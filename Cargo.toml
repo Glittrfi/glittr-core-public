@@ -1,0 +1,23 @@
+[package]
+name = "glittr-core"
+description = "Glittr protocol implementation"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix-web = "4.9.0"
+bitcoin = "0.32.3"
+borsh = "1.5.1"
+rocksdb = "0.22.0"
+tokio = "1.40.0"
+
+[[bin]]
+name = "glittr"
+path = "src/bin/main.rs"
+
+[lib]
+name = "glittr"
+path = "src/lib.rs"
+
+[dev-dependencies]
+mockcore = "0.0.0"
