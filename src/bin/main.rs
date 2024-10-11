@@ -1,3 +1,5 @@
+use glittr::run;
+
 fn main() {
-    println!("Glittr core implementation!");
+    run().expect("Main thread run")
 }

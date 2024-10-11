@@ -1,0 +1,4 @@
+btc_rpc_url: http://127.0.0.1:18443
+btc_rpc_username: user
+btc_rpc_password: password
+rocks_db_path: db_data
