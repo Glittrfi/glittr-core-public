@@ -14,6 +14,14 @@ pub enum ContractType {
     Dummy(DummyContract),
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CallType {
+    Mint,
+    Burn,
+    Swap
+}
+
 /// Transfer
 /// Asset: This is a block:tx reference to the contract where the asset was created
 /// N outputs: Number of output utxos to receive assets
@@ -29,7 +37,10 @@ pub enum TxType {
     ContractCreation {
         contract_type: ContractType,
     },
-    ContractCall,
+    ContractCall {
+        contract: BlockTxTuple,
+        call_type: CallType
+    },
 }
 
 #[derive(Deserialize, Serialize)]
@@ -176,7 +187,7 @@ mod test {
                 },
                 ContractType::Dummy(_dummy_contract) => panic!("not dummy contract"),
             },
-            TxType::ContractCall => panic!("not contract call"),
+            TxType::ContractCall { contract, call_type } => panic!("not contract call"),
         }
     }
 }
