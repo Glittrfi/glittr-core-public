@@ -4,29 +4,27 @@ use super::*;
 use asset_contract::AssetContract;
 use bitcoin::{opcodes, script::Instruction, Transaction};
 use bitcoincore_rpc::jsonrpc::serde_json::{self, Deserializer};
-use dummy_contract::DummyContract;
 use store::database::MESSAGE_PREFIX;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum ContractType {
     Asset(AssetContract),
-    Dummy(DummyContract),
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
 pub enum CallType {
     Mint,
     Burn,
-    Swap
+    Swap,
 }
 
 /// Transfer
 /// Asset: This is a block:tx reference to the contract where the asset was created
 /// N outputs: Number of output utxos to receive assets
 /// Amount: Vector of values assigning shares of the transfer to the appropriate UTXO outputs
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum TxType {
     Transfer {
@@ -39,13 +37,19 @@ pub enum TxType {
     },
     ContractCall {
         contract: BlockTxTuple,
-        call_type: CallType
+        call_type: CallType,
     },
 }
 
 #[derive(Deserialize, Serialize)]
 pub struct OpReturnMessage {
     pub tx_type: TxType,
+}
+
+impl CallType {
+    pub fn validate(&self) -> bool {
+        true
+    }
 }
 
 impl OpReturnMessage {
@@ -91,10 +95,37 @@ impl OpReturnMessage {
         }
     }
 
+    pub fn validate(&self) -> bool {
+        match self.tx_type.clone() {
+            TxType::Transfer {
+                asset,
+                n_outputs,
+                amounts,
+            } => {
+                // TODO: validate if asset exist
+                // TODO: validate n_outputs <  max outputs in transactions
+                // TODO: validate if amounts from input
+            }
+            TxType::ContractCreation { contract_type } => match contract_type {
+                ContractType::Asset(asset_contract) => {
+                    return asset_contract.validate();
+                }
+            },
+            TxType::ContractCall {
+                contract,
+                call_type,
+            } => {
+                // TODO: validate if contract exist
+                return call_type.validate();
+            }
+        }
+
+        true
+    }
+
     pub fn put(&self, database: &mut Database, key: BlockTx) -> Result<(), rocksdb::Error> {
         return database.put(MESSAGE_PREFIX, key.to_string().as_str(), self);
     }
-
 }
 
 impl fmt::Display for OpReturnMessage {
@@ -185,9 +216,11 @@ mod test {
                         transfer_ratio_type: _,
                     } => panic!("not purchase burn swap"),
                 },
-                ContractType::Dummy(_dummy_contract) => panic!("not dummy contract"),
             },
-            TxType::ContractCall { contract, call_type } => panic!("not contract call"),
+            TxType::ContractCall {
+                contract: _,
+                call_type: _,
+            } => panic!("not contract call"),
         }
     }
 }

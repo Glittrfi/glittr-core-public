@@ -46,15 +46,17 @@ impl Indexer {
                 for (pos, tx) in block.txdata.iter().enumerate() {
                     // run modules here
                     let _ = OpReturnMessage::parse_tx(tx).map(|value| {
-                        value
-                            .put(
-                                &mut self.database,
-                                BlockTx {
-                                    block: block_height,
-                                    tx: pos as u32,
-                                },
-                            )
-                            .unwrap();
+                        if value.validate() {
+                            value
+                                .put(
+                                    &mut self.database,
+                                    BlockTx {
+                                        block: block_height,
+                                        tx: pos as u32,
+                                    },
+                                )
+                                .unwrap();
+                        }
                     });
                 }
 

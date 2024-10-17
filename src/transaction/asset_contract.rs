@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum AssetContract {
     Preallocated {
@@ -20,7 +20,7 @@ pub enum AssetContract {
     },
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
 pub enum InputAssetType {
     RawBTC,
@@ -28,14 +28,14 @@ pub enum InputAssetType {
     GlittrAsset,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum TransferScheme {
     Purchase(BitcoinAddress),
     Burn,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum TransferRatioType {
     Fixed {
@@ -48,8 +48,36 @@ pub enum TransferRatioType {
 }
 
 impl AssetContract {
-    #[allow(dead_code)]
-    pub fn validate() {
-        todo!("validate if all parameters are valid, e.g. ");
+    pub fn validate(&self) -> bool {
+        match self {
+            AssetContract::Preallocated { todo } => {
+                // TODO: add and validate preallocated
+            }
+            AssetContract::FreeMint {
+                supply_cap,
+                amount_per_mint,
+                divisibility,
+                live_time,
+            } => {
+                if let Some(supply_cap) = supply_cap {
+                    if amount_per_mint > supply_cap {
+                        return false;
+                    }
+                }
+
+                // TODO: validate divisibility value
+                // TODO: validate live_time value (block_height must be valid)
+            }
+            AssetContract::PurchaseBurnSwap {
+                input_asset_type,
+                input_asset,
+                transfer_scheme,
+                transfer_ratio_type,
+            } => {
+                // TODO: validation
+            }
+        }
+
+        true
     }
 }
