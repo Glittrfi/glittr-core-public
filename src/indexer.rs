@@ -1,9 +1,9 @@
 use super::*;
 
 use bitcoincore_rpc::{Auth, Client, RpcApi};
-use modules::dummy_glyph::DummyGlyph;
 use std::{error::Error, time::Duration};
 use store::database::INDEXER_LAST_BLOCK_PREFIX;
+use transaction::message::OpReturnMessage;
 
 pub struct Indexer {
     rpc: Client,
@@ -45,8 +45,16 @@ impl Indexer {
 
                 for (pos, tx) in block.txdata.iter().enumerate() {
                     // run modules here
-                    let _ = DummyGlyph::parse_tx(tx).map(|value| {
-                        value.put(&mut self.database, format!("{}:{}", block_height, pos))
+                    let _ = OpReturnMessage::parse_tx(tx).map(|value| {
+                        value
+                            .put(
+                                &mut self.database,
+                                BlockTx {
+                                    block: block_height,
+                                    tx: pos as u32,
+                                },
+                            )
+                            .unwrap();
                     });
                 }
 

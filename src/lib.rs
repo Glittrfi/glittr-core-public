@@ -1,11 +1,15 @@
 use config::CONFIG;
+use serde::{Deserialize, Serialize};
 use std::{error::Error, thread};
 use store::database::Database;
 
 mod config;
 mod indexer;
-mod modules;
 mod store;
+mod transaction;
+mod types;
+
+pub use types::*;
 
 pub fn run() -> Result<(), Box<dyn Error>> {
     env_logger::init();
