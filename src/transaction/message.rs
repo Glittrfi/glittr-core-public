@@ -1,3 +1,5 @@
+use std::fmt;
+
 use super::*;
 use asset_contract::AssetContract;
 use bitcoin::{opcodes, script::Instruction, Transaction};
@@ -5,8 +7,8 @@ use bitcoincore_rpc::jsonrpc::serde_json::{self, Deserializer};
 use dummy_contract::DummyContract;
 use store::database::MESSAGE_PREFIX;
 
-#[serde(rename_all = "snake_case")]
 #[derive(Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ContractType {
     Asset(AssetContract),
     Dummy(DummyContract),
@@ -16,8 +18,8 @@ pub enum ContractType {
 /// Asset: This is a block:tx reference to the contract where the asset was created
 /// N outputs: Number of output utxos to receive assets
 /// Amount: Vector of values assigning shares of the transfer to the appropriate UTXO outputs
-#[serde(rename_all = "snake_case")]
 #[derive(Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum TxType {
     Transfer {
         asset: BlockTxTuple,
@@ -82,8 +84,11 @@ impl OpReturnMessage {
         return database.put(MESSAGE_PREFIX, key.to_string().as_str(), self);
     }
 
-    pub fn to_string(&self) -> String {
-        serde_json::to_string(&self).unwrap()
+}
+
+impl fmt::Display for OpReturnMessage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", serde_json::to_string(&self).unwrap())
     }
 }
 
@@ -118,7 +123,7 @@ mod test {
         let mut builder = script::Builder::new().push_opcode(opcodes::all::OP_RETURN);
 
         println!("{}", dummy_message.to_string());
-        for slice in vec![dummy_message.to_string().as_bytes()] {
+        for slice in [dummy_message.to_string().as_bytes()] {
             let Ok(push): Result<&PushBytes, _> = slice.try_into() else {
                 continue;
             };

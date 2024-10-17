@@ -1,7 +1,7 @@
 use super::*;
 
-#[serde(rename_all = "snake_case")]
 #[derive(Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum AssetContract {
     Preallocated {
         todo: Option<()>,
@@ -20,23 +20,23 @@ pub enum AssetContract {
     },
 }
 
-#[serde(rename_all = "snake_case")]
 #[derive(Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum InputAssetType {
     RawBTC,
     Rune,
     GlittrAsset,
 }
 
-#[serde(rename_all = "snake_case")]
 #[derive(Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum TransferScheme {
     Purchase(BitcoinAddress),
     Burn,
 }
 
-#[serde(rename_all = "snake_case")]
 #[derive(Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum TransferRatioType {
     Fixed {
         ratio: u16,
@@ -48,6 +48,7 @@ pub enum TransferRatioType {
 }
 
 impl AssetContract {
+    #[allow(dead_code)]
     pub fn validate() {
         todo!("validate if all parameters are valid, e.g. ");
     }
