@@ -2,17 +2,18 @@ use super::*;
 
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use std::{error::Error, time::Duration};
-use store::database::INDEXER_LAST_BLOCK_PREFIX;
+use store::database::{INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX};
 use transaction::message::OpReturnMessage;
 
 pub struct Indexer {
     rpc: Client,
-    database: Database,
+    database: Arc<Mutex<Database>>,
     last_indexed_block: u64,
 }
 
 impl Indexer {
-    pub fn new() -> Result<Self, Box<dyn Error>> {
+    pub async fn new(database: Arc<Mutex<Database>>) -> Result<Self, Box<dyn Error>> {
+        log::info!("Indexer start");
         let rpc = Client::new(
             CONFIG.btc_rpc_url.as_str(),
             Auth::UserPass(
@@ -21,9 +22,11 @@ impl Indexer {
             ),
         )?;
 
-        let database = Database::new();
-
-        let last_indexed_block: u64 = database.get(INDEXER_LAST_BLOCK_PREFIX, "").unwrap_or(0);
+        let last_indexed_block: u64 = database
+            .lock()
+            .await
+            .get(INDEXER_LAST_BLOCK_PREFIX, "")
+            .unwrap_or(0);
 
         Ok(Indexer {
             last_indexed_block, // Todo: change this to rocksdb
@@ -32,7 +35,8 @@ impl Indexer {
         })
     }
 
-    pub fn run_indexer(&mut self) -> Result<(), Box<dyn Error>> {
+    pub async fn run_indexer(&mut self) -> Result<(), Box<dyn Error>> {
+        log::info!("Indexer start");
         loop {
             let best_block_height = self.rpc.get_block_count()?;
 
@@ -45,15 +49,25 @@ impl Indexer {
 
                 for (pos, tx) in block.txdata.iter().enumerate() {
                     // run modules here
-                    let _ = OpReturnMessage::parse_tx(tx).map(|value| {
+                    let blocktx = BlockTx {
+                        block: block_height,
+                        tx: pos as u32,
+                    };
+                    let _ = OpReturnMessage::parse_tx(tx).map(|value| async {
                         if value.validate() {
-                            value
+                            self.database.lock().await.put(
+                                MESSAGE_PREFIX,
+                                blocktx.to_string().as_str(),
+                                value,
+                            ).unwrap();
+
+                            self.database
+                                .lock()
+                                .await
                                 .put(
-                                    &mut self.database,
-                                    BlockTx {
-                                        block: block_height,
-                                        tx: pos as u32,
-                                    },
+                                    TRANSACTION_TO_BLOCK_TX_PREFIX,
+                                    tx.compute_txid().to_string().as_str(),
+                                    blocktx.to_tuple(),
                                 )
                                 .unwrap();
                         }
@@ -63,8 +77,11 @@ impl Indexer {
                 self.last_indexed_block += 1;
             }
 
-            self.database
-                .put(INDEXER_LAST_BLOCK_PREFIX, "", self.last_indexed_block)?;
+            self.database.lock().await.put(
+                INDEXER_LAST_BLOCK_PREFIX,
+                "",
+                self.last_indexed_block,
+            )?;
 
             thread::sleep(Duration::from_secs(10));
         }

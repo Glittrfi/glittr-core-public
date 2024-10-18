@@ -1,5 +1,6 @@
 use std::fmt;
 
+#[derive(Clone, Copy)]
 pub struct BlockTx {
     pub block: u64,
     pub tx: u32,

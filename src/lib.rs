@@ -1,8 +1,11 @@
+use api::run_api;
 use config::CONFIG;
 use serde::{Deserialize, Serialize};
-use std::{error::Error, thread};
+use std::{error::Error, sync::Arc, thread};
 use store::database::Database;
+use tokio::sync::Mutex;
 
+mod api;
 mod config;
 mod indexer;
 mod store;
@@ -11,15 +14,22 @@ mod types;
 
 pub use types::*;
 
-pub fn run() -> Result<(), Box<dyn Error>> {
+#[tokio::main]
+pub async fn run() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
-    let handle = thread::spawn(|| {
-        let mut current_indexer = indexer::Indexer::new().expect("New indexer");
-        current_indexer.run_indexer().expect("Run indexer");
+    let database = Arc::new(Mutex::new(Database::new()));
+    let database_indexer = Arc::clone(&database);
+
+    tokio::spawn(async {
+        let mut current_indexer =
+            indexer::Indexer::new(database_indexer).await.expect("New indexer");
+        current_indexer.run_indexer().await.expect("Run indexer");
     });
 
-    handle.join().unwrap();
+    run_api(database).await?;
+
+    log::info!("here");
 
     Ok(())
 }
