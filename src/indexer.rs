@@ -53,25 +53,22 @@ impl Indexer {
                         block: block_height,
                         tx: pos as u32,
                     };
-                    let _ = OpReturnMessage::parse_tx(tx).map(|value| async {
-                        if value.validate() {
+                    let message = OpReturnMessage::parse_tx(tx).ok();
+                    if let Some(message) = message {
+                        if message.validate() {
                             self.database.lock().await.put(
                                 MESSAGE_PREFIX,
                                 blocktx.to_string().as_str(),
-                                value,
-                            ).unwrap();
+                                message,
+                            )?;
 
-                            self.database
-                                .lock()
-                                .await
-                                .put(
-                                    TRANSACTION_TO_BLOCK_TX_PREFIX,
-                                    tx.compute_txid().to_string().as_str(),
-                                    blocktx.to_tuple(),
-                                )
-                                .unwrap();
+                            self.database.lock().await.put(
+                                TRANSACTION_TO_BLOCK_TX_PREFIX,
+                                tx.compute_txid().to_string().as_str(),
+                                blocktx.to_tuple(),
+                            )?;
                         }
-                    });
+                    }
                 }
 
                 self.last_indexed_block += 1;
