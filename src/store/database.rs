@@ -10,15 +10,17 @@ pub struct Database {
     db: Arc<DB>,
 }
 
+
+#[derive(Debug)]
 pub enum DatabaseError {
     NotFound,
     DeserializeFailed,
 }
 
 impl Database {
-    pub fn new() -> Self {
+    pub fn new(path: String) -> Self {
         Self {
-            db: Arc::new(DB::open_default(CONFIG.rocks_db_path.clone()).unwrap()),
+            db: Arc::new(DB::open_default(path).unwrap()),
         }
     }
 
