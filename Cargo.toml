@@ -28,4 +28,5 @@ name = "glittr"
 path = "src/lib.rs"
 
 [dev-dependencies]
-mockcore = "0.0.0"
+mockcore = { version = "0.0.1", git = "https://github.com/ordinals/ord", rev = "387fe734b5c571e2dc76ea6b9fc41eacb0a09103" }
+tempfile = "3.13.0"
