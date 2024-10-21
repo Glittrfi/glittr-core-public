@@ -16,7 +16,7 @@ pub struct APIState {
     pub database: Arc<Mutex<Database>>,
 }
 pub async fn run_api(database: Arc<Mutex<Database>>) -> Result<(), std::io::Error> {
-    let mut shared_state = Arc::new(APIState { database });
+    let shared_state = Arc::new(APIState { database });
     let app = Router::new()
         .route("/health", get(health))
         .route("/tx/:txid", get(tx_result))
