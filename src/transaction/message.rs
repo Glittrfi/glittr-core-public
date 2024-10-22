@@ -4,7 +4,7 @@ use super::*;
 use asset_contract::AssetContract;
 use bitcoin::{opcodes, script::Instruction, Transaction};
 use bitcoincore_rpc::jsonrpc::serde_json::{self, Deserializer};
-use store::database::MESSAGE_PREFIX;
+use constants::OP_RETURN_MAGIC_PREFIX;
 
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
@@ -64,7 +64,7 @@ impl OpReturnMessage {
 
             let signature = instructions.next();
             if let Some(Ok(Instruction::PushBytes(glittr_message))) = signature {
-                if glittr_message.as_bytes() != "GLITTR".as_bytes() {
+                if glittr_message.as_bytes() != OP_RETURN_MAGIC_PREFIX.as_bytes() {
                     continue;
                 }
             } else {
@@ -84,6 +84,7 @@ impl OpReturnMessage {
                     }
                 }
             }
+            break;
         }
 
         let message =
@@ -121,10 +122,6 @@ impl OpReturnMessage {
         }
 
         true
-    }
-
-    pub fn put(&self, database: &mut Database, key: BlockTx) -> Result<(), rocksdb::Error> {
-        return database.put(MESSAGE_PREFIX, key.to_string().as_str(), self);
     }
 }
 

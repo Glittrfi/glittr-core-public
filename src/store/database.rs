@@ -15,6 +15,7 @@ pub enum DatabaseError {
     DeserializeFailed,
 }
 
+// TODO: implment error handling
 impl Database {
     pub fn new() -> Self {
         Self {
