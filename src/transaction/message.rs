@@ -4,6 +4,7 @@ use super::*;
 use asset_contract::AssetContract;
 use bitcoin::{opcodes, script::Instruction, Transaction};
 use bitcoincore_rpc::jsonrpc::serde_json::{self, Deserializer};
+use constants::OP_RETURN_MAGIC_PREFIX;
 use store::database::MESSAGE_PREFIX;
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -64,7 +65,7 @@ impl OpReturnMessage {
 
             let signature = instructions.next();
             if let Some(Ok(Instruction::PushBytes(glittr_message))) = signature {
-                if glittr_message.as_bytes() != "GLITTR".as_bytes() {
+                if glittr_message.as_bytes() != OP_RETURN_MAGIC_PREFIX.as_bytes() {
                     continue;
                 }
             } else {
