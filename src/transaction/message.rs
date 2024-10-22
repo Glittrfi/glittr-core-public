@@ -8,7 +8,7 @@ use bitcoin::{
     ScriptBuf, Transaction,
 };
 use bitcoincore_rpc::jsonrpc::serde_json::{self, Deserializer};
-use store::database::MESSAGE_PREFIX;
+use constants::{GLITTR_FIRST_BLOCK_HEIGHT, OP_RETURN_MAGIC_PREFIX};
 
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
@@ -68,7 +68,7 @@ impl OpReturnMessage {
 
             let signature = instructions.next();
             if let Some(Ok(Instruction::PushBytes(glittr_message))) = signature {
-                if glittr_message.as_bytes() != "GLITTR".as_bytes() {
+                if glittr_message.as_bytes() != OP_RETURN_MAGIC_PREFIX.as_bytes() {
                     continue;
                 }
             } else {
@@ -88,6 +88,7 @@ impl OpReturnMessage {
                     }
                 }
             }
+            break;
         }
 
         let message =
@@ -127,23 +128,14 @@ impl OpReturnMessage {
         true
     }
 
-    pub fn put(&self, database: &mut Database, key: BlockTx) -> Result<(), rocksdb::Error> {
-        return database.put(MESSAGE_PREFIX, key.to_string().as_str(), self);
-    }
-
     pub fn into_script(&self) -> ScriptBuf {
         let mut builder = script::Builder::new().push_opcode(opcodes::all::OP_RETURN);
-        for slice in [self.to_string().as_bytes()] {
-            let Ok(push): Result<&PushBytes, _> = slice.try_into() else {
-                continue;
-            };
+        let magic_prefix: &PushBytes = OP_RETURN_MAGIC_PREFIX.as_bytes().try_into().unwrap();
+        let binding = self.to_string();
+        let script_bytes: &PushBytes = binding.as_bytes().try_into().unwrap();
 
-            let Ok(push_glittr): Result<&PushBytes, _> = "GLITTR".as_bytes().try_into() else {
-                continue;
-            };
-            builder = builder.push_slice(push_glittr);
-            builder = builder.push_slice(push);
-        }
+        builder = builder.push_slice(magic_prefix);
+        builder = builder.push_slice(script_bytes);
 
         return builder.into_script();
     }

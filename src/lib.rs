@@ -10,6 +10,7 @@ mod store;
 mod transaction;
 mod types;
 mod config;
+mod constants;
 
 pub use api::*;
 pub use indexer::*;
@@ -24,19 +25,19 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
     let database = Arc::new(Mutex::new(Database::new(CONFIG.rocks_db_path.clone())));
     let database_indexer = Arc::clone(&database);
 
-    tokio::spawn(async {
-        let mut current_indexer = indexer::Indexer::new(
-            database_indexer,
-            CONFIG.btc_rpc_url.clone(),
-            CONFIG.btc_rpc_username.clone(),
-            CONFIG.btc_rpc_password.clone(),
-        )
-        .await
-        .expect("New indexer");
+    let indexer_handle = tokio::spawn(async {
+        let mut current_indexer = indexer::Indexer::new(database_indexer,             CONFIG.btc_rpc_url.clone(),
+        CONFIG.btc_rpc_username.clone(),
+        CONFIG.btc_rpc_password.clone())
+            .await
+            .expect("New indexer");
         current_indexer.run_indexer().await.expect("Run indexer");
     });
 
-    run_api(database).await?;
+    let api_handle = tokio::spawn(async { run_api(database).await });
+
+    indexer_handle.await?;
+    let _ = api_handle.await?;
 
     Ok(())
 }
