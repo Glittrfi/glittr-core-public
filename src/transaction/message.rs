@@ -5,7 +5,6 @@ use asset_contract::AssetContract;
 use bitcoin::{opcodes, script::Instruction, Transaction};
 use bitcoincore_rpc::jsonrpc::serde_json::{self, Deserializer};
 use constants::OP_RETURN_MAGIC_PREFIX;
-use store::database::MESSAGE_PREFIX;
 
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
@@ -123,10 +122,6 @@ impl OpReturnMessage {
         }
 
         true
-    }
-
-    pub fn put(&self, database: &mut Database, key: BlockTx) -> Result<(), rocksdb::Error> {
-        return database.put(MESSAGE_PREFIX, key.to_string().as_str(), self);
     }
 }
 

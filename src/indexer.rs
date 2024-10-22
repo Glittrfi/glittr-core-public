@@ -3,7 +3,7 @@ use super::*;
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use constants::first_glittr_height;
 use std::{error::Error, time::Duration};
-use store::database::INDEXER_LAST_BLOCK_PREFIX;
+use store::database::{INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX};
 use transaction::message::OpReturnMessage;
 
 pub struct Indexer {
@@ -63,15 +63,16 @@ impl Indexer {
                     // run modules here
                     let _ = OpReturnMessage::parse_tx(tx).map(|value| {
                         if value.validate() {
-                            value
-                                .put(
-                                    &mut self.database,
-                                    BlockTx {
-                                        block: block_height,
-                                        tx: pos as u32,
-                                    },
-                                )
-                                .unwrap();
+                            let _ = self.database.put(
+                                MESSAGE_PREFIX,
+                                BlockTx {
+                                    block: block_height,
+                                    tx: pos as u32,
+                                }
+                                .to_string()
+                                .as_str(),
+                                value,
+                            );
                         }
                     });
                 }
