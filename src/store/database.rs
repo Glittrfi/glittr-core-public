@@ -4,16 +4,22 @@ use rocksdb::DB;
 
 pub const INDEXER_LAST_BLOCK_PREFIX: &str = "last_block";
 pub const MESSAGE_PREFIX: &str = "message";
+pub const TRANSACTION_TO_BLOCK_TX_PREFIX: &str = "tx_to_blocktx";
 
 pub struct Database {
-    db: DB,
+    db: Arc<DB>,
+}
+
+pub enum DatabaseError {
+    NotFound,
+    DeserializeFailed,
 }
 
 // TODO: implment error handling
 impl Database {
     pub fn new() -> Self {
         Self {
-            db: DB::open_default(CONFIG.rocks_db_path.clone()).unwrap(),
+            db: Arc::new(DB::open_default(CONFIG.rocks_db_path.clone()).unwrap()),
         }
     }
 
@@ -29,16 +35,21 @@ impl Database {
         )
     }
 
-    pub fn get<T: for<'a> Deserialize<'a>>(&self, prefix: &str, key: &str) -> Option<T> {
+    pub fn get<T: for<'a> Deserialize<'a>>(
+        &self,
+        prefix: &str,
+        key: &str,
+    ) -> Result<T, DatabaseError> {
         let value = self.db.get(format!("{}{}", prefix, key)).unwrap();
 
-        value.map(|value| {
+        if let Some(value) = value {
             let message = T::deserialize(&mut Deserializer::from_slice(value.as_slice()));
 
-            match message {
-                Ok(message) => Some(message),
-                Err(_) => None,
-            }
-        })?
+            return match message {
+                Ok(message) => Ok(message),
+                Err(_) => Err(DatabaseError::DeserializeFailed),
+            };
+        }
+        Err(DatabaseError::NotFound)
     }
 }

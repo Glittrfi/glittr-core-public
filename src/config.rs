@@ -8,6 +8,7 @@ pub struct Settings {
     pub btc_rpc_username: String,
     pub btc_rpc_password: String,
     pub rocks_db_path: String,
+    pub api_url: String
 }
 
 lazy_static! {

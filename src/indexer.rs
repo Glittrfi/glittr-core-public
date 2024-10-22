@@ -3,17 +3,18 @@ use super::*;
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use constants::first_glittr_height;
 use std::{error::Error, time::Duration};
-use store::database::{INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX};
+use store::database::{INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX};
 use transaction::message::OpReturnMessage;
 
 pub struct Indexer {
     rpc: Client,
-    database: Database,
+    database: Arc<Mutex<Database>>,
     last_indexed_block: Option<u64>,
 }
 
 impl Indexer {
-    pub fn new() -> Result<Self, Box<dyn Error>> {
+    pub async fn new(database: Arc<Mutex<Database>>) -> Result<Self, Box<dyn Error>> {
+        log::info!("Indexer initiated");
         let rpc = Client::new(
             CONFIG.btc_rpc_url.as_str(),
             Auth::UserPass(
@@ -22,9 +23,7 @@ impl Indexer {
             ),
         )?;
 
-        let database = Database::new();
-
-        let mut last_indexed_block: Option<u64> = database.get(INDEXER_LAST_BLOCK_PREFIX, "");
+        let mut last_indexed_block: Option<u64> = database.lock().await.get(INDEXER_LAST_BLOCK_PREFIX, "").ok();
         if last_indexed_block.is_none() && first_glittr_height() > 0 {
             last_indexed_block = Some(first_glittr_height() - 1)
         }
@@ -36,7 +35,8 @@ impl Indexer {
         })
     }
 
-    pub fn run_indexer(&mut self) -> Result<(), Box<dyn Error>> {
+    pub async fn run_indexer(&mut self) -> Result<(), Box<dyn Error>> {
+        log::info!("Indexer start");
         loop {
             let current_block_tip = self.rpc.get_block_count()?;
 
@@ -61,29 +61,35 @@ impl Indexer {
 
                 for (pos, tx) in block.txdata.iter().enumerate() {
                     // run modules here
-                    let _ = OpReturnMessage::parse_tx(tx).map(|value| {
-                        if value.validate() {
-                            let _ = self.database.put(
+                    let blocktx = BlockTx {
+                        block: block_height,
+                        tx: pos as u32,
+                    };
+                    let message = OpReturnMessage::parse_tx(tx).ok();
+                    if let Some(message) = message {
+                        if message.validate() {
+                            self.database.lock().await.put(
                                 MESSAGE_PREFIX,
-                                BlockTx {
-                                    block: block_height,
-                                    tx: pos as u32,
-                                }
-                                .to_string()
-                                .as_str(),
-                                value,
-                            );
+                                blocktx.to_string().as_str(),
+                                message,
+                            )?;
+
+                            self.database.lock().await.put(
+                                TRANSACTION_TO_BLOCK_TX_PREFIX,
+                                tx.compute_txid().to_string().as_str(),
+                                blocktx.to_tuple(),
+                            )?;
                         }
-                    });
+                    }
                 }
 
                 self.last_indexed_block = Some(block_height);
             }
 
-            self.database.put(
+            self.database.lock().await.put(
                 INDEXER_LAST_BLOCK_PREFIX,
                 "",
-                self.last_indexed_block.unwrap(),
+                self.last_indexed_block,
             )?;
 
             thread::sleep(Duration::from_secs(10));
