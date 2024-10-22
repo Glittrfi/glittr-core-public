@@ -9,14 +9,15 @@ use axum::{
 use serde_json::{json, Value};
 use store::database::{DatabaseError, MESSAGE_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX};
 use transaction::message::OpReturnMessage;
-
 use super::*;
 
+
+// TODO: The database lock could possibly slowing down indexing. Add cache or rate limit for the API.
 pub struct APIState {
     pub database: Arc<Mutex<Database>>,
 }
 pub async fn run_api(database: Arc<Mutex<Database>>) -> Result<(), std::io::Error> {
-    let mut shared_state = Arc::new(APIState { database });
+    let shared_state = Arc::new(APIState { database });
     let app = Router::new()
         .route("/health", get(health))
         .route("/tx/:txid", get(tx_result))
