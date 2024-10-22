@@ -8,6 +8,7 @@ mod indexer;
 mod store;
 mod transaction;
 mod types;
+mod constants;
 
 pub use types::*;
 
