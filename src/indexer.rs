@@ -34,9 +34,9 @@ impl Indexer {
 
     pub fn run_indexer(&mut self) -> Result<(), Box<dyn Error>> {
         loop {
-            let best_block_height = self.rpc.get_block_count()?;
+            let current_block_tip = self.rpc.get_block_count()?;
 
-            while self.last_indexed_block < best_block_height {
+            while self.last_indexed_block < current_block_tip {
                 let block_height = self.last_indexed_block + 1;
                 let block_hash = self.rpc.get_block_hash(block_height)?;
                 let block = self.rpc.get_block(&block_hash)?;
