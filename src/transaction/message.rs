@@ -2,9 +2,13 @@ use std::fmt;
 
 use super::*;
 use asset_contract::AssetContract;
-use bitcoin::{opcodes, script::Instruction, Transaction};
+use bitcoin::{
+    opcodes,
+    script::{self, Instruction, PushBytes},
+    ScriptBuf, Transaction,
+};
 use bitcoincore_rpc::jsonrpc::serde_json::{self, Deserializer};
-use constants::OP_RETURN_MAGIC_PREFIX;
+use constants::{GLITTR_FIRST_BLOCK_HEIGHT, OP_RETURN_MAGIC_PREFIX};
 
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
@@ -123,6 +127,18 @@ impl OpReturnMessage {
 
         true
     }
+
+    pub fn into_script(&self) -> ScriptBuf {
+        let mut builder = script::Builder::new().push_opcode(opcodes::all::OP_RETURN);
+        let magic_prefix: &PushBytes = OP_RETURN_MAGIC_PREFIX.as_bytes().try_into().unwrap();
+        let binding = self.to_string();
+        let script_bytes: &PushBytes = binding.as_bytes().try_into().unwrap();
+
+        builder = builder.push_slice(magic_prefix);
+        builder = builder.push_slice(script_bytes);
+
+        return builder.into_script();
+    }
 }
 
 impl fmt::Display for OpReturnMessage {
@@ -159,26 +175,13 @@ mod test {
             },
         };
 
-        let mut builder = script::Builder::new().push_opcode(opcodes::all::OP_RETURN);
-
         println!("{}", dummy_message.to_string());
-        for slice in [dummy_message.to_string().as_bytes()] {
-            let Ok(push): Result<&PushBytes, _> = slice.try_into() else {
-                continue;
-            };
-
-            let Ok(push_glittr): Result<&PushBytes, _> = "GLITTR".as_bytes().try_into() else {
-                continue;
-            };
-            builder = builder.push_slice(push_glittr);
-            builder = builder.push_slice(push);
-        }
 
         let tx = Transaction {
             input: Vec::new(),
             lock_time: locktime::absolute::LockTime::ZERO,
             output: vec![TxOut {
-                script_pubkey: builder.into_script(),
+                script_pubkey: dummy_message.into_script(),
                 value: Amount::from_int_btc(0),
             }],
             version: Version(2),

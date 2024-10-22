@@ -4,23 +4,26 @@ use bitcoincore_rpc::{Auth, Client, RpcApi};
 use constants::first_glittr_height;
 use std::{error::Error, time::Duration};
 use store::database::{INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX};
+use tokio::time::sleep;
 use transaction::message::OpReturnMessage;
 
 pub struct Indexer {
     rpc: Client,
-    database: Arc<Mutex<Database>>,
-    last_indexed_block: Option<u64>,
+    pub database: Arc<Mutex<Database>>,
+    pub last_indexed_block: Option<u64>,
 }
 
 impl Indexer {
-    pub async fn new(database: Arc<Mutex<Database>>) -> Result<Self, Box<dyn Error>> {
-        log::info!("Indexer initiated");
+    pub async fn new(
+        database: Arc<Mutex<Database>>,
+        btc_rpc_url: String,
+        btc_rpc_username: String,
+        btc_rpc_password: String,
+    ) -> Result<Self, Box<dyn Error>> {
+        log::info!("Indexer start");
         let rpc = Client::new(
-            CONFIG.btc_rpc_url.as_str(),
-            Auth::UserPass(
-                CONFIG.btc_rpc_username.clone(),
-                CONFIG.btc_rpc_password.clone(),
-            ),
+            btc_rpc_url.as_str(),
+            Auth::UserPass(btc_rpc_username.clone(), btc_rpc_password.clone()),
         )?;
 
         let mut last_indexed_block: Option<u64> = database.lock().await.get(INDEXER_LAST_BLOCK_PREFIX, "").ok();
@@ -92,7 +95,7 @@ impl Indexer {
                 self.last_indexed_block,
             )?;
 
-            thread::sleep(Duration::from_secs(10));
+            sleep(Duration::from_secs(10)).await;
         }
     }
 }
