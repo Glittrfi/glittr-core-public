@@ -26,7 +26,7 @@ impl Indexer {
         let last_indexed_block: Option<u64> = database.get(INDEXER_LAST_BLOCK_PREFIX, "");
 
         Ok(Indexer {
-            last_indexed_block, // Todo: change this to rocksdb
+            last_indexed_block,
             database,
             rpc,
         })
