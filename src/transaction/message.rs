@@ -84,6 +84,7 @@ impl OpReturnMessage {
                     }
                 }
             }
+            break;
         }
 
         let message =
