@@ -9,6 +9,7 @@ pub struct Database {
     db: DB,
 }
 
+// TODO: implment error handling
 impl Database {
     pub fn new() -> Self {
         Self {
