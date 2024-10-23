@@ -2,11 +2,13 @@ use std::sync::Arc;
 
 use super::*;
 use axum::{
+    body::{Body, HttpBody},
     extract::{Path, State},
     http::StatusCode,
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
+use bitcoin::{consensus::deserialize, Transaction};
 use serde_json::{json, Value};
 use store::database::{DatabaseError, MESSAGE_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX};
 use transaction::message::OpReturnMessage;
@@ -22,6 +24,7 @@ pub async fn run_api(database: Arc<Mutex<Database>>) -> Result<(), std::io::Erro
         .route("/health", get(health))
         .route("/tx/:txid", get(tx_result))
         .route("/blocktx/:block/:tx", get(get_block_tx))
+        .route("/validate-tx", post(validate_tx))
         .with_state(shared_state);
     log::info!("API is listening on {}", CONFIG.api_url);
     let listener = tokio::net::TcpListener::bind(CONFIG.api_url.clone()).await?;
@@ -56,7 +59,7 @@ async fn tx_result(
     );
 
     if let Ok(message) = message {
-        Ok(Json(json!({"valid": true, "message": message})))
+        Ok(Json(json!({"is_valid": true, "message": message})))
     } else {
         return Err(StatusCode::NOT_FOUND);
     }
@@ -74,10 +77,49 @@ async fn get_block_tx(
         .get(MESSAGE_PREFIX, BlockTx { block, tx }.to_string().as_str());
 
     if let Ok(message) = message {
-        Ok(Json(json!({"valid": true, "message": message})))
+        Ok(Json(json!({"is_valid": true, "message": message})))
     } else {
         return Err(StatusCode::NOT_FOUND);
     }
+}
+
+async fn validate_tx(
+    State(_state): State<APIState>,
+    body: String,
+) -> Result<Json<Value>, StatusCode> {
+    let tx_bytes = if let Some(tx_bytes) = hex::decode(body).ok() {
+        tx_bytes
+    } else {
+        return Ok(Json(
+            json!({"is_valid": false, "msg": "Cannot decode hex string"}),
+        ));
+    };
+
+    let tx: Transaction = if let Some(tx) = deserialize(&tx_bytes).ok() {
+        tx
+    } else {
+        return Ok(Json(
+            json!({"is_valid": false, "msg": "Cannot deserialize to bitcoin transaction"}),
+        ));
+    };
+
+    return if let Some(op_return_message) = OpReturnMessage::parse_tx(&tx).ok() {
+        let is_valid = op_return_message.validate();
+
+        // TODO: invoke real validation using db, .e.g. process_and_validate(tx, db, is_parse: false);
+
+        if is_valid {
+            Ok(Json(json!({"is_valid": true})))
+        } else {
+            Ok(Json(
+                json!({"is_valid": false, "msg": "Arguments inside the messages are invalid"}),
+            ))
+        }
+    } else {
+        Ok(Json(
+            json!({"is_valid": false, "msg": "Not a valid Glittr message"}),
+        ))
+    };
 }
 
 async fn health() -> &'static str {
