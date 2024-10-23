@@ -1,4 +1,4 @@
-use std::{sync::Arc, thread, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use bitcoin::Witness;
 use mockcore::TransactionTemplate;
@@ -10,7 +10,7 @@ use glittr::{
     asset_contract::AssetContract,
     database::{Database, DatabaseError, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX},
     message::{ContractType, OpReturnMessage, TxType},
-    BlockTx, Indexer,
+    BlockTx, Indexer, MessageDataOutcome,
 };
 
 pub async fn spawn_test_indexer(
@@ -97,7 +97,7 @@ pub async fn test_integration_broadcast_op_return_message_success() {
 
     assert_eq!(last_block, 3);
 
-    let message: Result<OpReturnMessage, DatabaseError> = indexer
+    let message: Result<MessageDataOutcome, DatabaseError> = indexer
         .lock()
         .await
         .database

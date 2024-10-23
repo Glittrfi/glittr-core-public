@@ -11,8 +11,11 @@ mod transaction;
 mod types;
 mod config;
 mod constants;
+mod updater;
+mod flaw;
 
 pub use api::*;
+pub use updater::*;
 pub use indexer::*;
 pub use store::*;
 pub use transaction::*;
