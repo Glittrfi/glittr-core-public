@@ -1,4 +1,8 @@
+use std::str::FromStr;
+
+use bitcoin::Address;
 use flaw::Flaw;
+use serde_json::value::RawValue;
 
 use super::*;
 
@@ -24,8 +28,7 @@ pub enum AssetContract {
         live_time: BlockHeight,
     },
     PurchaseBurnSwap {
-        input_asset_type: InputAssetType,
-        input_asset: Option<BlockTxTuple>,
+        input_asset: InputAsset,
         transfer_scheme: TransferScheme,
         transfer_ratio_type: TransferRatioType,
     },
@@ -33,24 +36,30 @@ pub enum AssetContract {
 
 #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
 #[serde(rename_all = "snake_case")]
-pub enum InputAssetType {
+pub enum InputAsset {
     RawBTC,
-    Rune,
-    GlittrAsset,
+    Rune(BlockTxTuple),
+    GlittrAsset(BlockTxTuple),
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum TransferScheme {
     Purchase(BitcoinAddress),
-    Burn,
+    Burn, // NOTE: btc burned must go to op_return, bitcoind must set maxburnamount
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct OracleMessage<'a> {
+    #[serde(borrow)]
+    payload: &'a RawValue,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum TransferRatioType {
     Fixed {
-        ratio: u16,
+        ratio: Ratio, // out_value = input_value * ratio
     },
     Oracle {
         pubkey: Vec<u8>, // compressed public key
@@ -80,12 +89,42 @@ impl AssetContract {
                 // TODO: validate live_time value (block_height must be valid)
             }
             AssetContract::PurchaseBurnSwap {
-                input_asset_type: _,
-                input_asset: _,
-                transfer_scheme: _,
-                transfer_ratio_type: _,
+                input_asset,
+                transfer_scheme,
+                transfer_ratio_type,
             } => {
-                // TODO: validation
+                if let InputAsset::GlittrAsset(block_tx_tuple) = input_asset {
+                    if block_tx_tuple.1 == 0 {
+                        return Some(Flaw::InvalidBlockTxPointer);
+                    }
+                } else if let InputAsset::Rune(block_tx_tuple) = input_asset {
+                    if block_tx_tuple.1 == 0 {
+                        return Some(Flaw::InvalidBlockTxPointer);
+                    }
+                }
+
+                if let TransferScheme::Purchase(bitcoin_address) = transfer_scheme {
+                    if let Err(_) = Address::from_str(bitcoin_address.as_str()) {
+                        return Some(Flaw::InvalidBitcoinAddress);
+                    }
+                }
+
+                match &transfer_ratio_type {
+                    TransferRatioType::Fixed { ratio } => {
+                        if ratio.1 == 0 {
+                            return Some(Flaw::DivideByZero);
+                        }
+                    }
+                    TransferRatioType::Oracle { pubkey, message } => {
+                        if pubkey.len() != 33 || pubkey.len() != 32 {
+                            return Some(Flaw::PubkeyLengthInvalid);
+                        }
+
+                        if let Err(_) = serde_json::from_str::<OracleMessage>(&message.as_str()) {
+                            return Some(Flaw::OracleMessageFormatInvalid);
+                        }
+                    }
+                }
             }
         }
 

@@ -6,6 +6,7 @@ pub struct BlockTx {
     pub tx: u32,
 }
 
+pub type Ratio = (u32, u32);
 pub type BlockTxTuple = (u64, u32);
 pub type BlockHeight = u32;
 pub type BitcoinAddress = String;
