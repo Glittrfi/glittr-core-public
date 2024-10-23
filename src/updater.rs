@@ -7,18 +7,18 @@ use super::*;
 
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
-pub struct StateData {
+pub struct MessageDataOutcome {
     message: Option<OpReturnMessage>,
     flaw: Option<Flaw>,
 }
 
-pub struct State {
+pub struct Updater {
     pub database: Arc<Mutex<Database>>,
 }
 
-impl State {
+impl Updater {
     pub async fn new(database: Arc<Mutex<Database>>) -> Self {
-        State { database }
+        Updater { database }
     }
 
     // run modules here
@@ -29,7 +29,7 @@ impl State {
         tx: &Transaction,
         message_result: Result<OpReturnMessage, Flaw>,
     ) -> Result<(), Box<dyn Error>> {
-        let mut state_data = StateData {
+        let mut outcome = MessageDataOutcome {
             message: None,
             flaw: None,
         };
@@ -40,11 +40,11 @@ impl State {
         };
 
         if let Ok(message) = message_result {
-            state_data.message = Some(message.clone());
+            outcome.message = Some(message.clone());
             if let Some(flaw) = message.validate() {
-                state_data.flaw = Some(flaw);
+                outcome.flaw = Some(flaw);
             } else {
-                state_data.flaw = match message.tx_type {
+                outcome.flaw = match message.tx_type {
                     TxType::Transfer {
                         asset: _,
                         n_outputs: _,
@@ -77,13 +77,13 @@ impl State {
                 }
             }
         } else {
-            state_data.flaw = Some(message_result.unwrap_err());
+            outcome.flaw = Some(message_result.unwrap_err());
         }
 
         self.database.lock().await.put(
             MESSAGE_PREFIX,
             block_tx.to_string().as_str(),
-            state_data,
+            outcome,
         )?;
 
         self.database.lock().await.put(
