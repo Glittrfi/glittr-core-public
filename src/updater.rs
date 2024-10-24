@@ -94,9 +94,7 @@ impl Updater {
                         contract,
                         call_type,
                     } => match call_type {
-                        CallType::Mint => {
-                            self.mint(tx, contract).await
-                        }
+                        CallType::Mint(mint_option) => self.mint(tx, &contract, &mint_option).await,
                         CallType::Burn => {
                             log::info!("Process call type burn");
                             None

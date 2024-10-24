@@ -12,7 +12,7 @@ use glittr::{
         Database, DatabaseError, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX, MINT_DATA_PREFIX,
         MINT_OUTPUT_PREFIX,
     },
-    message::{CallType, ContractType, OpReturnMessage, TxType},
+    message::{CallType, ContractType, MintOption, OpReturnMessage, TxType},
     BlockTx, Flaw, Indexer, MessageDataOutcome, MintData,
 };
 
@@ -227,7 +227,7 @@ async fn test_integration_mint() {
         let message = OpReturnMessage {
             tx_type: TxType::ContractCall {
                 contract: block_tx_contract.to_tuple(),
-                call_type: CallType::Mint,
+                call_type: CallType::Mint(MintOption { pointer: 0 }),
             },
         };
         ctx.build_and_mine_message(message).await;
@@ -286,7 +286,7 @@ async fn test_integration_mint_supply_cap_exceeded() {
     let message = OpReturnMessage {
         tx_type: TxType::ContractCall {
             contract: block_tx_contract.to_tuple(),
-            call_type: CallType::Mint,
+            call_type: CallType::Mint(MintOption { pointer: 0 }),
         },
     };
     ctx.build_and_mine_message(message).await;
@@ -296,7 +296,7 @@ async fn test_integration_mint_supply_cap_exceeded() {
     let message = OpReturnMessage {
         tx_type: TxType::ContractCall {
             contract: block_tx_contract.to_tuple(),
-            call_type: CallType::Mint,
+            call_type: CallType::Mint(MintOption { pointer: 0 }),
         },
     };
     let overflow_block_tx = ctx.build_and_mine_message(message).await;

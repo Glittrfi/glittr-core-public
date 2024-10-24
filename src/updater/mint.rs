@@ -1,3 +1,5 @@
+use message::MintOption;
+
 use super::*;
 
 impl Updater {
@@ -21,11 +23,15 @@ impl Updater {
         contract_id: &BlockTxTuple,
         tx_id: &str,
         n_output: u32,
-        amount: u32
+        amount: u32,
     ) -> Option<Flaw> {
         let contract_key = BlockTx::from_tuple(*contract_id).to_string();
         let key = format!("{}:{}:{}", contract_key, tx_id, n_output.to_string());
-        let result = self.database.lock().await.put(MINT_OUTPUT_PREFIX, &key, amount);
+        let result = self
+            .database
+            .lock()
+            .await
+            .put(MINT_OUTPUT_PREFIX, &key, amount);
         if result.is_err() {
             return Some(Flaw::WriteError);
         }
@@ -49,14 +55,12 @@ impl Updater {
         None
     }
 
-    // TODO:
-    // - add pointer to mint, specify wich output index for the mint receiver
-    // - current default index is 0
     async fn mint_free_mint(
         &self,
         asset: AssetContractFreeMint,
         tx: &Transaction,
         contract_id: &BlockTxTuple,
+        mint_option: &MintOption,
     ) -> Option<Flaw> {
         let mut mint_data = match self.get_mint_data(contract_id).await {
             Ok(data) => data,
@@ -76,14 +80,18 @@ impl Updater {
         }
         mint_data.minted = mint_data.minted.saturating_add(1);
 
+        // check pointer overflow
+        if mint_option.pointer >= tx.output.len() as u32 {
+            return Some(Flaw::PointerOverflow);
+        }
+
         // set the outpoint
-        let default_n_pointer = 0;
         let flaw = self
             .set_mint_output(
                 contract_id,
                 tx.compute_txid().to_string().as_str(),
-                default_n_pointer,
-                asset.amount_per_mint
+                mint_option.pointer,
+                asset.amount_per_mint,
             )
             .await;
         if flaw.is_some() {
@@ -94,14 +102,20 @@ impl Updater {
         self.update_mint_data(contract_id, &mint_data).await
     }
 
-    pub async fn mint(&mut self, tx: &Transaction, contract_id: BlockTxTuple) -> Option<Flaw> {
+    pub async fn mint(
+        &mut self,
+        tx: &Transaction,
+        contract_id: &BlockTxTuple,
+        mint_option: &MintOption,
+    ) -> Option<Flaw> {
         let message = self.get_message(&contract_id).await;
         match message {
             Ok(op_return_message) => match op_return_message.tx_type {
                 TxType::ContractCreation { contract_type } => match contract_type {
                     message::ContractType::Asset(asset) => match asset {
                         AssetContract::FreeMint(free_mint) => {
-                            self.mint_free_mint(free_mint, tx, &contract_id).await
+                            self.mint_free_mint(free_mint, tx, contract_id, mint_option)
+                                .await
                         }
                         // TODO: add others asset types
                         _ => Some(Flaw::ContractNotMatch),

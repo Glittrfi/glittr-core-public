@@ -19,8 +19,14 @@ pub enum ContractType {
 
 #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
 #[serde(rename_all = "snake_case")]
+pub struct MintOption {
+    pub pointer: u32
+}
+
+#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+#[serde(rename_all = "snake_case")]
 pub enum CallType {
-    Mint,
+    Mint(MintOption),
     Burn,
     Swap,
 }

@@ -16,6 +16,7 @@ pub enum Flaw {
     ContractNotMatch,
     ContractNotFound,
     WriteError, // TODO: write error should be panic
+    PointerOverflow,
 
     // call type::mint
     SupplyCapExceeded,

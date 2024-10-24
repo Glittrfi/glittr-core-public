@@ -23,9 +23,6 @@ impl AssetContractFreeMint {
                 return Some(Flaw::OverflowAmountPerMint);
             }
         }
-
-        // TODO: validate divisibility value
-        // TODO: validate live_time value (block_height must be valid)
         None
     }
 }
