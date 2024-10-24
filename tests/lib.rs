@@ -541,34 +541,129 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
 #[tokio::test]
 async fn test_metaprotocol_to_glittr_asset() {
     let mut ctx = TestContext::new().await;
-    let rune_location: BlockTx = BlockTx { block: 1, tx: 1 };
-    let contract_treasury = get_bitcoin_address();
 
-    let pubkey: Vec<u8> = vec![
-        0xA8, 0x88, 0x79, 0x2D, 0xF8, 0x4F, 0x3D, 0x89, 0x0D, 0xD8, 0x92, 0xB9, 0x8E, 0xA1, 0xF6,
-        0xF4, 0x92, 0xC4, 0x8C, 0x2B, 0x93, 0xD1, 0x28, 0xF1, 0xD9, 0x7D, 0x93, 0x74, 0x1C, 0x8C,
-        0x14, 0x12,
-    ];
-
-    let message = OpReturnMessage {
+    let secp = Secp256k1::new();
+    let oracle_keypair = Keypair::new(&secp, &mut rand::thread_rng());
+    let oracle_xonly = XOnlyPublicKey::from_keypair(&oracle_keypair);
+    let contract_message = OpReturnMessage {
         tx_type: TxType::ContractCreation {
             contract_type: ContractType::Asset(AssetContract::PurchaseBurnSwap(
                 AssetContractPurchaseBurnSwap {
                     input_asset: InputAsset::Metaprotocol,
-                    transfer_scheme: TransferScheme::Purchase(contract_treasury.to_string()),
+                    transfer_scheme: TransferScheme::Burn,
                     transfer_ratio_type: TransferRatioType::Oracle {
-                        pubkey,
-                        setting: OracleSetting { asset_id: None },
+                        pubkey: oracle_xonly.0.serialize().to_vec(),
+                        setting: OracleSetting {
+                            asset_id: Some("rune:840000:3".to_string()),
+                        },
                     },
                 },
             )),
         },
     };
 
-    let block_tx = ctx.build_and_mine_contract_message(&message).await;
+    let contract_init_block_tx = ctx.build_and_mine_contract_message(&contract_message).await;
+
+    let minter_address = get_bitcoin_address();
+
+    // prepare btc
+    let bitcoin_value = 50000;
+    let fee = 100;
+    let dust = 546;
+    let oracle_out_value = 10000;
+
+    ctx.core.mine_blocks_with_subsidy(1, bitcoin_value);
+    let height = ctx.core.height();
+
+    let input_txid = ctx.core.tx((height - 1) as usize, 0).compute_txid();
+    let oracle_message = OracleMessage {
+        input_outpoint: OutPoint {
+            txid: input_txid,
+            vout: 0,
+        },
+        min_in_value: 0,
+        out_value: oracle_out_value,
+        asset_id: Some("rune:840000:3".to_string()),
+    };
+
+    let secp: Secp256k1<secp256k1::All> = Secp256k1::new();
+    let msg = Message::from_digest_slice(
+        sha256::Hash::hash(
+            serde_json::to_string(&oracle_message)
+                .unwrap()
+                .as_bytes(),
+        )
+        .as_byte_array(),
+    )
+    .unwrap();
+
+    let signature = secp.sign_schnorr(&msg, &oracle_keypair);
+
+    let mint_message = OpReturnMessage {
+        tx_type: TxType::ContractCall {
+            contract: contract_init_block_tx.to_tuple(),
+            call_type: CallType::Mint(MintOption {
+                pointer: 1,
+                oracle_message: Some(OracleMessageSigned {
+                    signature: signature.serialize().to_vec(),
+                    message: oracle_message.clone(),
+                }),
+            }),
+        },
+    };
+    ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[((height - 1) as usize, 0, 0, Witness::new())],
+        op_return: Some(mint_message.into_script()),
+        op_return_index: Some(0),
+        op_return_value: Some(bitcoin_value - fee - dust),
+        output_values: &[dust],
+        outputs: 1,
+        p2tr: false,
+        recipient: Some(minter_address),
+    });
+
+    ctx.core.mine_blocks(1);
+
+    let mint_block_tx = BlockTx {
+        block: height + 1,
+        tx: 1,
+    };
+
     start_indexer(Arc::clone(&ctx.indexer)).await;
-    ctx.verify_last_block(block_tx.block).await;
-    ctx.get_message_outcome(block_tx).await;
+    ctx.get_message_outcome(contract_init_block_tx).await;
+    let mint_outcome = ctx.get_message_outcome(mint_block_tx).await;
+    assert!(mint_outcome.flaw.is_none(), "{:?}", mint_outcome.flaw);
+
+    let tx = ctx
+        .get_transaction_from_block_tx(mint_block_tx)
+        .await
+        .unwrap();
+    let pbs = if let TxType::ContractCreation {
+        contract_type: ContractType::Asset(AssetContract::PurchaseBurnSwap(pbs)),
+    } = contract_message.tx_type.clone()
+    {
+        Some(pbs.clone())
+    } else {
+        None
+    };
+
+    let mint_outcome = Updater::get_mint_purchase_burn_swap(
+        pbs.unwrap(),
+        &tx,
+        MintOption {
+            pointer: 1,
+            oracle_message: Some(OracleMessageSigned {
+                signature: signature.serialize().to_vec(),
+                message: oracle_message,
+            }),
+        },
+    )
+    .await
+    .unwrap();
+    assert!(mint_outcome.out_value == oracle_out_value);
+    assert!(mint_outcome.txout == 1);
+
     ctx.drop().await;
 }
 
