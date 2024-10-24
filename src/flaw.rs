@@ -12,7 +12,7 @@ pub enum Flaw {
     MessageInvalid,
     ContractNotMatch,
     ContractNotFound,
-    WriteError,
+    WriteError, // TODO: write error should be panic
 
     // call type::mint
     SupplyCapExceeded,
