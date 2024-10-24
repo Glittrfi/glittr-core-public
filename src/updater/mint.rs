@@ -85,6 +85,8 @@ impl Updater {
             return Some(Flaw::PointerOverflow);
         }
 
+        // TODO: check livetime
+
         // set the outpoint
         let flaw = self
             .set_mint_output(
