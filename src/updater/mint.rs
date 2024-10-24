@@ -21,10 +21,11 @@ impl Updater {
         contract_id: &BlockTxTuple,
         tx_id: &str,
         n_output: u32,
+        amount: u32
     ) -> Option<Flaw> {
         let contract_key = BlockTx::from_tuple(*contract_id).to_string();
         let key = format!("{}:{}:{}", contract_key, tx_id, n_output.to_string());
-        let result = self.database.lock().await.put(MINT_OUTPUT_PREFIX, &key, 1);
+        let result = self.database.lock().await.put(MINT_OUTPUT_PREFIX, &key, amount);
         if result.is_err() {
             return Some(Flaw::WriteError);
         }
@@ -82,6 +83,7 @@ impl Updater {
                 contract_id,
                 tx.compute_txid().to_string().as_str(),
                 default_n_pointer,
+                asset.amount_per_mint
             )
             .await;
         if flaw.is_some() {

@@ -8,9 +8,12 @@ use glittr::{
     asset_contract::{
         AssetContract, AssetContractFreeMint, InputAsset, TransferRatioType, TransferScheme,
     },
-    database::{Database, DatabaseError, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX},
-    message::{ContractType, OpReturnMessage, TxType},
-    BlockTx, Indexer, MessageDataOutcome,
+    database::{
+        Database, DatabaseError, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX, MINT_DATA_PREFIX,
+        MINT_OUTPUT_PREFIX,
+    },
+    message::{CallType, ContractType, OpReturnMessage, TxType},
+    BlockTx, Flaw, Indexer, MessageDataOutcome, MintData,
 };
 
 // Test utilities
@@ -174,10 +177,26 @@ async fn test_integration_purchaseburnswap() {
     ctx.drop().await;
 }
 
-// Template for additional tests
 #[tokio::test]
 async fn test_integration_freemint() {
-    // TODO: Implement using TestContext
+    let mut ctx = TestContext::new().await;
+
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCreation {
+            contract_type: ContractType::Asset(AssetContract::FreeMint(AssetContractFreeMint {
+                supply_cap: Some(1000),
+                amount_per_mint: 10,
+                divisibility: 18,
+                live_time: 0,
+            })),
+        },
+    };
+
+    let block_tx = ctx.build_and_mine_message(message).await;
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+    ctx.verify_last_block(block_tx.block).await;
+    ctx.verify_message(block_tx).await;
+    ctx.drop().await;
 }
 
 #[tokio::test]
@@ -187,7 +206,119 @@ async fn test_integration_preallocated() {
 
 #[tokio::test]
 async fn test_integration_mint() {
-    // TODO: Implement using TestContext
+    let mut ctx = TestContext::new().await;
+
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCreation {
+            contract_type: ContractType::Asset(AssetContract::FreeMint(AssetContractFreeMint {
+                supply_cap: Some(1000),
+                amount_per_mint: 10,
+                divisibility: 18,
+                live_time: 0,
+            })),
+        },
+    };
+
+    let block_tx_contract = ctx.build_and_mine_message(message).await;
+
+    let total_mints = 10;
+
+    for _ in 0..total_mints {
+        let message = OpReturnMessage {
+            tx_type: TxType::ContractCall {
+                contract: block_tx_contract.to_tuple(),
+                call_type: CallType::Mint,
+            },
+        };
+        ctx.build_and_mine_message(message).await;
+    }
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    let mint_data: Result<MintData, DatabaseError> = ctx
+        .indexer
+        .lock()
+        .await
+        .database
+        .lock()
+        .await
+        .get(MINT_DATA_PREFIX, block_tx_contract.to_string().as_str());
+    let mint_data = mint_data.expect("Mint data should exist");
+
+    let mint_outputs: Result<Vec<(String, u32)>, DatabaseError> = ctx
+        .indexer
+        .lock()
+        .await
+        .database
+        .lock()
+        .await
+        .get_by_prefix(MINT_OUTPUT_PREFIX);
+    let mint_outputs = mint_outputs.expect("Mint outputs should exist");
+
+    for (k, v) in &mint_outputs {
+        println!("Mint output: {}: {}", k, v);
+    }
+
+    assert_eq!(mint_data.minted, total_mints);
+    assert_eq!(mint_outputs.len() as u32, total_mints);
+
+    ctx.drop().await;
+}
+
+#[tokio::test]
+async fn test_integration_mint_supply_cap_exceeded() {
+    let mut ctx = TestContext::new().await;
+
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCreation {
+            contract_type: ContractType::Asset(AssetContract::FreeMint(AssetContractFreeMint {
+                supply_cap: Some(50),
+                amount_per_mint: 50,
+                divisibility: 18,
+                live_time: 0,
+            })),
+        },
+    };
+
+    let block_tx_contract = ctx.build_and_mine_message(message).await;
+
+    // first mint
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCall {
+            contract: block_tx_contract.to_tuple(),
+            call_type: CallType::Mint,
+        },
+    };
+    ctx.build_and_mine_message(message).await;
+
+    // second mint should be execeeded the supply cap
+    // and the total minted should be still 1
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCall {
+            contract: block_tx_contract.to_tuple(),
+            call_type: CallType::Mint,
+        },
+    };
+    let overflow_block_tx = ctx.build_and_mine_message(message).await;
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    let mint_data: Result<MintData, DatabaseError> = ctx
+        .indexer
+        .lock()
+        .await
+        .database
+        .lock()
+        .await
+        .get(MINT_DATA_PREFIX, block_tx_contract.to_string().as_str());
+    let mint_data = mint_data.expect("Mint data should exist");
+
+    assert_eq!(mint_data.minted, 1);
+
+    let outcome = ctx.verify_message(overflow_block_tx).await;
+    assert_eq!(outcome.flaw.unwrap(), Flaw::SupplyCapExceeded);
+
+    ctx.drop().await;
 }
 
 #[tokio::test]

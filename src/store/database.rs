@@ -1,6 +1,6 @@
 use super::*;
 use bitcoincore_rpc::jsonrpc::serde_json::{self, Deserializer};
-use rocksdb::DB;
+use rocksdb::{IteratorMode, DB};
 
 pub const INDEXER_LAST_BLOCK_PREFIX: &str = "last_block";
 pub const MESSAGE_PREFIX: &str = "message";
@@ -13,7 +13,6 @@ pub const MINT_DATA_PREFIX: &str = "mint_data";
 pub struct Database {
     db: Arc<DB>,
 }
-
 
 #[derive(Debug)]
 pub enum DatabaseError {
@@ -36,7 +35,7 @@ impl Database {
         value: T,
     ) -> Result<(), rocksdb::Error> {
         self.db.put(
-            format!("{}{}", prefix, key),
+            format!("{}:{}", prefix, key),
             serde_json::to_string(&value).unwrap(),
         )
     }
@@ -46,7 +45,7 @@ impl Database {
         prefix: &str,
         key: &str,
     ) -> Result<T, DatabaseError> {
-        let value = self.db.get(format!("{}{}", prefix, key)).unwrap();
+        let value = self.db.get(format!("{}:{}", prefix, key)).unwrap();
 
         if let Some(value) = value {
             let message = T::deserialize(&mut Deserializer::from_slice(value.as_slice()));
@@ -57,5 +56,36 @@ impl Database {
             };
         }
         Err(DatabaseError::NotFound)
+    }
+
+    // expensive function, better to not use it, better to define the index for each value datas
+    pub fn get_by_prefix<T: for<'a> Deserialize<'a>>(
+        &self,
+        prefix: &str,
+    ) -> Result<Vec<(String, T)>, DatabaseError> {
+        let mut results = Vec::new();
+        let iter = self.db.iterator(IteratorMode::From(
+            prefix.as_bytes(),
+            rocksdb::Direction::Forward,
+        ));
+
+        for item in iter {
+            match item {
+                Ok((key, value)) => {
+                    let key_str = String::from_utf8_lossy(&key);
+                    if !key_str.starts_with(prefix) {
+                        break; // Stop when we've moved past the prefix
+                    }
+
+                    match T::deserialize(&mut Deserializer::from_slice(&value)) {
+                        Ok(deserialized) => results.push((key_str.to_string(), deserialized)),
+                        Err(_) => return Err(DatabaseError::DeserializeFailed),
+                    }
+                }
+                Err(_) => return Err(DatabaseError::DeserializeFailed),
+            }
+        }
+
+        Ok(results)
     }
 }

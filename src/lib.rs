@@ -22,6 +22,7 @@ pub use indexer::*;
 pub use store::*;
 pub use transaction::*;
 pub use types::*;
+pub use flaw::*;
 
 #[tokio::main]
 pub async fn run() -> Result<(), Box<dyn Error>> {

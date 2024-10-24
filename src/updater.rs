@@ -14,15 +14,15 @@ use super::*;
 #[derive(Deserialize, Serialize, Clone, Default, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MintData {
-    minted: u32,
-    burned: u32,
+    pub minted: u32,
+    pub burned: u32,
 }
 
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct MessageDataOutcome {
-    message: Option<OpReturnMessage>,
-    flaw: Option<Flaw>,
+    pub message: Option<OpReturnMessage>,
+    pub flaw: Option<Flaw>,
 }
 
 pub struct Updater {
@@ -95,8 +95,7 @@ impl Updater {
                         call_type,
                     } => match call_type {
                         CallType::Mint => {
-                            self.mint(tx, contract).await;
-                            None
+                            self.mint(tx, contract).await
                         }
                         CallType::Burn => {
                             log::info!("Process call type burn");
