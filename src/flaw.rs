@@ -9,7 +9,14 @@ pub enum Flaw {
     FailedDeserialization,
 
     // call type
+    MessageInvalid,
+    ContractNotMatch,
+    ContractNotFound,
+    WriteError,
+
+    // call type::mint
+    SupplyCapExceeded,
 
     // asset contract
-    OverflowAmountPerMint
+    OverflowAmountPerMint,
 }

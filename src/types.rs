@@ -17,6 +17,12 @@ impl fmt::Display for BlockTx {
 }
 
 impl BlockTx {
+    pub fn from_tuple(block_tx_tuple: BlockTxTuple) -> BlockTx {
+        BlockTx {
+            block: block_tx_tuple.0,
+            tx: block_tx_tuple.1,
+        }
+    }
     pub fn to_tuple(&self) -> BlockTxTuple {
         (self.block, self.tx)
     }

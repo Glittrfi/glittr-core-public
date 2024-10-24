@@ -7,7 +7,7 @@ use tempfile::TempDir;
 use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
 
 use glittr::{
-    asset_contract::AssetContract,
+    asset_contract::{AssetContract, AssetContractFreeMint},
     database::{Database, DatabaseError, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX},
     message::{ContractType, OpReturnMessage, TxType},
     BlockTx, Indexer, MessageDataOutcome,
@@ -59,12 +59,12 @@ pub async fn test_integration_broadcast_op_return_message_success() {
 
     let dummy_message = OpReturnMessage {
         tx_type: TxType::ContractCreation {
-            contract_type: ContractType::Asset(AssetContract::FreeMint {
+            contract_type: ContractType::Asset(AssetContract::FreeMint(AssetContractFreeMint {
                 supply_cap: Some(1000),
                 amount_per_mint: 10,
                 divisibility: 18,
                 live_time: 0,
-            }),
+            })),
         },
     };
     core.broadcast_tx(TransactionTemplate {
@@ -97,13 +97,8 @@ pub async fn test_integration_broadcast_op_return_message_success() {
 
     assert_eq!(last_block, 3);
 
-    let message: Result<MessageDataOutcome, DatabaseError> = indexer
-        .lock()
-        .await
-        .database
-        .lock()
-        .await
-        .get(
+    let message: Result<MessageDataOutcome, DatabaseError> =
+        indexer.lock().await.database.lock().await.get(
             MESSAGE_PREFIX,
             BlockTx { block: 3, tx: 1 }.to_string().as_str(),
         );
