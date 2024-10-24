@@ -1,11 +1,11 @@
-use asset_contract::{AssetContract, AssetContractFreeMint};
+use asset_contract::{AssetContract, AssetContractFreeMint, InputAsset};
 use bitcoin::Transaction;
 use database::{
     DatabaseError, MESSAGE_PREFIX, MINT_DATA_PREFIX, MINT_OUTPUT_PREFIX,
     TRANSACTION_TO_BLOCK_TX_PREFIX,
 };
 use flaw::Flaw;
-use message::{CallType, OpReturnMessage, TxType};
+use message::{CallType, ContractType, OpReturnMessage, TxType};
 
 use super::*;
 
@@ -64,8 +64,28 @@ impl Updater {
                         log::info!("Process transfer");
                         None
                     }
-                    TxType::ContractCreation { contract_type: _ } => {
+                    TxType::ContractCreation { contract_type } => {
                         log::info!("Process contract creation");
+                        if let ContractType::Asset(asset_contract) = contract_type {
+                            if let AssetContract::PurchaseBurnSwap { input_asset, .. } =
+                                asset_contract
+                            {
+                                if let InputAsset::GlittrAsset(block_tx_tuple) = input_asset {
+                                    if let Some(tx_type) =
+                                        self.get_message_txtype(block_tx_tuple).await.ok()
+                                    {
+                                        match tx_type {
+                                            TxType::ContractCreation { .. } => None,
+                                            _ => Some(Flaw::ReferencingFlawedBlockTx),
+                                        };
+                                    }
+                                } else if let InputAsset::Rune(_block_tx_tuple) = input_asset {
+                                    // NOTE: design decision, IMO we shouldn't check if rune exist as validation
+                                    // since rune is a separate meta-protocol
+                                    // validating rune is exist / not here means our core must index runes
+                                }
+                            }
+                        }
                         None
                     }
                     TxType::ContractCall {
@@ -103,6 +123,29 @@ impl Updater {
         )?;
 
         Ok(())
+    }
+
+    async fn get_message_txtype(&self, block_tx: BlockTxTuple) -> Result<TxType, Flaw> {
+        let outcome: MessageDataOutcome = self
+            .database
+            .lock()
+            .await
+            .get(
+                MESSAGE_PREFIX,
+                BlockTx {
+                    block: block_tx.0,
+                    tx: block_tx.1,
+                }
+                .to_string()
+                .as_str(),
+            )
+            .unwrap();
+
+        if outcome.flaw.is_some() {
+            return Err(Flaw::ReferencingFlawedBlockTx);
+        } else {
+            return Ok(outcome.message.unwrap().tx_type);
+        }
     }
 
     async fn get_message(&self, contract_id: &BlockTxTuple) -> Result<OpReturnMessage, Flaw> {

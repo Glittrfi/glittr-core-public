@@ -125,6 +125,7 @@ impl OpReturnMessage {
                 // TODO: validate if contract exist
                 return call_type.validate();
             }
+
         }
 
         None
@@ -205,7 +206,6 @@ mod test {
                         assert_eq!(free_mint.live_time, 0);
                     }
                     AssetContract::PurchaseBurnSwap {
-                        input_asset_type: _,
                         input_asset: _,
                         transfer_scheme: _,
                         transfer_ratio_type: _,

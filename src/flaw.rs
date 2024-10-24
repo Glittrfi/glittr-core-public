@@ -8,6 +8,9 @@ pub enum Flaw {
     InvalidScript,
     FailedDeserialization,
 
+    InvalidBlockTxPointer,
+    ReferencingFlawedBlockTx,
+    InvalidBitcoinAddress,
     // call type
     MessageInvalid,
     ContractNotMatch,
@@ -19,4 +22,7 @@ pub enum Flaw {
 
     // asset contract
     OverflowAmountPerMint,
+    DivideByZero,
+    PubkeyLengthInvalid,
+    OracleMessageFormatInvalid,
 }
