@@ -5,7 +5,7 @@ use asset_contract::AssetContract;
 use bitcoin::{
     opcodes,
     script::{self, Instruction, PushBytes},
-    ScriptBuf, Transaction,
+    OutPoint, ScriptBuf, Transaction,
 };
 use bitcoincore_rpc::jsonrpc::serde_json::{self, Deserializer};
 use constants::OP_RETURN_MAGIC_PREFIX;
@@ -17,7 +17,7 @@ pub enum ContractType {
     Asset(AssetContract),
 }
 
-#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum CallType {
     Mint(MintOption),
@@ -25,9 +25,27 @@ pub enum CallType {
     Swap,
 }
 
-#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct MintOption {
     pub pointer: u32,
+    pub oracle_message: Option<OracleMessageSigned>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct OracleMessageSigned {
+    pub signature: Vec<u8>,
+    pub message: OracleMessage,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct OracleMessage {
+    pub input_outpoint: OutPoint,
+    /// min_in_value represents what the input valued at (minimum because btc value could differ (-fee))
+    pub min_in_value: u128,
+    /// out_value represents the oracle's valuation of the input
+    pub out_value: u128,
+    /// ordinal_number if ordinal, rune's block_tx if rune, etc
+    pub asset_id: Option<String>,
 }
 
 /// Transfer

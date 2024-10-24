@@ -10,7 +10,6 @@ pub struct Database {
     db: Arc<DB>,
 }
 
-
 #[derive(Debug)]
 pub enum DatabaseError {
     NotFound,

@@ -1,5 +1,14 @@
-use asset_contract::{AssetContract, AssetContractPurchaseBurnSwap, InputAsset, TransferScheme};
-use bitcoin::{opcodes, script::Instruction, Transaction};
+use std::str::FromStr;
+
+use asset_contract::{AssetContract, AssetContractPurchaseBurnSwap, InputAsset};
+use bitcoin::{
+    hashes::{sha256, Hash},
+    key::Secp256k1,
+    opcodes,
+    script::Instruction,
+    secp256k1::{schnorr::Signature, Message},
+    Address, Transaction, XOnlyPublicKey,
+};
 use database::{DatabaseError, MESSAGE_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX};
 use flaw::Flaw;
 use message::{CallType, ContractType, MintOption, OpReturnMessage, TxType};
@@ -75,10 +84,6 @@ impl Updater {
                                             _ => Some(Flaw::ReferencingFlawedBlockTx),
                                         };
                                     }
-                                } else if let InputAsset::Rune(_block_tx_tuple) = input_asset {
-                                    // NOTE: design decision, IMO we shouldn't check if rune exist as validation
-                                    // since rune is a separate meta-protocol
-                                    // validating rune is exist / not here means our core must index runes
                                 }
                             }
                         }
@@ -167,28 +172,32 @@ impl Updater {
         tx: &Transaction,
         mint_option: MintOption,
     ) -> Result<MintResult, Flaw> {
-        // NOTE: all asset always went to the first non-op-return txout if the pointer is invalid (for burn)
         // TODO: given the utxo, how you would know if the utxo contains glittr asset. will be implemented on transfer.
-        let mut total_burn_value = 0;
-        let mut out_value = 0;
+        let mut total_received_value: u128 = 0;
+        let mut out_value: u128 = 0;
         let mut txout: Option<u32> = None;
 
-        match pbs.input_asset {
-            InputAsset::RawBTC => (),
-            _ => return Err(Flaw::NotImplemented),
-        };
-
+        // VALIDATE OUTPUT
         match pbs.transfer_scheme {
+            // Ensure that the asset is set to burn
             asset_contract::TransferScheme::Burn => {
                 for (pos, output) in tx.output.iter().enumerate() {
                     let mut instructions = output.script_pubkey.instructions();
 
                     if instructions.next() == Some(Ok(Instruction::Op(opcodes::all::OP_RETURN))) {
-                        if let InputAsset::RawBTC = pbs.input_asset {
-                            total_burn_value = output.value.to_sat();
+                        match pbs.input_asset {
+                            InputAsset::RawBTC => {
+                                total_received_value = output.value.to_sat() as u128;
+                            }
+                            InputAsset::GlittrAsset(_) => todo!(),
+                            InputAsset::Metaprotocol => {
+                                // TODO: handle transfer for each and every metaprotocol (ordinal, runes)
+                                // need to copy the transfer mechanics for each, make sure the sat is burned
+                            }
                         }
 
                         if mint_option.pointer != pos as u32 {
+                            // NOTE: all asset always went to the first non-op-return txout if the pointer is invalid (for burn)
                             txout = Some(mint_option.pointer as u32);
                             break;
                         }
@@ -199,19 +208,101 @@ impl Updater {
                     }
                 }
             }
-            asset_contract::TransferScheme::Purchase(_) => return Err(Flaw::NotImplemented),
+            asset_contract::TransferScheme::Purchase(bitcoin_address) => {
+                for output in tx.output.iter() {
+                    let address = Address::from_str(bitcoin_address.as_str())
+                        .unwrap()
+                        .assume_checked();
+                    // TODO: bitcoin network from CONFIG
+                    let address_from_script = Address::from_script(
+                        output.script_pubkey.as_script(),
+                        bitcoin::Network::Regtest,
+                    );
+
+                    if let Some(address_from_script) = address_from_script.ok() {
+                        if address == address_from_script {
+                            match pbs.input_asset {
+                                InputAsset::RawBTC => {
+                                    total_received_value = output.value.to_sat() as u128;
+                                }
+                                InputAsset::GlittrAsset(_) => todo!(),
+                                InputAsset::Metaprotocol => {
+                                    // TODO: handle transfer for each and every metaprotocol (ordinal, runes)
+                                    // need to copy the transfer mechanics for each, make sure the sat is burned
+                                }
+                            }
+                        }
+                    }
+                }
+                txout = Some(mint_option.pointer);
+            }
         }
 
-        match pbs.transfer_ratio_type {
-            asset_contract::TransferRatioType::Fixed { ratio } => {
-                if let asset_contract::TransferScheme::Burn = pbs.transfer_scheme {
-                    out_value = (total_burn_value as u128 * ratio.0) / ratio.1;
+        if txout.unwrap() > tx.output.len() as u32 {
+            return Err(Flaw::InvalidMintPointer);
+        }
+
+        // VALIDATE INPUT
+        match pbs.input_asset {
+            InputAsset::GlittrAsset(_) => todo!(),
+            _ => (), // validated below
+        };
+
+        if let asset_contract::TransferRatioType::Fixed { ratio } = pbs.transfer_ratio_type {
+            out_value = (total_received_value as u128 * ratio.0) / ratio.1;
+        } else if let asset_contract::TransferRatioType::Oracle { pubkey, setting } =
+            pbs.transfer_ratio_type.clone()
+        {
+            let verified = if let Some(oracle_message_signed) = mint_option.oracle_message {
+                if setting.asset_id == oracle_message_signed.message.asset_id {
+                    let pubkey: XOnlyPublicKey =
+                        XOnlyPublicKey::from_slice(pubkey.as_slice()).unwrap();
+
+                    if let Some(signature) =
+                        Signature::from_slice(&oracle_message_signed.signature).ok()
+                    {
+                        let secp = Secp256k1::new();
+
+                        let msg = Message::from_digest_slice(
+                            sha256::Hash::hash(
+                                serde_json::to_string(&oracle_message_signed.message)
+                                    .unwrap()
+                                    .as_str()
+                                    .as_bytes(),
+                            )
+                            .as_byte_array(),
+                        )
+                        .unwrap();
+
+                        out_value = oracle_message_signed.message.out_value as u128;
+
+                        let mut input_found = false;
+                        for txin in tx.input.iter() {
+                            if txin.previous_output == oracle_message_signed.message.input_outpoint
+                            {
+                                input_found = true;
+                            }
+                        }
+
+                        let below_min_in_value =
+                            total_received_value < oracle_message_signed.message.min_in_value;
+
+                        !below_min_in_value
+                            && input_found
+                            && pubkey.verify(&secp, &msg, &signature).is_ok()
+                    } else {
+                        false
+                    }
+                } else {
+                    false
                 }
+            } else {
+                false
+            };
+
+            if !verified {
+                return Err(Flaw::OracleMintFailed);
             }
-            asset_contract::TransferRatioType::Oracle {
-                pubkey: _,
-                message: _,
-            } => return Err(Flaw::NotImplemented),
         }
 
         // TODO: save the mint result on asset tracker (wait for jon)

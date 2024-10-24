@@ -1,8 +1,7 @@
 use std::str::FromStr;
 
-use bitcoin::Address;
+use bitcoin::{secp256k1::PublicKey, Address, XOnlyPublicKey};
 use flaw::Flaw;
-use serde_json::value::RawValue;
 
 use super::*;
 
@@ -42,21 +41,22 @@ pub struct AssetContractPurchaseBurnSwap {
 #[serde(rename_all = "snake_case")]
 pub enum InputAsset {
     RawBTC,
-    Rune(BlockTxTuple),
     GlittrAsset(BlockTxTuple),
+    Metaprotocol,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum TransferScheme {
     Purchase(BitcoinAddress),
-    Burn, // NOTE: btc burned must go to op_return, bitcoind must set maxburnamount
+    /// NOTE: btc burned must go to op_return, bitcoind must set maxburnamount
+    Burn,
 }
 
-#[derive(Deserialize, Serialize)]
-pub struct OracleMessage<'a> {
-    #[serde(borrow)]
-    payload: &'a RawValue,
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct OracleSetting {
+    /// set asset_id to none to fully trust the oracle, ordinal_number if ordinal, rune's block_tx if rune, etc
+    pub asset_id: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -67,7 +67,7 @@ pub enum TransferRatioType {
     },
     Oracle {
         pubkey: Vec<u8>, // compressed public key
-        message: String, // todo: Arguments expected in oracle message
+        setting: OracleSetting,
     },
 }
 
@@ -101,10 +101,6 @@ impl AssetContract {
                     if block_tx_tuple.1 == 0 {
                         return Some(Flaw::InvalidBlockTxPointer);
                     }
-                } else if let InputAsset::Rune(block_tx_tuple) = input_asset {
-                    if block_tx_tuple.1 == 0 {
-                        return Some(Flaw::InvalidBlockTxPointer);
-                    }
                 }
 
                 if let TransferScheme::Purchase(bitcoin_address) = transfer_scheme {
@@ -119,13 +115,9 @@ impl AssetContract {
                             return Some(Flaw::DivideByZero);
                         }
                     }
-                    TransferRatioType::Oracle { pubkey, message } => {
-                        if pubkey.len() != 33 || pubkey.len() != 32 {
-                            return Some(Flaw::PubkeyLengthInvalid);
-                        }
-
-                        if let Err(_) = serde_json::from_str::<OracleMessage>(&message.as_str()) {
-                            return Some(Flaw::OracleMessageFormatInvalid);
+                    TransferRatioType::Oracle { pubkey, setting: _ } => {
+                        if XOnlyPublicKey::from_slice(pubkey).is_err() {
+                            return Some(Flaw::PubkeyInvalid);
                         }
                     }
                 }

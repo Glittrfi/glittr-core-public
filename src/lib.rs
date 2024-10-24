@@ -7,21 +7,21 @@ use store::database::Database;
 use tokio::sync::Mutex;
 
 mod api;
+mod config;
+mod constants;
+mod flaw;
 mod indexer;
 mod store;
 mod transaction;
 mod types;
-mod config;
-mod constants;
 mod updater;
-mod flaw;
 
 pub use api::*;
-pub use updater::*;
 pub use indexer::*;
 pub use store::*;
 pub use transaction::*;
 pub use types::*;
+pub use updater::*;
 
 #[tokio::main]
 pub async fn run() -> Result<(), Box<dyn Error>> {
@@ -31,11 +31,14 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
     let database_indexer = Arc::clone(&database);
 
     let indexer_handle = tokio::spawn(async {
-        let mut current_indexer = indexer::Indexer::new(database_indexer,             CONFIG.btc_rpc_url.clone(),
-        CONFIG.btc_rpc_username.clone(),
-        CONFIG.btc_rpc_password.clone())
-            .await
-            .expect("New indexer");
+        let mut current_indexer = indexer::Indexer::new(
+            database_indexer,
+            CONFIG.btc_rpc_url.clone(),
+            CONFIG.btc_rpc_username.clone(),
+            CONFIG.btc_rpc_password.clone(),
+        )
+        .await
+        .expect("New indexer");
         current_indexer.run_indexer().await.expect("Run indexer");
     });
 
