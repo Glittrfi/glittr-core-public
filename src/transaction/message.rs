@@ -162,7 +162,7 @@ impl OpReturnMessage {
         builder = builder.push_slice(magic_prefix);
         builder = builder.push_slice(script_bytes);
 
-        return builder.into_script();
+        builder.into_script()
     }
 }
 
@@ -195,7 +195,7 @@ mod test {
             },
         };
 
-        println!("{}", dummy_message.to_string());
+        println!("{}", dummy_message);
 
         let tx = Transaction {
             input: Vec::new(),

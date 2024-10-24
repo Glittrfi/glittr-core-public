@@ -54,7 +54,7 @@ impl TestContext {
     async fn new() -> Self {
         // env_logger::init();
         let tempdir = TempDir::new().unwrap();
-        let core = tokio::task::spawn_blocking(|| mockcore::spawn())
+        let core = tokio::task::spawn_blocking(mockcore::spawn)
             .await
             .expect("Task panicked");
 
@@ -166,7 +166,9 @@ async fn start_indexer(indexer: Arc<Mutex<Indexer>>) -> JoinHandle<()> {
 async fn spawn_test_indexer(db_path: String, rpc_url: String) -> Arc<Mutex<Indexer>> {
     let database: Arc<Mutex<Database>> = Arc::new(Mutex::new(Database::new(db_path)));
 
-    let indexer = Arc::new(Mutex::new(
+    
+
+    Arc::new(Mutex::new(
         Indexer::new(
             Arc::clone(&database),
             rpc_url,
@@ -175,9 +177,7 @@ async fn spawn_test_indexer(db_path: String, rpc_url: String) -> Arc<Mutex<Index
         )
         .await
         .unwrap(),
-    ));
-
-    indexer
+    ))
 }
 
 #[tokio::test]
@@ -462,7 +462,6 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
         sha256::Hash::hash(
             serde_json::to_string(&oracle_message)
                 .unwrap()
-                .as_str()
                 .as_bytes(),
         )
         .as_byte_array(),
@@ -533,7 +532,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
     )
     .await
     .unwrap();
-    assert!(mint_outcome.out_value == oracle_out_value as u128);
+    assert!(mint_outcome.out_value == oracle_out_value);
     assert!(mint_outcome.txout == 1);
 
     ctx.drop().await;

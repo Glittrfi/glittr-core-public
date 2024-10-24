@@ -76,8 +76,7 @@ impl Updater {
                             ) = asset_contract
                             {
                                 if let InputAsset::GlittrAsset(block_tx_tuple) = input_asset {
-                                    if let Some(tx_type) =
-                                        self.get_message_txtype(block_tx_tuple).await.ok()
+                                    if let Ok(tx_type) = self.get_message_txtype(block_tx_tuple).await
                                     {
                                         match tx_type {
                                             TxType::ContractCreation { .. } => None,
@@ -140,9 +139,9 @@ impl Updater {
             .unwrap();
 
         if outcome.flaw.is_some() {
-            return Err(Flaw::ReferencingFlawedBlockTx);
+            Err(Flaw::ReferencingFlawedBlockTx)
         } else {
-            return Ok(outcome.message.unwrap().tx_type);
+            Ok(outcome.message.unwrap().tx_type)
         }
     }
 
@@ -198,13 +197,11 @@ impl Updater {
 
                         if mint_option.pointer != pos as u32 {
                             // NOTE: all asset always went to the first non-op-return txout if the pointer is invalid (for burn)
-                            txout = Some(mint_option.pointer as u32);
+                            txout = Some(mint_option.pointer);
                             break;
                         }
-                    } else {
-                        if txout.is_none() {
-                            txout = Some(pos as u32);
-                        }
+                    } else if txout.is_none() {
+                        txout = Some(pos as u32);
                     }
                 }
             }
@@ -219,7 +216,7 @@ impl Updater {
                         bitcoin::Network::Regtest,
                     );
 
-                    if let Some(address_from_script) = address_from_script.ok() {
+                    if let Ok(address_from_script) = address_from_script {
                         if address == address_from_script {
                             match pbs.input_asset {
                                 InputAsset::RawBTC => {
@@ -249,7 +246,7 @@ impl Updater {
         };
 
         if let asset_contract::TransferRatioType::Fixed { ratio } = pbs.transfer_ratio_type {
-            out_value = (total_received_value as u128 * ratio.0) / ratio.1;
+            out_value = (total_received_value * ratio.0) / ratio.1;
         } else if let asset_contract::TransferRatioType::Oracle { pubkey, setting } =
             pbs.transfer_ratio_type.clone()
         {
@@ -258,8 +255,7 @@ impl Updater {
                     let pubkey: XOnlyPublicKey =
                         XOnlyPublicKey::from_slice(pubkey.as_slice()).unwrap();
 
-                    if let Some(signature) =
-                        Signature::from_slice(&oracle_message_signed.signature).ok()
+                    if let Ok(signature) = Signature::from_slice(&oracle_message_signed.signature)
                     {
                         let secp = Secp256k1::new();
 
@@ -267,14 +263,13 @@ impl Updater {
                             sha256::Hash::hash(
                                 serde_json::to_string(&oracle_message_signed.message)
                                     .unwrap()
-                                    .as_str()
                                     .as_bytes(),
                             )
                             .as_byte_array(),
                         )
                         .unwrap();
 
-                        out_value = oracle_message_signed.message.out_value as u128;
+                        out_value = oracle_message_signed.message.out_value;
 
                         let mut input_found = false;
                         for txin in tx.input.iter() {

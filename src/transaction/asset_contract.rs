@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use bitcoin::{secp256k1::PublicKey, Address, XOnlyPublicKey};
+use bitcoin::{Address, XOnlyPublicKey};
 use flaw::Flaw;
 
 use super::*;
@@ -104,7 +104,7 @@ impl AssetContract {
                 }
 
                 if let TransferScheme::Purchase(bitcoin_address) = transfer_scheme {
-                    if let Err(_) = Address::from_str(bitcoin_address.as_str()) {
+                    if Address::from_str(bitcoin_address.as_str()).is_err() {
                         return Some(Flaw::InvalidBitcoinAddress);
                     }
                 }
