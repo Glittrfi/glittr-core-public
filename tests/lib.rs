@@ -1,22 +1,121 @@
+use bitcoin::{Witness};
+use mockcore::{Handle, TransactionTemplate};
 use std::{sync::Arc, time::Duration};
-
-use bitcoin::Witness;
-use mockcore::TransactionTemplate;
 use tempfile::TempDir;
-
 use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
 
 use glittr::{
-    asset_contract::AssetContract,
+    asset_contract::{AssetContract, InputAsset, TransferRatioType, TransferScheme},
     database::{Database, DatabaseError, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX},
     message::{ContractType, OpReturnMessage, TxType},
     BlockTx, Indexer, MessageDataOutcome,
 };
 
-pub async fn spawn_test_indexer(
+// Test utilities
+struct TestContext {
+    indexer: Arc<Mutex<Indexer>>,
+    core: Handle,
+    _tempdir: TempDir,
+}
+
+impl TestContext {
+    async fn new() -> Self {
+        // env_logger::init();
+        let tempdir = TempDir::new().unwrap();
+        let core = tokio::task::spawn_blocking(|| mockcore::spawn())
+            .await
+            .expect("Task panicked");
+
+        // Initial setup
+        core.mine_blocks(2);
+
+        let indexer=
+            spawn_test_indexer(tempdir.path().to_str().unwrap().to_string(), core.url()).await;
+
+        Self {
+            indexer,
+            core,
+            _tempdir: tempdir,
+        }
+    }
+
+    async fn build_and_mine_message(&mut self, message: OpReturnMessage) -> BlockTx {
+        let height = self.core.height();
+
+        self.core.broadcast_tx(TransactionTemplate {
+            fee: 0,
+            inputs: &[((height - 1) as usize, 0, 0, Witness::new())],
+            op_return: Some(message.into_script()),
+            op_return_index: Some(0),
+            op_return_value: Some(0),
+            output_values: &[0, 100],
+            outputs: 2,
+            p2tr: false,
+            recipient: None,
+        });
+
+        self.core.mine_blocks(1);
+
+        BlockTx {
+            block: height + 1,
+            tx: 1,
+        }
+    }
+
+    async fn verify_message(&self, block_tx: BlockTx) -> MessageDataOutcome {
+        let message: Result<MessageDataOutcome, DatabaseError> = self
+            .indexer
+            .lock()
+            .await
+            .database
+            .lock()
+            .await
+            .get(MESSAGE_PREFIX, block_tx.to_string().as_str());
+
+        message.expect("Message should exist")
+    }
+
+    async fn verify_last_block(&self, expected_height: u64) {
+        let last_block: u64 = self
+            .indexer
+            .lock()
+            .await
+            .database
+            .lock()
+            .await
+            .get(INDEXER_LAST_BLOCK_PREFIX, "")
+            .unwrap();
+
+        assert_eq!(last_block, expected_height);
+    }
+
+    async fn drop(self) {
+        tokio::task::spawn_blocking(|| drop(self.core))
+        .await
+        .expect("Drop failed");
+    }
+}
+
+async fn start_indexer(indexer: Arc<Mutex<Indexer>>) -> JoinHandle<()> {
+    let handle = tokio::spawn(async move {
+        indexer
+            .lock()
+            .await
+            .run_indexer()
+            .await
+            .expect("Run indexer");
+    });
+    sleep(Duration::from_millis(100)).await; // let the indexer run first
+
+    handle.abort();
+
+    handle
+}
+
+async fn spawn_test_indexer(
     db_path: String,
     rpc_url: String,
-) -> (Arc<Mutex<Indexer>>, JoinHandle<()>) {
+) -> Arc<Mutex<Indexer>> {
     let database = Arc::new(Mutex::new(Database::new(db_path)));
 
     let indexer = Arc::new(Mutex::new(
@@ -30,34 +129,14 @@ pub async fn spawn_test_indexer(
         .unwrap(),
     ));
 
-    let indexer_clone = Arc::clone(&indexer);
-    let handle = tokio::spawn(async move {
-        println!("running indexer");
-        indexer
-            .lock()
-            .await
-            .run_indexer()
-            .await
-            .expect("Run indexer");
-    });
-
-    sleep(Duration::from_millis(100)).await; // let the indexer run first
-
-    (indexer_clone, handle)
+    indexer
 }
 
 #[tokio::test]
-pub async fn test_integration_broadcast_op_return_message_success() {
-    let tempdir = TempDir::new().unwrap();
+async fn test_integration_broadcast_op_return_message_success() {
+    let mut ctx = TestContext::new().await;
 
-    let core = tokio::task::spawn_blocking(|| mockcore::spawn())
-        .await
-        .expect("Task panicked");
-
-    core.mine_blocks(2);
-    let height = core.height();
-
-    let dummy_message = OpReturnMessage {
+    let message = OpReturnMessage {
         tx_type: TxType::ContractCreation {
             contract_type: ContractType::Asset(AssetContract::FreeMint {
                 supply_cap: Some(1000),
@@ -67,68 +146,62 @@ pub async fn test_integration_broadcast_op_return_message_success() {
             }),
         },
     };
-    core.broadcast_tx(TransactionTemplate {
-        fee: 0,
-        inputs: &[((height - 1) as usize, 0, 0, Witness::new())],
-        op_return: Some(dummy_message.into_script()),
-        op_return_index: Some(0),
-        op_return_value: Some(0),
-        output_values: &[0, 100],
-        outputs: 2,
-        p2tr: false,
-        recipient: None,
-    });
 
-    core.mine_blocks(1);
-
-    let (indexer, indexer_run_handle) =
-        spawn_test_indexer(tempdir.path().to_str().unwrap().to_string(), core.url()).await;
-
-    indexer_run_handle.abort();
-
-    let last_block: u64 = indexer
-        .lock()
-        .await
-        .database
-        .lock()
-        .await
-        .get(INDEXER_LAST_BLOCK_PREFIX, "")
-        .unwrap();
-
-    assert_eq!(last_block, 3);
-
-    let message: Result<MessageDataOutcome, DatabaseError> = indexer
-        .lock()
-        .await
-        .database
-        .lock()
-        .await
-        .get(
-            MESSAGE_PREFIX,
-            BlockTx { block: 3, tx: 1 }.to_string().as_str(),
-        );
-
-    assert!(message.is_ok());
-
-    tokio::task::spawn_blocking(|| drop(core))
-        .await
-        .expect("Drop failed");
+    let block_tx = ctx.build_and_mine_message(message).await;
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+    ctx.verify_last_block(block_tx.block).await;
+    ctx.verify_message(block_tx).await;
+    ctx.drop().await;
 }
 
-#[test]
-pub fn test_integration_freemint() {}
+#[tokio::test]
+async fn test_integration_purchaseburnswap() {
+    let mut ctx = TestContext::new().await;
 
-#[test]
-pub fn test_integration_preallocated() {}
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCreation {
+            contract_type: ContractType::Asset(AssetContract::PurchaseBurnSwap {
+                input_asset: InputAsset::RawBTC,
+                transfer_scheme: TransferScheme::Burn,
+                transfer_ratio_type: TransferRatioType::Fixed { ratio: (1, 1) },
+            }),
+        },
+    };
 
-#[test]
-pub fn test_integration_mint() {}
+    let block_tx = ctx.build_and_mine_message(message).await;
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+    ctx.verify_last_block(block_tx.block).await;
+    ctx.verify_message(block_tx).await;
+    ctx.drop().await;
+}
 
-#[test]
-pub fn test_integration_transfer() {}
+// Template for additional tests
+#[tokio::test]
+async fn test_integration_freemint() {
+    // TODO: Implement using TestContext
+}
 
-#[test]
-pub fn test_integration_burn() {}
+#[tokio::test]
+async fn test_integration_preallocated() {
+    // TODO: Implement using TestContext
+}
 
-#[test]
-pub fn test_integration_swap() {}
+#[tokio::test]
+async fn test_integration_mint() {
+    // TODO: Implement using TestContext
+}
+
+#[tokio::test]
+async fn test_integration_transfer() {
+    // TODO: Implement using TestContext
+}
+
+#[tokio::test]
+async fn test_integration_burn() {
+    // TODO: Implement using TestContext
+}
+
+#[tokio::test]
+async fn test_integration_swap() {
+    // TODO: Implement using TestContext
+}

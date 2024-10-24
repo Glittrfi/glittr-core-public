@@ -1,3 +1,5 @@
+#![allow(irrefutable_let_patterns)]
+
 use config::CONFIG;
 use serde::{Deserialize, Serialize};
 use std::{error::Error, sync::Arc, thread};
