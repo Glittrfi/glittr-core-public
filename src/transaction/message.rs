@@ -20,9 +20,14 @@ pub enum ContractType {
 #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum CallType {
-    Mint,
+    Mint(MintOption),
     Burn,
     Swap,
+}
+
+#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+pub struct MintOption {
+    pub pointer: u32,
 }
 
 /// Transfer
@@ -125,7 +130,6 @@ impl OpReturnMessage {
                 // TODO: validate if contract exist
                 return call_type.validate();
             }
-
         }
 
         None
@@ -152,11 +156,7 @@ impl fmt::Display for OpReturnMessage {
 
 #[cfg(test)]
 mod test {
-    use bitcoin::{
-        locktime,
-        transaction::Version,
-        Amount, Transaction, TxOut,
-    };
+    use bitcoin::{locktime, transaction::Version, Amount, Transaction, TxOut};
 
     use crate::transaction::asset_contract::AssetContract;
     use crate::transaction::message::ContractType;
@@ -211,7 +211,7 @@ mod test {
                         assert_eq!(divisibility, 18);
                         assert_eq!(live_time, 0);
                     }
-                    AssetContract::PurchaseBurnSwap(_)  => panic!("not purchase burn swap"),
+                    AssetContract::PurchaseBurnSwap(_) => panic!("not purchase burn swap"),
                 },
             },
             TxType::ContractCall {

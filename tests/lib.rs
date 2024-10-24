@@ -14,7 +14,7 @@ use glittr::{
         AssetContract, AssetContractPurchaseBurnSwap, InputAsset, TransferRatioType, TransferScheme,
     },
     database::{Database, DatabaseError, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX},
-    message::{CallType, ContractType, OpReturnMessage, TxType},
+    message::{CallType, ContractType, MintOption, OpReturnMessage, TxType},
     BlockTx, Indexer, MessageDataOutcome, Updater,
 };
 
@@ -159,7 +159,7 @@ async fn start_indexer(indexer: Arc<Mutex<Indexer>>) -> JoinHandle<()> {
 }
 
 async fn spawn_test_indexer(db_path: String, rpc_url: String) -> Arc<Mutex<Indexer>> {
-    let database = Arc::new(Mutex::new(Database::new(db_path)));
+    let database: Arc<Mutex<Database>> = Arc::new(Mutex::new(Database::new(db_path)));
 
     let indexer = Arc::new(Mutex::new(
         Indexer::new(
@@ -243,7 +243,7 @@ async fn test_raw_btc_to_wbtc_burn() {
     let mint_message = OpReturnMessage {
         tx_type: TxType::ContractCall {
             contract: contract_init_block_tx.to_tuple(),
-            call_type: CallType::Mint,
+            call_type: CallType::Mint(MintOption { pointer: 0 }),
         },
     };
 
@@ -292,11 +292,12 @@ async fn test_raw_btc_to_wbtc_burn() {
         None
     };
 
-    let mint_outcome = Updater::get_mint_purchase_burn_swap(pbs.unwrap(), &tx)
-        .await
-        .unwrap();
+    let mint_outcome =
+        Updater::get_mint_purchase_burn_swap(pbs.unwrap(), &tx, MintOption { pointer: 1 })
+            .await
+            .unwrap();
     assert!(mint_outcome.out_value == (bitcoin_value - fee - dust) as u128);
-    assert!(mint_outcome.txout == 0);
+    assert!(mint_outcome.txout == 1);
 
     ctx.drop().await;
 }

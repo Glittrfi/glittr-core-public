@@ -1,8 +1,8 @@
-use asset_contract::{AssetContract, AssetContractPurchaseBurnSwap, InputAsset};
+use asset_contract::{AssetContract, AssetContractPurchaseBurnSwap, InputAsset, TransferScheme};
 use bitcoin::{opcodes, script::Instruction, Transaction};
 use database::{DatabaseError, MESSAGE_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX};
 use flaw::Flaw;
-use message::{CallType, ContractType, OpReturnMessage, TxType};
+use message::{CallType, ContractType, MintOption, OpReturnMessage, TxType};
 
 use super::*;
 
@@ -88,7 +88,7 @@ impl Updater {
                         contract,
                         call_type,
                     } => match call_type {
-                        CallType::Mint => self.mint(tx, contract).await,
+                        CallType::Mint(mint_option) => self.mint(tx, contract, mint_option).await,
                         CallType::Burn => {
                             log::info!("Process call type burn");
                             None
@@ -165,11 +165,12 @@ impl Updater {
     pub async fn get_mint_purchase_burn_swap(
         pbs: AssetContractPurchaseBurnSwap,
         tx: &Transaction,
+        mint_option: MintOption,
     ) -> Result<MintResult, Flaw> {
-        // NOTE: all asset always went to the first non-op-return txout
+        // NOTE: all asset always went to the first non-op-return txout if the pointer is invalid (for burn)
         // TODO: given the utxo, how you would know if the utxo contains glittr asset. will be implemented on transfer.
         let mut total_burn_value = 0;
-        let out_value;
+        let mut out_value = 0;
         let mut txout: Option<u32> = None;
 
         match pbs.input_asset {
@@ -179,12 +180,18 @@ impl Updater {
 
         match pbs.transfer_scheme {
             asset_contract::TransferScheme::Burn => {
-                // how much the op_return output get
                 for (pos, output) in tx.output.iter().enumerate() {
                     let mut instructions = output.script_pubkey.instructions();
 
                     if instructions.next() == Some(Ok(Instruction::Op(opcodes::all::OP_RETURN))) {
-                        total_burn_value = output.value.to_sat();
+                        if let InputAsset::RawBTC = pbs.input_asset {
+                            total_burn_value = output.value.to_sat();
+                        }
+
+                        if mint_option.pointer != pos as u32 {
+                            txout = Some(mint_option.pointer as u32);
+                            break;
+                        }
                     } else {
                         if txout.is_none() {
                             txout = Some(pos as u32);
@@ -197,7 +204,9 @@ impl Updater {
 
         match pbs.transfer_ratio_type {
             asset_contract::TransferRatioType::Fixed { ratio } => {
-                out_value = (total_burn_value as u128 * ratio.0) / ratio.1;
+                if let asset_contract::TransferScheme::Burn = pbs.transfer_scheme {
+                    out_value = (total_burn_value as u128 * ratio.0) / ratio.1;
+                }
             }
             asset_contract::TransferRatioType::Oracle {
                 pubkey: _,
@@ -208,18 +217,25 @@ impl Updater {
         // TODO: save the mint result on asset tracker (wait for jon)
         Ok(MintResult {
             out_value,
-            txout: 0,
+            txout: txout.unwrap(),
         })
     }
 
-    async fn mint(&mut self, tx: &Transaction, contract_id: BlockTxTuple) -> Option<Flaw> {
+    async fn mint(
+        &mut self,
+        tx: &Transaction,
+        contract_id: BlockTxTuple,
+        mint_option: MintOption,
+    ) -> Option<Flaw> {
         let message = self.get_message(&contract_id).await;
         match message {
             Ok(op_return_message) => match op_return_message.tx_type {
                 TxType::ContractCreation { contract_type } => match contract_type {
                     message::ContractType::Asset(asset) => match asset {
                         AssetContract::PurchaseBurnSwap(pbs) => {
-                            Updater::get_mint_purchase_burn_swap(pbs, tx).await.err()
+                            Updater::get_mint_purchase_burn_swap(pbs, tx, mint_option)
+                                .await
+                                .err()
                         }
                         _ => Some(Flaw::ContractNotMatch),
                     },
