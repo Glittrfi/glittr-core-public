@@ -12,10 +12,15 @@ pub enum Flaw {
     ReferencingFlawedBlockTx,
     InvalidBitcoinAddress,
     // call type
+    MessageInvalid,
+    ContractNotFound,
+    ContractNotMatch,
 
     // asset contract
     OverflowAmountPerMint,
     DivideByZero,
     PubkeyLengthInvalid,
     OracleMessageFormatInvalid,
+
+    NotImplemented,
 }

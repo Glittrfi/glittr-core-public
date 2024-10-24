@@ -211,11 +211,7 @@ mod test {
                         assert_eq!(divisibility, 18);
                         assert_eq!(live_time, 0);
                     }
-                    AssetContract::PurchaseBurnSwap {
-                        input_asset: _,
-                        transfer_scheme: _,
-                        transfer_ratio_type: _,
-                    } => panic!("not purchase burn swap"),
+                    AssetContract::PurchaseBurnSwap(_)  => panic!("not purchase burn swap"),
                 },
             },
             TxType::ContractCall {

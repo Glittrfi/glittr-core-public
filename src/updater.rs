@@ -1,6 +1,6 @@
-use asset_contract::{AssetContract, InputAsset};
-use bitcoin::{Transaction};
-use database::{MESSAGE_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX};
+use asset_contract::{AssetContract, AssetContractPurchaseBurnSwap, InputAsset};
+use bitcoin::{opcodes, script::Instruction, Transaction};
+use database::{DatabaseError, MESSAGE_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX};
 use flaw::Flaw;
 use message::{CallType, ContractType, OpReturnMessage, TxType};
 
@@ -9,8 +9,13 @@ use super::*;
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct MessageDataOutcome {
-    message: Option<OpReturnMessage>,
-    flaw: Option<Flaw>,
+    pub message: Option<OpReturnMessage>,
+    pub flaw: Option<Flaw>,
+}
+
+pub struct MintResult {
+    pub out_value: u128,
+    pub txout: u32,
 }
 
 pub struct Updater {
@@ -57,19 +62,19 @@ impl Updater {
                     TxType::ContractCreation { contract_type } => {
                         log::info!("Process contract creation");
                         if let ContractType::Asset(asset_contract) = contract_type {
-                            if let AssetContract::PurchaseBurnSwap {
-                                input_asset,
-                                ..
-                            } = asset_contract
+                            if let AssetContract::PurchaseBurnSwap(
+                                AssetContractPurchaseBurnSwap { input_asset, .. },
+                            ) = asset_contract
                             {
                                 if let InputAsset::GlittrAsset(block_tx_tuple) = input_asset {
-                                    if let Some(tx_type) = self.get_message_txtype(block_tx_tuple).await.ok() {
+                                    if let Some(tx_type) =
+                                        self.get_message_txtype(block_tx_tuple).await.ok()
+                                    {
                                         match tx_type {
                                             TxType::ContractCreation { .. } => None,
                                             _ => Some(Flaw::ReferencingFlawedBlockTx),
                                         };
                                     }
-
                                 } else if let InputAsset::Rune(_block_tx_tuple) = input_asset {
                                     // NOTE: design decision, IMO we shouldn't check if rune exist as validation
                                     // since rune is a separate meta-protocol
@@ -83,10 +88,7 @@ impl Updater {
                         contract,
                         call_type,
                     } => match call_type {
-                        CallType::Mint => {
-                            self.mint(tx, block_tx, contract).await;
-                            None
-                        }
+                        CallType::Mint => self.mint(tx, contract).await,
                         CallType::Burn => {
                             log::info!("Process call type burn");
                             None
@@ -117,7 +119,20 @@ impl Updater {
     }
 
     async fn get_message_txtype(&self, block_tx: BlockTxTuple) -> Result<TxType, Flaw> {
-        let outcome: MessageDataOutcome = self.database.lock().await.get(MESSAGE_PREFIX, BlockTx {block: block_tx.0, tx: block_tx.1}.to_string().as_str()).unwrap();
+        let outcome: MessageDataOutcome = self
+            .database
+            .lock()
+            .await
+            .get(
+                MESSAGE_PREFIX,
+                BlockTx {
+                    block: block_tx.0,
+                    tx: block_tx.1,
+                }
+                .to_string()
+                .as_str(),
+            )
+            .unwrap();
 
         if outcome.flaw.is_some() {
             return Err(Flaw::ReferencingFlawedBlockTx);
@@ -126,8 +141,92 @@ impl Updater {
         }
     }
 
-    // TODO:
-    // - add pointer to mint, specify wich output index for the mint receiver
-    // - current default index is first non op_return index
-    async fn mint(&mut self, _: &Transaction, _: &BlockTx, _: BlockTxTuple) {}
+    async fn get_message(&self, contract_id: &BlockTxTuple) -> Result<OpReturnMessage, Flaw> {
+        let contract_key = BlockTx::from_tuple(*contract_id).to_string();
+        let outcome: Result<MessageDataOutcome, DatabaseError> = self
+            .database
+            .lock()
+            .await
+            .get(MESSAGE_PREFIX, &contract_key);
+
+        match outcome {
+            Ok(outcome) => {
+                if let Some(flaw) = outcome.flaw {
+                    Err(flaw)
+                } else {
+                    outcome.message.ok_or(Flaw::MessageInvalid)
+                }
+            }
+            Err(DatabaseError::NotFound) => Err(Flaw::ContractNotFound),
+            Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
+        }
+    }
+
+    pub async fn get_mint_purchase_burn_swap(
+        pbs: AssetContractPurchaseBurnSwap,
+        tx: &Transaction,
+    ) -> Result<MintResult, Flaw> {
+        // NOTE: all asset always went to the first non-op-return txout
+        // TODO: given the utxo, how you would know if the utxo contains glittr asset. will be implemented on transfer.
+        let mut total_burn_value = 0;
+        let out_value;
+        let mut txout: Option<u32> = None;
+
+        match pbs.input_asset {
+            InputAsset::RawBTC => (),
+            _ => return Err(Flaw::NotImplemented),
+        };
+
+        match pbs.transfer_scheme {
+            asset_contract::TransferScheme::Burn => {
+                // how much the op_return output get
+                for (pos, output) in tx.output.iter().enumerate() {
+                    let mut instructions = output.script_pubkey.instructions();
+
+                    if instructions.next() == Some(Ok(Instruction::Op(opcodes::all::OP_RETURN))) {
+                        total_burn_value = output.value.to_sat();
+                    } else {
+                        if txout.is_none() {
+                            txout = Some(pos as u32);
+                        }
+                    }
+                }
+            }
+            asset_contract::TransferScheme::Purchase(_) => return Err(Flaw::NotImplemented),
+        }
+
+        match pbs.transfer_ratio_type {
+            asset_contract::TransferRatioType::Fixed { ratio } => {
+                out_value = (total_burn_value as u128 * ratio.0) / ratio.1;
+            }
+            asset_contract::TransferRatioType::Oracle {
+                pubkey: _,
+                message: _,
+            } => return Err(Flaw::NotImplemented),
+        }
+
+        // TODO: save the mint result on asset tracker (wait for jon)
+        Ok(MintResult {
+            out_value,
+            txout: 0,
+        })
+    }
+
+    async fn mint(&mut self, tx: &Transaction, contract_id: BlockTxTuple) -> Option<Flaw> {
+        let message = self.get_message(&contract_id).await;
+        match message {
+            Ok(op_return_message) => match op_return_message.tx_type {
+                TxType::ContractCreation { contract_type } => match contract_type {
+                    message::ContractType::Asset(asset) => match asset {
+                        AssetContract::PurchaseBurnSwap(pbs) => {
+                            Updater::get_mint_purchase_burn_swap(pbs, tx).await.err()
+                        }
+                        _ => Some(Flaw::ContractNotMatch),
+                    },
+                },
+                _ => Some(Flaw::ContractNotMatch),
+            },
+            Err(flaw) => Some(flaw),
+        }
+    }
 }

@@ -27,11 +27,15 @@ pub enum AssetContract {
         divisibility: u8,
         live_time: BlockHeight,
     },
-    PurchaseBurnSwap {
-        input_asset: InputAsset,
-        transfer_scheme: TransferScheme,
-        transfer_ratio_type: TransferRatioType,
-    },
+    PurchaseBurnSwap(AssetContractPurchaseBurnSwap),
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct AssetContractPurchaseBurnSwap {
+    pub input_asset: InputAsset,
+    pub transfer_scheme: TransferScheme,
+    pub transfer_ratio_type: TransferRatioType,
 }
 
 #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
@@ -88,11 +92,11 @@ impl AssetContract {
                 // TODO: validate divisibility value
                 // TODO: validate live_time value (block_height must be valid)
             }
-            AssetContract::PurchaseBurnSwap {
+            AssetContract::PurchaseBurnSwap(AssetContractPurchaseBurnSwap {
                 input_asset,
                 transfer_scheme,
                 transfer_ratio_type,
-            } => {
+            }) => {
                 if let InputAsset::GlittrAsset(block_tx_tuple) = input_asset {
                     if block_tx_tuple.1 == 0 {
                         return Some(Flaw::InvalidBlockTxPointer);
