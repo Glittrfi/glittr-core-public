@@ -679,11 +679,6 @@ async fn test_integration_preallocated() {
 }
 
 #[tokio::test]
-async fn test_integration_mint() {
-    // TODO: Implement using TestContext
-}
-
-#[tokio::test]
 async fn test_integration_transfer() {
     // TODO: Implement using TestContext
 }
