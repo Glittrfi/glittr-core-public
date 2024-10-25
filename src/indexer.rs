@@ -70,6 +70,10 @@ impl Indexer {
 
                 for (pos, tx) in block.txdata.iter().enumerate() {
                     let message = OpReturnMessage::parse_tx(tx);
+                    // TODO: 
+                    // - invalidate assets previous inputs (if any)
+                    // - use the pointer to move the assets
+                    // - burn the assets if the pointer is not specified
                     updater.index(block_height, pos as u32, tx, message).await?;
                 }
 

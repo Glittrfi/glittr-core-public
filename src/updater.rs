@@ -1,9 +1,11 @@
 mod mint;
 
+use std::collections::HashMap;
+
 use asset_contract::{AssetContract, AssetContractFreeMint, InputAsset};
 use bitcoin::Transaction;
 use database::{
-    DatabaseError, MESSAGE_PREFIX, MINT_DATA_PREFIX, MINT_OUTPUT_PREFIX,
+    DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, MESSAGE_PREFIX,
     TRANSACTION_TO_BLOCK_TX_PREFIX,
 };
 use flaw::Flaw;
@@ -13,9 +15,21 @@ use super::*;
 
 #[derive(Deserialize, Serialize, Clone, Default, Debug)]
 #[serde(rename_all = "snake_case")]
-pub struct MintData {
+pub struct AssetContractDataFreeMint {
     pub minted: u32,
     pub burned: u32,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum AssetContractData {
+    FreeMint(AssetContractDataFreeMint),
+}
+
+#[derive(Deserialize, Serialize, Clone, Default, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct AssetList {
+    pub list: HashMap<String, u32>,
 }
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -147,6 +161,27 @@ impl Updater {
         }
     }
 
+    async fn get_asset_list(&self, outpoint: &Outpoint) -> Result<AssetList, Flaw> {
+        let result: Result<AssetList, DatabaseError> = self
+            .database
+            .lock()
+            .await
+            .get(ASSET_LIST_PREFIX, &outpoint.to_str());
+
+        match result {
+            Ok(data) => Ok(data),
+            Err(DatabaseError::NotFound) => Ok(AssetList::default()),
+            Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
+        }
+    }
+
+    async fn set_asset_list(&self, outpoint: &Outpoint, asset_list: &AssetList) {
+        self.database
+            .lock()
+            .await
+            .put(ASSET_LIST_PREFIX, &outpoint.to_str(), asset_list);
+    }
+
     async fn get_message(&self, contract_id: &BlockTxTuple) -> Result<OpReturnMessage, Flaw> {
         let contract_key = BlockTx::from_tuple(*contract_id).to_string();
         let outcome: Result<MessageDataOutcome, DatabaseError> = self
@@ -166,5 +201,36 @@ impl Updater {
             Err(DatabaseError::NotFound) => Err(Flaw::ContractNotFound),
             Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
         }
+    }
+
+    async fn get_asset_contract_data(
+        &self,
+        contract_id: &BlockTxTuple,
+    ) -> Result<AssetContractData, Flaw> {
+        let contract_key = BlockTx::from_tuple(*contract_id).to_string();
+        let data: Result<AssetContractData, DatabaseError> = self
+            .database
+            .lock()
+            .await
+            .get(ASSET_CONTRACT_DATA_PREFIX, &contract_key);
+
+        match data {
+            Ok(data) => Ok(data),
+            Err(DatabaseError::NotFound) => Err(Flaw::AssetContractDataNotFound),
+            Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
+        }
+    }
+
+    async fn set_asset_contract_data(
+        &self,
+        contract_id: &BlockTxTuple,
+        asset_contract_data: &AssetContractData,
+    ) {
+        let contract_key = BlockTx::from_tuple(*contract_id).to_string();
+        self.database.lock().await.put(
+            ASSET_CONTRACT_DATA_PREFIX,
+            &contract_key,
+            asset_contract_data,
+        );
     }
 }

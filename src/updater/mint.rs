@@ -3,42 +3,55 @@ use message::MintOption;
 use super::*;
 
 impl Updater {
-    async fn get_mint_data(&self, contract_id: &BlockTxTuple) -> Result<MintData, Flaw> {
-        let contract_key = BlockTx::from_tuple(*contract_id).to_string();
-        let result: Result<MintData, DatabaseError> = self
-            .database
-            .lock()
-            .await
-            .get(MINT_DATA_PREFIX, &contract_key);
+    async fn get_free_mint_data(
+        &self,
+        contract_id: &BlockTxTuple,
+    ) -> Result<AssetContractDataFreeMint, Flaw> {
+        let data = match self.get_asset_contract_data(contract_id).await {
+            Ok(data) => data,
+            Err(flaw) => match flaw {
+                Flaw::AssetContractDataNotFound => return Ok(AssetContractDataFreeMint::default()),
+                _ => return Err(flaw),
+            },
+        };
 
-        match result {
-            Ok(data) => Ok(data),
-            Err(DatabaseError::NotFound) => Ok(MintData::default()),
-            Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
+        match data {
+            AssetContractData::FreeMint(free_mint) => Ok(free_mint),
+            // TODO: add error when enum type doesn't match
         }
     }
 
-    async fn set_mint_output(
+    async fn update_asset_list_for_mint(
         &self,
         contract_id: &BlockTxTuple,
-        tx_id: &str,
-        n_output: u32,
+        outpoint: &Outpoint,
         amount: u32,
-    ) {
-        let contract_key = BlockTx::from_tuple(*contract_id).to_string();
-        let key = format!("{}:{}:{}", contract_key, tx_id, n_output.to_string());
-        self.database
-            .lock()
-            .await
-            .put(MINT_OUTPUT_PREFIX, &key, amount);
+    ) -> Option<Flaw> {
+        let mut asset_list = match self.get_asset_list(outpoint).await {
+            Ok(data) => data,
+            Err(flaw) => return Some(flaw),
+        };
+        let block_tx = BlockTx::from_tuple(*contract_id);
+        let previous_amount = asset_list.list.get(&block_tx.to_str()).unwrap_or(&0);
+
+        asset_list
+            .list
+            .insert(block_tx.to_str(), previous_amount.saturating_add(amount));
+        self.set_asset_list(outpoint, &asset_list).await;
+
+        None
     }
 
-    async fn update_mint_data(&self, contract_id: &BlockTxTuple, mint_data: &MintData) {
-        let contract_key = BlockTx::from_tuple(*contract_id).to_string();
-        self.database
-            .lock()
-            .await
-            .put(MINT_DATA_PREFIX, &contract_key, mint_data);
+    async fn update_asset_contract_data_for_free_mint(
+        &self,
+        contract_id: &BlockTxTuple,
+        free_mint_data: &AssetContractDataFreeMint,
+    ) {
+        self.set_asset_contract_data(
+            &contract_id,
+            &AssetContractData::FreeMint(free_mint_data.clone()),
+        )
+        .await
     }
 
     async fn mint_free_mint(
@@ -48,14 +61,14 @@ impl Updater {
         contract_id: &BlockTxTuple,
         mint_option: &MintOption,
     ) -> Option<Flaw> {
-        let mut mint_data = match self.get_mint_data(contract_id).await {
+        let mut free_mint_data = match self.get_free_mint_data(contract_id).await {
             Ok(data) => data,
             Err(flaw) => return Some(flaw),
         };
 
         // check the supply
         if let Some(supply_cap) = asset.supply_cap {
-            let next_supply = mint_data
+            let next_supply = free_mint_data
                 .minted
                 .saturating_mul(asset.amount_per_mint)
                 .saturating_add(asset.amount_per_mint);
@@ -64,25 +77,30 @@ impl Updater {
                 return Some(Flaw::SupplyCapExceeded);
             }
         }
-        mint_data.minted = mint_data.minted.saturating_add(1);
+        free_mint_data.minted = free_mint_data.minted.saturating_add(1);
 
         // check pointer overflow
         if mint_option.pointer >= tx.output.len() as u32 {
             return Some(Flaw::PointerOverflow);
         }
+        let outpoint = Outpoint {
+            txid: tx.compute_txid().to_string(),
+            vout: mint_option.pointer,
+        };
+
         // TODO: check livetime
 
         // set the outpoint
-        self.set_mint_output(
-            contract_id,
-            tx.compute_txid().to_string().as_str(),
-            mint_option.pointer,
-            asset.amount_per_mint,
-        )
-        .await;
+        let flaw = self
+            .update_asset_list_for_mint(contract_id, &outpoint, asset.amount_per_mint)
+            .await;
+        if flaw.is_some() {
+            return flaw;
+        }
 
         // update the mint data
-        self.update_mint_data(contract_id, &mint_data).await;
+        self.update_asset_contract_data_for_free_mint(contract_id, &free_mint_data)
+            .await;
 
         None
     }

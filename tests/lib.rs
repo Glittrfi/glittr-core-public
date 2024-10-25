@@ -9,11 +9,11 @@ use glittr::{
         AssetContract, AssetContractFreeMint, InputAsset, TransferRatioType, TransferScheme,
     },
     database::{
-        Database, DatabaseError, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX, MINT_DATA_PREFIX,
-        MINT_OUTPUT_PREFIX,
+        Database, DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX,
+        INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX,
     },
     message::{CallType, ContractType, MintOption, OpReturnMessage, TxType},
-    BlockTx, Flaw, Indexer, MessageDataOutcome, MintData,
+    AssetContractData, AssetList, BlockTx, Flaw, Indexer, MessageDataOutcome,
 };
 
 // Test utilities
@@ -235,32 +235,31 @@ async fn test_integration_mint() {
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
 
-    let mint_data: Result<MintData, DatabaseError> = ctx
+    let asset_contract_data: Result<AssetContractData, DatabaseError> =
+        ctx.indexer.lock().await.database.lock().await.get(
+            ASSET_CONTRACT_DATA_PREFIX,
+            block_tx_contract.to_string().as_str(),
+        );
+    let data_free_mint = match asset_contract_data.expect("Mint data should exist") {
+        AssetContractData::FreeMint(free_mint) => free_mint,
+    };
+
+    let asset_list: Result<Vec<(String, AssetList)>, DatabaseError> = ctx
         .indexer
         .lock()
         .await
         .database
         .lock()
         .await
-        .get(MINT_DATA_PREFIX, block_tx_contract.to_string().as_str());
-    let mint_data = mint_data.expect("Mint data should exist");
+        .expensive_find_by_prefix(ASSET_LIST_PREFIX);
+    let asset_lists = asset_list.expect("asset list should exist");
 
-    let mint_outputs: Result<Vec<(String, u32)>, DatabaseError> = ctx
-        .indexer
-        .lock()
-        .await
-        .database
-        .lock()
-        .await
-        .expensive_find_by_prefix(MINT_OUTPUT_PREFIX);
-    let mint_outputs = mint_outputs.expect("Mint outputs should exist");
-
-    for (k, v) in &mint_outputs {
-        println!("Mint output: {}: {}", k, v);
+    for (k, v) in &asset_lists {
+        println!("Mint output: {}: {:?}", k, v);
     }
-
-    assert_eq!(mint_data.minted, total_mints);
-    assert_eq!(mint_outputs.len() as u32, total_mints);
+    
+    assert_eq!(data_free_mint.minted, total_mints);
+    assert_eq!(asset_lists.len() as u32, total_mints);
 
     ctx.drop().await;
 }
@@ -303,17 +302,16 @@ async fn test_integration_mint_supply_cap_exceeded() {
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
 
-    let mint_data: Result<MintData, DatabaseError> = ctx
-        .indexer
-        .lock()
-        .await
-        .database
-        .lock()
-        .await
-        .get(MINT_DATA_PREFIX, block_tx_contract.to_string().as_str());
-    let mint_data = mint_data.expect("Mint data should exist");
+    let asset_contract_data: Result<AssetContractData, DatabaseError> =
+        ctx.indexer.lock().await.database.lock().await.get(
+            ASSET_CONTRACT_DATA_PREFIX,
+            block_tx_contract.to_string().as_str(),
+        );
+    let data_free_mint = match asset_contract_data.expect("Mint data should exist") {
+        AssetContractData::FreeMint(free_mint) => free_mint,
+    };
 
-    assert_eq!(mint_data.minted, 1);
+    assert_eq!(data_free_mint.minted, 1);
 
     let outcome = ctx.verify_message(overflow_block_tx).await;
     assert_eq!(outcome.flaw.unwrap(), Flaw::SupplyCapExceeded);

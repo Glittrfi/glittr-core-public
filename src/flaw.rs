@@ -15,6 +15,7 @@ pub enum Flaw {
     MessageInvalid,
     ContractNotMatch,
     ContractNotFound,
+    AssetContractDataNotFound,
     PointerOverflow,
 
     // call type::mint
