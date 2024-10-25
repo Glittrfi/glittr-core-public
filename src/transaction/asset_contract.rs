@@ -6,13 +6,25 @@ use serde_json::value::RawValue;
 
 use super::*;
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct AssetContractFreeMint {
-    supply_cap: Option<u32>,
-    amount_per_mint: u32,
-    divisibility: u8,
-    live_time: BlockHeight,
+    pub supply_cap: Option<u32>,
+    // TODO change the type to u128, need to check the serialization and deserialization since JSON
+    // has a MAX number limitation. 
+    pub amount_per_mint: u32,
+    pub divisibility: u8,
+    pub live_time: BlockHeight,
+}
+impl AssetContractFreeMint {
+    pub fn validate(&self) -> Option<Flaw> {
+        if let Some(supply_cap) = self.supply_cap {
+            if self.amount_per_mint > supply_cap {
+                return Some(Flaw::OverflowAmountPerMint);
+            }
+        }
+        None
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -21,12 +33,7 @@ pub enum AssetContract {
     Preallocated {
         todo: Option<()>,
     },
-    FreeMint {
-        supply_cap: Option<u32>,
-        amount_per_mint: u32,
-        divisibility: u8,
-        live_time: BlockHeight,
-    },
+    FreeMint(AssetContractFreeMint),
     PurchaseBurnSwap {
         input_asset: InputAsset,
         transfer_scheme: TransferScheme,
@@ -73,21 +80,7 @@ impl AssetContract {
             AssetContract::Preallocated { todo: _ } => {
                 // TODO: add and validate preallocated
             }
-            AssetContract::FreeMint {
-                supply_cap,
-                amount_per_mint,
-                divisibility: _,
-                live_time: _,
-            } => {
-                if let Some(supply_cap) = supply_cap {
-                    if amount_per_mint > supply_cap {
-                        return Some(Flaw::OverflowAmountPerMint);
-                    }
-                }
-
-                // TODO: validate divisibility value
-                // TODO: validate live_time value (block_height must be valid)
-            }
+            AssetContract::FreeMint(free_mint) => return free_mint.validate(),
             AssetContract::PurchaseBurnSwap {
                 input_asset,
                 transfer_scheme,
