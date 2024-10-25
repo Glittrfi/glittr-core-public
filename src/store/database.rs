@@ -6,8 +6,8 @@ pub const INDEXER_LAST_BLOCK_PREFIX: &str = "last_block";
 pub const MESSAGE_PREFIX: &str = "message";
 pub const TRANSACTION_TO_BLOCK_TX_PREFIX: &str = "tx_to_blocktx";
 
-pub const ASSET_LIST_PREFIX : &str = "asset_list";
-pub const ASSET_CONTRACT_DATA_PREFIX : &str = "asset_contract_data";
+pub const ASSET_LIST_PREFIX: &str = "asset_list";
+pub const ASSET_CONTRACT_DATA_PREFIX: &str = "asset_contract_data";
 
 pub struct Database {
     db: Arc<DB>,

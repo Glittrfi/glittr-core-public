@@ -10,7 +10,7 @@ use super::*;
 pub struct AssetContractFreeMint {
     pub supply_cap: Option<u32>,
     // TODO change the type to u128, need to check the serialization and deserialization since JSON
-    // has a MAX number limitation. 
+    // has a MAX number limitation.
     pub amount_per_mint: u32,
     pub divisibility: u8,
     pub live_time: BlockHeight,
@@ -29,9 +29,7 @@ impl AssetContractFreeMint {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum AssetContract {
-    Preallocated {
-        todo: Option<()>,
-    },
+    Preallocated { todo: Option<()> },
     FreeMint(AssetContractFreeMint),
     PurchaseBurnSwap(AssetContractPurchaseBurnSwap),
 }

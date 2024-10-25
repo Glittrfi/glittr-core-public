@@ -70,7 +70,7 @@ impl Indexer {
 
                 for (pos, tx) in block.txdata.iter().enumerate() {
                     let message = OpReturnMessage::parse_tx(tx);
-                    // TODO: 
+                    // TODO:
                     // - invalidate assets previous inputs (if any)
                     // - use the pointer to move the assets
                     // - burn the assets if the pointer is not specified

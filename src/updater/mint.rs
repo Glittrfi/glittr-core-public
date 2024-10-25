@@ -1,5 +1,5 @@
-use std::str::FromStr;
 use message::MintOption;
+use std::str::FromStr;
 
 use super::*;
 
@@ -128,10 +128,13 @@ impl Updater {
         match pbs.input_asset {
             InputAsset::GlittrAsset(asset_contract_id) => {
                 for txin in tx.input.iter() {
-                    if let Ok(asset_list) = self.get_asset_list(&Outpoint {
-                        txid: txin.previous_output.txid.to_string(),
-                        vout: txin.previous_output.vout,
-                    }).await {
+                    if let Ok(asset_list) = self
+                        .get_asset_list(&Outpoint {
+                            txid: txin.previous_output.txid.to_string(),
+                            vout: txin.previous_output.vout,
+                        })
+                        .await
+                    {
                         let block_tx = BlockTx::from_tuple(asset_contract_id);
                         let amount = asset_list.list.get(&block_tx.to_str()).unwrap_or(&0);
                         total_in_value_glittr_asset = *amount;
@@ -306,14 +309,15 @@ impl Updater {
                             self.mint_free_mint(free_mint, tx, block_tx, contract_id, mint_option)
                                 .await
                         }
-                        AssetContract::PurchaseBurnSwap(purchase_burn_swap) => self
-                            .mint_purchase_burn_swap(
+                        AssetContract::PurchaseBurnSwap(purchase_burn_swap) => {
+                            self.mint_purchase_burn_swap(
                                 purchase_burn_swap,
                                 tx,
                                 contract_id,
                                 mint_option.clone(),
                             )
-                            .await,
+                            .await
+                        }
                         AssetContract::Preallocated { .. } => Some(Flaw::NotImplemented),
                     },
                 },

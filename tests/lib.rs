@@ -23,7 +23,7 @@ use glittr::{
         CallType, ContractType, MintOption, OpReturnMessage, OracleMessage, OracleMessageSigned,
         TxType,
     },
-    AssetContractData, AssetList, BlockTx, Flaw, Indexer, MessageDataOutcome, Outpoint
+    AssetContractData, AssetList, BlockTx, Flaw, Indexer, MessageDataOutcome, Outpoint,
 };
 
 // Test utilities
@@ -288,8 +288,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
-    ctx.get_and_verify_message_outcome(contract_id)
-        .await;
+    ctx.get_and_verify_message_outcome(contract_id).await;
     let mint_outcome = ctx.get_and_verify_message_outcome(mint_block_tx).await;
     assert!(mint_outcome.flaw.is_none());
 
@@ -310,11 +309,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
     }
 
     let outpoint_str = asset_lists[0].0.clone();
-    let out_value = *asset_lists[0]
-        .1
-        .list
-        .get(&contract_id.to_str())
-        .unwrap();
+    let out_value = *asset_lists[0].1.list.get(&contract_id.to_str()).unwrap();
 
     assert!(out_value == (bitcoin_value - fee - dust) as u32);
     assert!(
@@ -391,8 +386,7 @@ async fn test_raw_btc_to_glittr_asset_purchase() {
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
-    ctx.get_and_verify_message_outcome(contract_id)
-        .await;
+    ctx.get_and_verify_message_outcome(contract_id).await;
     let mint_outcome = ctx.get_and_verify_message_outcome(mint_block_tx).await;
     assert!(mint_outcome.flaw.is_none());
 
@@ -522,8 +516,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
-    ctx.get_and_verify_message_outcome(contract_id)
-        .await;
+    ctx.get_and_verify_message_outcome(contract_id).await;
     let mint_outcome = ctx.get_and_verify_message_outcome(mint_block_tx).await;
     assert!(mint_outcome.flaw.is_none(), "{:?}", mint_outcome.flaw);
 
@@ -652,8 +645,7 @@ async fn test_metaprotocol_to_glittr_asset() {
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
-    ctx.get_and_verify_message_outcome(contract_id)
-        .await;
+    ctx.get_and_verify_message_outcome(contract_id).await;
     let mint_outcome = ctx.get_and_verify_message_outcome(mint_block_tx).await;
     assert!(mint_outcome.flaw.is_none(), "{:?}", mint_outcome.flaw);
 
@@ -759,7 +751,8 @@ async fn test_integration_mint_freemint() {
             ASSET_CONTRACT_DATA_PREFIX,
             block_tx_contract.to_string().as_str(),
         );
-    let AssetContractData::FreeMint(data_free_mint) = asset_contract_data.expect("Free mint data should exist");
+    let AssetContractData::FreeMint(data_free_mint) =
+        asset_contract_data.expect("Free mint data should exist");
 
     let asset_list: Result<Vec<(String, AssetList)>, DatabaseError> = ctx
         .indexer
@@ -830,7 +823,8 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
             ASSET_CONTRACT_DATA_PREFIX,
             block_tx_contract.to_string().as_str(),
         );
-    let AssetContractData::FreeMint(data_free_mint) = asset_contract_data.expect("Free mint data should exist");
+    let AssetContractData::FreeMint(data_free_mint) =
+        asset_contract_data.expect("Free mint data should exist");
 
     assert_eq!(data_free_mint.minted, 1);
 
@@ -888,7 +882,8 @@ async fn test_integration_mint_freemint_livetime_notreached() {
             ASSET_CONTRACT_DATA_PREFIX,
             block_tx_contract.to_string().as_str(),
         );
-    let AssetContractData::FreeMint(data_free_mint) = asset_contract_data.expect("Free mint data should exist");
+    let AssetContractData::FreeMint(data_free_mint) =
+        asset_contract_data.expect("Free mint data should exist");
 
     let outcome = ctx
         .get_and_verify_message_outcome(notreached_block_tx)

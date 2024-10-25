@@ -2,15 +2,16 @@ mod mint;
 
 use std::collections::HashMap;
 
-use asset_contract::{AssetContract, AssetContractFreeMint, AssetContractPurchaseBurnSwap, InputAsset};
+use asset_contract::{
+    AssetContract, AssetContractFreeMint, AssetContractPurchaseBurnSwap, InputAsset,
+};
 use bitcoin::{
-    Transaction,
     hashes::{sha256, Hash},
     key::Secp256k1,
     opcodes,
     script::Instruction,
     secp256k1::{schnorr::Signature, Message},
-    Address, XOnlyPublicKey,
+    Address, Transaction, XOnlyPublicKey,
 };
 use database::{
     DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, MESSAGE_PREFIX,
@@ -100,7 +101,8 @@ impl Updater {
                             ) = asset_contract
                             {
                                 if let InputAsset::GlittrAsset(block_tx_tuple) = input_asset {
-                                    if let Ok(tx_type) = self.get_message_txtype(block_tx_tuple).await
+                                    if let Ok(tx_type) =
+                                        self.get_message_txtype(block_tx_tuple).await
                                     {
                                         match tx_type {
                                             TxType::ContractCreation { .. } => None,
@@ -116,7 +118,9 @@ impl Updater {
                         contract,
                         call_type,
                     } => match call_type {
-                        CallType::Mint(mint_option) => self.mint(tx, block_tx, &contract, &mint_option).await,
+                        CallType::Mint(mint_option) => {
+                            self.mint(tx, block_tx, &contract, &mint_option).await
+                        }
                         CallType::Burn => {
                             log::info!("Process call type burn");
                             None
