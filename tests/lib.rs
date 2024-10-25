@@ -12,17 +12,14 @@ use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
 
 use glittr::{
     asset_contract::{
-        AssetContract, AssetContractPurchaseBurnSwap, InputAsset, OracleSetting, TransferRatioType,
-        TransferScheme,
-    },
-    database::{
+        AssetContract, AssetContractFreeMint, AssetContractPurchaseBurnSwap, InputAsset, OracleSetting, TransferRatioType, TransferScheme
+    }, database::{
         Database, DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX,
         INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX,
-    },
-    message::{
+    }, message::{
         CallType, ContractType, MintOption, OpReturnMessage, OracleMessage, OracleMessageSigned,
         TxType,
-    },
+    }, AssetContractData, AssetList, BlockTx, Flaw, Indexer, MessageDataOutcome, Updater
 };
 
 // Test utilities
@@ -48,6 +45,7 @@ pub fn get_bitcoin_address() -> Address {
 
 struct TestContext {
     indexer: Arc<Mutex<Indexer>>,
+    database: Arc<Mutex<Database>>,
     core: Handle,
     _tempdir: TempDir,
 }
@@ -63,17 +61,19 @@ impl TestContext {
         // Initial setup
         core.mine_blocks(2);
 
+        let database = Arc::new(Mutex::new(Database::new(tempdir.path().to_str().unwrap().to_string())));
         let indexer =
-            spawn_test_indexer(tempdir.path().to_str().unwrap().to_string(), core.url()).await;
+            spawn_test_indexer(&database, core.url()).await;
 
         Self {
             indexer,
+            database,
             core,
             _tempdir: tempdir,
         }
     }
 
-    async fn get_transaction_from_block_tx(&self, block_tx: BlockTx) -> Result<Transaction, ()> {
+    fn get_transaction_from_block_tx(&self, block_tx: BlockTx) -> Result<Transaction, ()> {
         let rpc = Client::new(
             self.core.url().as_str(),
             Auth::UserPass("".to_string(), "".to_string()),
@@ -115,7 +115,7 @@ impl TestContext {
         }
     }
 
-    async fn get_message_outcome(&self, block_tx: BlockTx) -> MessageDataOutcome {
+    async fn get_and_verify_message_outcome(&self, block_tx: BlockTx) -> MessageDataOutcome {
         let message: Result<MessageDataOutcome, DatabaseError> = self
             .indexer
             .lock()
@@ -165,9 +165,7 @@ async fn start_indexer(indexer: Arc<Mutex<Indexer>>) -> JoinHandle<()> {
     handle
 }
 
-async fn spawn_test_indexer(db_path: String, rpc_url: String) -> Arc<Mutex<Indexer>> {
-    let database = Arc::new(Mutex::new(Database::new(db_path)));
-
+async fn spawn_test_indexer(database: &Arc<Mutex<Database>>, rpc_url: String) -> Arc<Mutex<Indexer>> {
     Arc::new(Mutex::new(
         Indexer::new(
             Arc::clone(&database),
@@ -198,7 +196,7 @@ async fn test_integration_broadcast_op_return_message_success() {
     let block_tx = ctx.build_and_mine_contract_message(&message).await;
     start_indexer(Arc::clone(&ctx.indexer)).await;
     ctx.verify_last_block(block_tx.block).await;
-    ctx.get_message_outcome(block_tx).await;
+    ctx.get_and_verify_message_outcome(block_tx).await;
     ctx.drop().await;
 }
 
@@ -221,7 +219,7 @@ async fn test_integration_purchaseburnswap() {
     let block_tx = ctx.build_and_mine_contract_message(&message).await;
     start_indexer(Arc::clone(&ctx.indexer)).await;
     ctx.verify_last_block(block_tx.block).await;
-    ctx.get_message_outcome(block_tx).await;
+    ctx.get_and_verify_message_outcome(block_tx).await;
     ctx.drop().await;
 }
 
@@ -284,13 +282,12 @@ async fn test_raw_btc_to_glittr_asset_burn() {
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
-    ctx.get_message_outcome(contract_init_block_tx).await;
-    let mint_outcome = ctx.get_message_outcome(mint_block_tx).await;
+    ctx.get_and_verify_message_outcome(contract_init_block_tx).await;
+    let mint_outcome = ctx.get_and_verify_message_outcome(mint_block_tx).await;
     assert!(mint_outcome.flaw.is_none());
 
     let tx = ctx
         .get_transaction_from_block_tx(mint_block_tx)
-        .await
         .unwrap();
     let pbs = if let TxType::ContractCreation {
         contract_type: ContractType::Asset(AssetContract::PurchaseBurnSwap(pbs)),
@@ -301,7 +298,8 @@ async fn test_raw_btc_to_glittr_asset_burn() {
         None
     };
 
-    let mint_outcome = Updater::get_mint_purchase_burn_swap(
+    let updater = Updater::new(Arc::clone(&ctx.database)).await;
+    let mint_outcome = updater.mint_purchase_burn_swap(
         pbs.unwrap(),
         &tx,
         MintOption {
@@ -375,13 +373,12 @@ async fn test_raw_btc_to_glittr_asset_purchase() {
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
-    ctx.get_message_outcome(contract_init_block_tx).await;
-    let mint_outcome = ctx.get_message_outcome(mint_block_tx).await;
+    ctx.get_and_verify_message_outcome(contract_init_block_tx).await;
+    let mint_outcome = ctx.get_and_verify_message_outcome(mint_block_tx).await;
     assert!(mint_outcome.flaw.is_none());
 
     let tx = ctx
         .get_transaction_from_block_tx(mint_block_tx)
-        .await
         .unwrap();
     let pbs = if let TxType::ContractCreation {
         contract_type: ContractType::Asset(AssetContract::PurchaseBurnSwap(pbs)),
@@ -392,7 +389,8 @@ async fn test_raw_btc_to_glittr_asset_purchase() {
         None
     };
 
-    let mint_outcome = Updater::get_mint_purchase_burn_swap(
+    let updater = Updater::new(Arc::clone(&ctx.database)).await;
+    let mint_outcome = updater.mint_purchase_burn_swap(
         pbs.unwrap(),
         &tx,
         MintOption {
@@ -459,8 +457,12 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
 
     let secp: Secp256k1<secp256k1::All> = Secp256k1::new();
     let msg = Message::from_digest_slice(
-        sha256::Hash::hash(serde_json::to_string(&oracle_message).unwrap().as_bytes())
-            .as_byte_array(),
+        sha256::Hash::hash(
+            serde_json::to_string(&oracle_message)
+                .unwrap()
+                .as_bytes(),
+        )
+        .as_byte_array(),
     )
     .unwrap();
 
@@ -498,13 +500,12 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
-    ctx.get_message_outcome(contract_init_block_tx).await;
-    let mint_outcome = ctx.get_message_outcome(mint_block_tx).await;
+    ctx.get_and_verify_message_outcome(contract_init_block_tx).await;
+    let mint_outcome = ctx.get_and_verify_message_outcome(mint_block_tx).await;
     assert!(mint_outcome.flaw.is_none(), "{:?}", mint_outcome.flaw);
 
     let tx = ctx
         .get_transaction_from_block_tx(mint_block_tx)
-        .await
         .unwrap();
     let pbs = if let TxType::ContractCreation {
         contract_type: ContractType::Asset(AssetContract::PurchaseBurnSwap(pbs)),
@@ -515,7 +516,8 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
         None
     };
 
-    let mint_outcome = Updater::get_mint_purchase_burn_swap(
+    let updater = Updater::new(Arc::clone(&ctx.database)).await;
+    let mint_outcome = updater.mint_purchase_burn_swap(
         pbs.unwrap(),
         &tx,
         MintOption {
@@ -584,8 +586,12 @@ async fn test_metaprotocol_to_glittr_asset() {
 
     let secp: Secp256k1<secp256k1::All> = Secp256k1::new();
     let msg = Message::from_digest_slice(
-        sha256::Hash::hash(serde_json::to_string(&oracle_message).unwrap().as_bytes())
-            .as_byte_array(),
+        sha256::Hash::hash(
+            serde_json::to_string(&oracle_message)
+                .unwrap()
+                .as_bytes(),
+        )
+        .as_byte_array(),
     )
     .unwrap();
 
@@ -623,13 +629,12 @@ async fn test_metaprotocol_to_glittr_asset() {
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
-    ctx.get_message_outcome(contract_init_block_tx).await;
-    let mint_outcome = ctx.get_message_outcome(mint_block_tx).await;
+    ctx.get_and_verify_message_outcome(contract_init_block_tx).await;
+    let mint_outcome = ctx.get_and_verify_message_outcome(mint_block_tx).await;
     assert!(mint_outcome.flaw.is_none(), "{:?}", mint_outcome.flaw);
 
     let tx = ctx
         .get_transaction_from_block_tx(mint_block_tx)
-        .await
         .unwrap();
     let pbs = if let TxType::ContractCreation {
         contract_type: ContractType::Asset(AssetContract::PurchaseBurnSwap(pbs)),
@@ -640,7 +645,9 @@ async fn test_metaprotocol_to_glittr_asset() {
         None
     };
 
-    let mint_outcome = Updater::get_mint_purchase_burn_swap(
+    let updater = Updater::new(Arc::clone(&ctx.database)).await;
+
+    let mint_outcome = updater.mint_purchase_burn_swap(
         pbs.unwrap(),
         &tx,
         MintOption {
@@ -674,10 +681,10 @@ async fn test_integration_freemint() {
         },
     };
 
-    let block_tx = ctx.build_and_mine_message(message).await;
+    let block_tx = ctx.build_and_mine_contract_message(&message).await;
     start_indexer(Arc::clone(&ctx.indexer)).await;
     ctx.verify_last_block(block_tx.block).await;
-    ctx.verify_message(block_tx).await;
+    ctx.get_and_verify_message_outcome(block_tx).await;
     ctx.drop().await;
 }
 
@@ -701,7 +708,7 @@ async fn test_integration_mint_freemint() {
         },
     };
 
-    let block_tx_contract = ctx.build_and_mine_message(message).await;
+    let block_tx_contract = ctx.build_and_mine_contract_message(&message).await;
 
     let total_mints = 10;
 
@@ -709,13 +716,10 @@ async fn test_integration_mint_freemint() {
         let message = OpReturnMessage {
             tx_type: TxType::ContractCall {
                 contract: block_tx_contract.to_tuple(),
-                call_type: CallType::Mint(MintOption {
-                    pointer: 0,
-                    oracle_message: None,
-                }),
+                call_type: CallType::Mint(MintOption {pointer:0, oracle_message: None }),
             },
         };
-        ctx.build_and_mine_message(message).await;
+        ctx.build_and_mine_contract_message(&message).await;
     }
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
@@ -742,7 +746,7 @@ async fn test_integration_mint_freemint() {
     for (k, v) in &asset_lists {
         println!("Mint output: {}: {:?}", k, v);
     }
-
+    
     assert_eq!(data_free_mint.minted, total_mints);
     assert_eq!(asset_lists.len() as u32, total_mints);
 
@@ -764,32 +768,26 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
         },
     };
 
-    let block_tx_contract = ctx.build_and_mine_message(message).await;
+    let block_tx_contract = ctx.build_and_mine_contract_message(&message).await;
 
     // first mint
     let message = OpReturnMessage {
         tx_type: TxType::ContractCall {
             contract: block_tx_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 0,
-                oracle_message: None,
-            }),
+            call_type: CallType::Mint(MintOption {pointer:0, oracle_message: None }),
         },
     };
-    ctx.build_and_mine_message(message).await;
+    ctx.build_and_mine_contract_message(&message).await;
 
     // second mint should be execeeded the supply cap
     // and the total minted should be still 1
     let message = OpReturnMessage {
         tx_type: TxType::ContractCall {
             contract: block_tx_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 0,
-                oracle_message: None,
-            }),
+            call_type: CallType::Mint(MintOption {pointer:0, oracle_message: None }),
         },
     };
-    let overflow_block_tx = ctx.build_and_mine_message(message).await;
+    let overflow_block_tx = ctx.build_and_mine_contract_message(&message).await;
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
 
@@ -804,7 +802,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
 
     assert_eq!(data_free_mint.minted, 1);
 
-    let outcome = ctx.verify_message(overflow_block_tx).await;
+    let outcome = ctx.get_and_verify_message_outcome(overflow_block_tx).await;
     assert_eq!(outcome.flaw.unwrap(), Flaw::SupplyCapExceeded);
 
     ctx.drop().await;
@@ -825,31 +823,25 @@ async fn test_integration_mint_freemint_livetime_notreached() {
         },
     };
 
-    let block_tx_contract = ctx.build_and_mine_message(message).await;
+    let block_tx_contract = ctx.build_and_mine_contract_message(&message).await;
 
     // first mint not reach the live time
     let message = OpReturnMessage {
         tx_type: TxType::ContractCall {
             contract: block_tx_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 0,
-                oracle_message: None,
-            }),
+            call_type: CallType::Mint(MintOption {pointer:0, oracle_message: None }),
         },
     };
-    let notreached_block_tx = ctx.build_and_mine_message(message).await;
+    let notreached_block_tx = ctx.build_and_mine_contract_message(&message).await;
     println!("Not reached livetime block tx: {:?}", notreached_block_tx);
 
     let message = OpReturnMessage {
         tx_type: TxType::ContractCall {
             contract: block_tx_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 0,
-                oracle_message: None,
-            }),
+            call_type: CallType::Mint(MintOption {pointer:0, oracle_message: None }),
         },
     };
-    ctx.build_and_mine_message(message).await;
+    ctx.build_and_mine_contract_message(&message).await;
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
 
@@ -862,7 +854,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
         AssetContractData::FreeMint(free_mint) => free_mint,
     };
 
-    let outcome = ctx.verify_message(notreached_block_tx).await;
+    let outcome = ctx.get_and_verify_message_outcome(notreached_block_tx).await;
     assert_eq!(outcome.flaw.unwrap(), Flaw::LiveTimeNotReached);
 
     assert_eq!(data_free_mint.minted, 1);

@@ -116,7 +116,7 @@ impl Updater {
         pbs: AssetContractPurchaseBurnSwap,
         tx: &Transaction,
         mint_option: MintOption,
-    ) -> Option<Flaw> {
+    ) -> Result<MintResult, Flaw> {
         // TODO: given the utxo, how you would know if the utxo contains glittr asset. will be implemented on transfer.
         let mut total_received_value: u128 = 0;
         let mut out_value: u128 = 0;
@@ -182,7 +182,7 @@ impl Updater {
         }
 
         if txout.unwrap() > tx.output.len() as u32 {
-            return Some(Flaw::PointerOverflow);
+            return Err(Flaw::PointerOverflow);
         }
 
         // VALIDATE INPUT
@@ -242,12 +242,12 @@ impl Updater {
             };
 
             if !verified {
-                return Some(Flaw::OracleMintFailed);
+                return Err(Flaw::OracleMintFailed);
             }
         }
 
         // TODO: save the mint result on asset tracker (wait for jon)
-        None
+        Ok(MintResult { out_value, txout: txout.unwrap() })
     }
 
     pub async fn mint(
@@ -267,7 +267,7 @@ impl Updater {
                                 .await
                         }
                         AssetContract::PurchaseBurnSwap(asset_contract_purchase_burn_swap) => {
-                            self.mint_purchase_burn_swap(asset_contract_purchase_burn_swap, tx, mint_option.clone()).await
+                            self.mint_purchase_burn_swap(asset_contract_purchase_burn_swap, tx, mint_option.clone()).await.err()
                         }
                         AssetContract::Preallocated { .. } => Some(Flaw::NotImplemented),
                     },
