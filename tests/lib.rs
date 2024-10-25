@@ -252,7 +252,7 @@ async fn test_integration_mint() {
         .database
         .lock()
         .await
-        .get_by_prefix(MINT_OUTPUT_PREFIX);
+        .expensive_find_by_prefix(MINT_OUTPUT_PREFIX);
     let mint_outputs = mint_outputs.expect("Mint outputs should exist");
 
     for (k, v) in &mint_outputs {

@@ -58,8 +58,7 @@ impl Database {
         Err(DatabaseError::NotFound)
     }
 
-    // expensive function, better to not use it, better to define the index for each value datas
-    pub fn get_by_prefix<T: for<'a> Deserialize<'a>>(
+    pub fn expensive_find_by_prefix<T: for<'a> Deserialize<'a>>(
         &self,
         prefix: &str,
     ) -> Result<Vec<(String, T)>, DatabaseError> {
