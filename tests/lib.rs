@@ -174,7 +174,7 @@ async fn spawn_test_indexer(
 ) -> Arc<Mutex<Indexer>> {
     Arc::new(Mutex::new(
         Indexer::new(
-            Arc::clone(&database),
+            Arc::clone(database),
             rpc_url,
             "".to_string(),
             "".to_string(),
@@ -759,9 +759,7 @@ async fn test_integration_mint_freemint() {
             ASSET_CONTRACT_DATA_PREFIX,
             block_tx_contract.to_string().as_str(),
         );
-    let data_free_mint = match asset_contract_data.expect("Free mint data should exist") {
-        AssetContractData::FreeMint(free_mint) => free_mint,
-    };
+    let AssetContractData::FreeMint(data_free_mint) = asset_contract_data.expect("Free mint data should exist");
 
     let asset_list: Result<Vec<(String, AssetList)>, DatabaseError> = ctx
         .indexer
@@ -832,9 +830,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
             ASSET_CONTRACT_DATA_PREFIX,
             block_tx_contract.to_string().as_str(),
         );
-    let data_free_mint = match asset_contract_data.expect("Free mint data should exist") {
-        AssetContractData::FreeMint(free_mint) => free_mint,
-    };
+    let AssetContractData::FreeMint(data_free_mint) = asset_contract_data.expect("Free mint data should exist");
 
     assert_eq!(data_free_mint.minted, 1);
 
@@ -892,9 +888,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
             ASSET_CONTRACT_DATA_PREFIX,
             block_tx_contract.to_string().as_str(),
         );
-    let data_free_mint = match asset_contract_data.expect("Free mint data should exist") {
-        AssetContractData::FreeMint(free_mint) => free_mint,
-    };
+    let AssetContractData::FreeMint(data_free_mint) = asset_contract_data.expect("Free mint data should exist");
 
     let outcome = ctx
         .get_and_verify_message_outcome(notreached_block_tx)

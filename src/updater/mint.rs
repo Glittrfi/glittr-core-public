@@ -49,7 +49,7 @@ impl Updater {
         free_mint_data: &AssetContractDataFreeMint,
     ) {
         self.set_asset_contract_data(
-            &contract_id,
+            contract_id,
             &AssetContractData::FreeMint(free_mint_data.clone()),
         )
         .await
@@ -128,10 +128,10 @@ impl Updater {
         match pbs.input_asset {
             InputAsset::GlittrAsset(asset_contract_id) => {
                 for txin in tx.input.iter() {
-                    if let Some(asset_list) = self.get_asset_list(&Outpoint {
+                    if let Ok(asset_list) = self.get_asset_list(&Outpoint {
                         txid: txin.previous_output.txid.to_string(),
                         vout: txin.previous_output.vout,
-                    }).await.ok() {
+                    }).await {
                         let block_tx = BlockTx::from_tuple(asset_contract_id);
                         let amount = asset_list.list.get(&block_tx.to_str()).unwrap_or(&0);
                         total_in_value_glittr_asset = *amount;
@@ -297,7 +297,7 @@ impl Updater {
         contract_id: &BlockTxTuple,
         mint_option: &MintOption,
     ) -> Option<Flaw> {
-        let message = self.get_message(&contract_id).await;
+        let message = self.get_message(contract_id).await;
         match message {
             Ok(op_return_message) => match op_return_message.tx_type {
                 TxType::ContractCreation { contract_type } => match contract_type {
