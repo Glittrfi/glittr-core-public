@@ -205,7 +205,7 @@ async fn test_integration_preallocated() {
 }
 
 #[tokio::test]
-async fn test_integration_mint() {
+async fn test_integration_mint_freemint() {
     let mut ctx = TestContext::new().await;
 
     let message = OpReturnMessage {
@@ -214,7 +214,7 @@ async fn test_integration_mint() {
                 supply_cap: Some(1000),
                 amount_per_mint: 10,
                 divisibility: 18,
-                live_time: 0,
+                live_time: 100,
             })),
         },
     };
@@ -240,7 +240,7 @@ async fn test_integration_mint() {
             ASSET_CONTRACT_DATA_PREFIX,
             block_tx_contract.to_string().as_str(),
         );
-    let data_free_mint = match asset_contract_data.expect("Mint data should exist") {
+    let data_free_mint = match asset_contract_data.expect("Free mint data should exist") {
         AssetContractData::FreeMint(free_mint) => free_mint,
     };
 
@@ -265,7 +265,7 @@ async fn test_integration_mint() {
 }
 
 #[tokio::test]
-async fn test_integration_mint_supply_cap_exceeded() {
+async fn test_integration_mint_freemint_supply_cap_exceeded() {
     let mut ctx = TestContext::new().await;
 
     let message = OpReturnMessage {
@@ -274,7 +274,7 @@ async fn test_integration_mint_supply_cap_exceeded() {
                 supply_cap: Some(50),
                 amount_per_mint: 50,
                 divisibility: 18,
-                live_time: 0,
+                live_time: 100,
             })),
         },
     };
@@ -307,7 +307,7 @@ async fn test_integration_mint_supply_cap_exceeded() {
             ASSET_CONTRACT_DATA_PREFIX,
             block_tx_contract.to_string().as_str(),
         );
-    let data_free_mint = match asset_contract_data.expect("Mint data should exist") {
+    let data_free_mint = match asset_contract_data.expect("Free mint data should exist") {
         AssetContractData::FreeMint(free_mint) => free_mint,
     };
 
@@ -315,6 +315,62 @@ async fn test_integration_mint_supply_cap_exceeded() {
 
     let outcome = ctx.verify_message(overflow_block_tx).await;
     assert_eq!(outcome.flaw.unwrap(), Flaw::SupplyCapExceeded);
+
+    ctx.drop().await;
+}
+
+#[tokio::test]
+async fn test_integration_mint_freemint_livetime_exceeded() {
+    let mut ctx = TestContext::new().await;
+
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCreation {
+            contract_type: ContractType::Asset(AssetContract::FreeMint(AssetContractFreeMint {
+                supply_cap: Some(1000),
+                amount_per_mint: 50,
+                divisibility: 18,
+                live_time: 4,
+            })),
+        },
+    };
+
+    let block_tx_contract = ctx.build_and_mine_message(message).await;
+
+    // first mint
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCall {
+            contract: block_tx_contract.to_tuple(),
+            call_type: CallType::Mint(MintOption { pointer: 0 }),
+        },
+    };
+    ctx.build_and_mine_message(message).await;
+
+    // second mint should be execeeded the livetime 
+    // and the total minted should be still 1
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCall {
+            contract: block_tx_contract.to_tuple(),
+            call_type: CallType::Mint(MintOption { pointer: 0 }),
+        },
+    };
+    let overflow_block_tx = ctx.build_and_mine_message(message).await;
+    println!("Overflow block tx: {:?}", overflow_block_tx);
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    let asset_contract_data: Result<AssetContractData, DatabaseError> =
+        ctx.indexer.lock().await.database.lock().await.get(
+            ASSET_CONTRACT_DATA_PREFIX,
+            block_tx_contract.to_string().as_str(),
+        );
+    let data_free_mint = match asset_contract_data.expect("Free mint data should exist") {
+        AssetContractData::FreeMint(free_mint) => free_mint,
+    };
+
+    assert_eq!(data_free_mint.minted, 1);
+
+    let outcome = ctx.verify_message(overflow_block_tx).await;
+    assert_eq!(outcome.flaw.unwrap(), Flaw::LiveTimeExceeded);
 
     ctx.drop().await;
 }

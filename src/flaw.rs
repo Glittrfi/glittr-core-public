@@ -20,6 +20,7 @@ pub enum Flaw {
 
     // call type::mint
     SupplyCapExceeded,
+    LiveTimeExceeded,
 
     // asset contract
     OverflowAmountPerMint,

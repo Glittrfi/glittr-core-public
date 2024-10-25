@@ -58,9 +58,15 @@ impl Updater {
         &self,
         asset: AssetContractFreeMint,
         tx: &Transaction,
+        block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
         mint_option: &MintOption,
     ) -> Option<Flaw> {
+        // check livetime
+        if block_tx.block > asset.live_time {
+            return Some(Flaw::LiveTimeExceeded);
+        }
+
         let mut free_mint_data = match self.get_free_mint_data(contract_id).await {
             Ok(data) => data,
             Err(flaw) => return Some(flaw),
@@ -88,8 +94,6 @@ impl Updater {
             vout: mint_option.pointer,
         };
 
-        // TODO: check livetime
-
         // set the outpoint
         let flaw = self
             .update_asset_list_for_mint(contract_id, &outpoint, asset.amount_per_mint)
@@ -108,6 +112,7 @@ impl Updater {
     pub async fn mint(
         &mut self,
         tx: &Transaction,
+        block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
         mint_option: &MintOption,
     ) -> Option<Flaw> {
@@ -117,7 +122,7 @@ impl Updater {
                 TxType::ContractCreation { contract_type } => match contract_type {
                     message::ContractType::Asset(asset) => match asset {
                         AssetContract::FreeMint(free_mint) => {
-                            self.mint_free_mint(free_mint, tx, contract_id, mint_option)
+                            self.mint_free_mint(free_mint, tx, block_tx, contract_id, mint_option)
                                 .await
                         }
                         // TODO: add others asset types

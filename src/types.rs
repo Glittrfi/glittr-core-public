@@ -8,7 +8,7 @@ pub struct BlockTx {
 
 pub type Ratio = (u32, u32);
 pub type BlockTxTuple = (u64, u32);
-pub type BlockHeight = u32;
+pub type BlockHeight = u64;
 pub type BitcoinAddress = String;
 
 impl fmt::Display for BlockTx {
