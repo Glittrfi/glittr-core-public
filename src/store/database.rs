@@ -20,9 +20,10 @@ pub enum DatabaseError {
     DeserializeFailed,
 }
 
-// TODO: 
+// TODO:
 // - implment error handling
 // - hash the key
+// - add transaction feature
 impl Database {
     pub fn new(path: String) -> Self {
         Self {
@@ -30,16 +31,13 @@ impl Database {
         }
     }
 
-    pub fn put<T: Serialize>(
-        &mut self,
-        prefix: &str,
-        key: &str,
-        value: T,
-    ) -> Result<(), rocksdb::Error> {
-        self.db.put(
-            format!("{}:{}", prefix, key),
-            serde_json::to_string(&value).unwrap(),
-        )
+    pub fn put<T: Serialize>(&mut self, prefix: &str, key: &str, value: T) {
+        self.db
+            .put(
+                format!("{}:{}", prefix, key),
+                serde_json::to_string(&value).unwrap(),
+            )
+            .expect("Error putting data into database");
     }
 
     pub fn get<T: for<'a> Deserialize<'a>>(
@@ -47,7 +45,10 @@ impl Database {
         prefix: &str,
         key: &str,
     ) -> Result<T, DatabaseError> {
-        let value = self.db.get(format!("{}:{}", prefix, key)).unwrap();
+        let value = self
+            .db
+            .get(format!("{}:{}", prefix, key))
+            .expect("Error getting data from database");
 
         if let Some(value) = value {
             let message = T::deserialize(&mut Deserializer::from_slice(value.as_slice()));

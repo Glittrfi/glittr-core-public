@@ -113,13 +113,13 @@ impl Updater {
         self.database
             .lock()
             .await
-            .put(MESSAGE_PREFIX, block_tx.to_string().as_str(), outcome)?;
+            .put(MESSAGE_PREFIX, block_tx.to_string().as_str(), outcome);
 
         self.database.lock().await.put(
             TRANSACTION_TO_BLOCK_TX_PREFIX,
             tx.compute_txid().to_string().as_str(),
             block_tx.to_tuple(),
-        )?;
+        );
 
         Ok(())
     }

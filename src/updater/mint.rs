@@ -24,35 +24,21 @@ impl Updater {
         tx_id: &str,
         n_output: u32,
         amount: u32,
-    ) -> Option<Flaw> {
+    ) {
         let contract_key = BlockTx::from_tuple(*contract_id).to_string();
         let key = format!("{}:{}:{}", contract_key, tx_id, n_output.to_string());
-        let result = self
-            .database
+        self.database
             .lock()
             .await
             .put(MINT_OUTPUT_PREFIX, &key, amount);
-        if result.is_err() {
-            return Some(Flaw::WriteError);
-        }
-        None
     }
 
-    async fn update_mint_data(
-        &self,
-        contract_id: &BlockTxTuple,
-        mint_data: &MintData,
-    ) -> Option<Flaw> {
+    async fn update_mint_data(&self, contract_id: &BlockTxTuple, mint_data: &MintData) {
         let contract_key = BlockTx::from_tuple(*contract_id).to_string();
-        let result = self
-            .database
+        self.database
             .lock()
             .await
             .put(MINT_DATA_PREFIX, &contract_key, mint_data);
-        if result.is_err() {
-            return Some(Flaw::WriteError);
-        }
-        None
     }
 
     async fn mint_free_mint(
@@ -84,24 +70,21 @@ impl Updater {
         if mint_option.pointer >= tx.output.len() as u32 {
             return Some(Flaw::PointerOverflow);
         }
-
         // TODO: check livetime
 
         // set the outpoint
-        let flaw = self
-            .set_mint_output(
-                contract_id,
-                tx.compute_txid().to_string().as_str(),
-                mint_option.pointer,
-                asset.amount_per_mint,
-            )
-            .await;
-        if flaw.is_some() {
-            return flaw;
-        }
+        self.set_mint_output(
+            contract_id,
+            tx.compute_txid().to_string().as_str(),
+            mint_option.pointer,
+            asset.amount_per_mint,
+        )
+        .await;
 
         // update the mint data
-        self.update_mint_data(contract_id, &mint_data).await
+        self.update_mint_data(contract_id, &mint_data).await;
+
+        None
     }
 
     pub async fn mint(

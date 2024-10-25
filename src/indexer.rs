@@ -76,11 +76,10 @@ impl Indexer {
                 self.last_indexed_block = Some(block_height);
             }
 
-            self.database.lock().await.put(
-                INDEXER_LAST_BLOCK_PREFIX,
-                "",
-                self.last_indexed_block,
-            )?;
+            self.database
+                .lock()
+                .await
+                .put(INDEXER_LAST_BLOCK_PREFIX, "", self.last_indexed_block);
 
             sleep(Duration::from_secs(10)).await;
         }
