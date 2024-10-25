@@ -18,17 +18,17 @@ pub enum ContractType {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct MintOption {
+    pub pointer: u32,
+    pub oracle_message: Option<OracleMessageSigned>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum CallType {
     Mint(MintOption),
     Burn,
     Swap,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct MintOption {
-    pub pointer: u32,
-    pub oracle_message: Option<OracleMessageSigned>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -176,6 +176,7 @@ impl fmt::Display for OpReturnMessage {
 mod test {
     use bitcoin::{locktime, transaction::Version, Amount, Transaction, TxOut};
 
+    use crate::asset_contract::AssetContractFreeMint;
     use crate::transaction::asset_contract::AssetContract;
     use crate::transaction::message::ContractType;
     use crate::transaction::message::TxType;
@@ -186,12 +187,14 @@ mod test {
     pub fn parse_op_return_message_success() {
         let dummy_message = OpReturnMessage {
             tx_type: TxType::ContractCreation {
-                contract_type: ContractType::Asset(AssetContract::FreeMint {
-                    supply_cap: Some(1000),
-                    amount_per_mint: 10,
-                    divisibility: 18,
-                    live_time: 0,
-                }),
+                contract_type: ContractType::Asset(AssetContract::FreeMint(
+                    AssetContractFreeMint {
+                        supply_cap: Some(1000),
+                        amount_per_mint: 10,
+                        divisibility: 18,
+                        live_time: 0,
+                    },
+                )),
             },
         };
 
@@ -218,16 +221,11 @@ mod test {
             TxType::ContractCreation { contract_type } => match contract_type {
                 ContractType::Asset(asset_contract) => match asset_contract {
                     AssetContract::Preallocated { todo: _ } => panic!("not preallocated"),
-                    AssetContract::FreeMint {
-                        supply_cap,
-                        amount_per_mint,
-                        divisibility,
-                        live_time,
-                    } => {
-                        assert_eq!(supply_cap, Some(1000));
-                        assert_eq!(amount_per_mint, 10);
-                        assert_eq!(divisibility, 18);
-                        assert_eq!(live_time, 0);
+                    AssetContract::FreeMint(free_mint) => {
+                        assert_eq!(free_mint.supply_cap, Some(1000));
+                        assert_eq!(free_mint.amount_per_mint, 10);
+                        assert_eq!(free_mint.divisibility, 18);
+                        assert_eq!(free_mint.live_time, 0);
                     }
                     AssetContract::PurchaseBurnSwap(_) => panic!("not purchase burn swap"),
                 },

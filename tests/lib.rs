@@ -15,12 +15,14 @@ use glittr::{
         AssetContract, AssetContractPurchaseBurnSwap, InputAsset, OracleSetting, TransferRatioType,
         TransferScheme,
     },
-    database::{Database, DatabaseError, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX},
+    database::{
+        Database, DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX,
+        INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX,
+    },
     message::{
         CallType, ContractType, MintOption, OpReturnMessage, OracleMessage, OracleMessageSigned,
         TxType,
     },
-    BlockTx, Indexer, MessageDataOutcome, Updater,
 };
 
 // Test utilities
@@ -164,9 +166,7 @@ async fn start_indexer(indexer: Arc<Mutex<Indexer>>) -> JoinHandle<()> {
 }
 
 async fn spawn_test_indexer(db_path: String, rpc_url: String) -> Arc<Mutex<Indexer>> {
-    let database: Arc<Mutex<Database>> = Arc::new(Mutex::new(Database::new(db_path)));
-
-    
+    let database = Arc::new(Mutex::new(Database::new(db_path)));
 
     Arc::new(Mutex::new(
         Indexer::new(
@@ -186,12 +186,12 @@ async fn test_integration_broadcast_op_return_message_success() {
 
     let message = OpReturnMessage {
         tx_type: TxType::ContractCreation {
-            contract_type: ContractType::Asset(AssetContract::FreeMint {
+            contract_type: ContractType::Asset(AssetContract::FreeMint(AssetContractFreeMint {
                 supply_cap: Some(1000),
                 amount_per_mint: 10,
                 divisibility: 18,
                 live_time: 0,
-            }),
+            })),
         },
     };
 
@@ -459,12 +459,8 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
 
     let secp: Secp256k1<secp256k1::All> = Secp256k1::new();
     let msg = Message::from_digest_slice(
-        sha256::Hash::hash(
-            serde_json::to_string(&oracle_message)
-                .unwrap()
-                .as_bytes(),
-        )
-        .as_byte_array(),
+        sha256::Hash::hash(serde_json::to_string(&oracle_message).unwrap().as_bytes())
+            .as_byte_array(),
     )
     .unwrap();
 
@@ -588,12 +584,8 @@ async fn test_metaprotocol_to_glittr_asset() {
 
     let secp: Secp256k1<secp256k1::All> = Secp256k1::new();
     let msg = Message::from_digest_slice(
-        sha256::Hash::hash(
-            serde_json::to_string(&oracle_message)
-                .unwrap()
-                .as_bytes(),
-        )
-        .as_byte_array(),
+        sha256::Hash::hash(serde_json::to_string(&oracle_message).unwrap().as_bytes())
+            .as_byte_array(),
     )
     .unwrap();
 
@@ -667,15 +659,215 @@ async fn test_metaprotocol_to_glittr_asset() {
     ctx.drop().await;
 }
 
-// Template for additional tests
 #[tokio::test]
 async fn test_integration_freemint() {
-    // TODO: Implement using TestContext
+    let mut ctx = TestContext::new().await;
+
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCreation {
+            contract_type: ContractType::Asset(AssetContract::FreeMint(AssetContractFreeMint {
+                supply_cap: Some(1000),
+                amount_per_mint: 10,
+                divisibility: 18,
+                live_time: 0,
+            })),
+        },
+    };
+
+    let block_tx = ctx.build_and_mine_message(message).await;
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+    ctx.verify_last_block(block_tx.block).await;
+    ctx.verify_message(block_tx).await;
+    ctx.drop().await;
 }
 
 #[tokio::test]
 async fn test_integration_preallocated() {
     // TODO: Implement using TestContext
+}
+
+#[tokio::test]
+async fn test_integration_mint_freemint() {
+    let mut ctx = TestContext::new().await;
+
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCreation {
+            contract_type: ContractType::Asset(AssetContract::FreeMint(AssetContractFreeMint {
+                supply_cap: Some(1000),
+                amount_per_mint: 10,
+                divisibility: 18,
+                live_time: 0,
+            })),
+        },
+    };
+
+    let block_tx_contract = ctx.build_and_mine_message(message).await;
+
+    let total_mints = 10;
+
+    for _ in 0..total_mints {
+        let message = OpReturnMessage {
+            tx_type: TxType::ContractCall {
+                contract: block_tx_contract.to_tuple(),
+                call_type: CallType::Mint(MintOption {
+                    pointer: 0,
+                    oracle_message: None,
+                }),
+            },
+        };
+        ctx.build_and_mine_message(message).await;
+    }
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    let asset_contract_data: Result<AssetContractData, DatabaseError> =
+        ctx.indexer.lock().await.database.lock().await.get(
+            ASSET_CONTRACT_DATA_PREFIX,
+            block_tx_contract.to_string().as_str(),
+        );
+    let data_free_mint = match asset_contract_data.expect("Free mint data should exist") {
+        AssetContractData::FreeMint(free_mint) => free_mint,
+    };
+
+    let asset_list: Result<Vec<(String, AssetList)>, DatabaseError> = ctx
+        .indexer
+        .lock()
+        .await
+        .database
+        .lock()
+        .await
+        .expensive_find_by_prefix(ASSET_LIST_PREFIX);
+    let asset_lists = asset_list.expect("asset list should exist");
+
+    for (k, v) in &asset_lists {
+        println!("Mint output: {}: {:?}", k, v);
+    }
+
+    assert_eq!(data_free_mint.minted, total_mints);
+    assert_eq!(asset_lists.len() as u32, total_mints);
+
+    ctx.drop().await;
+}
+
+#[tokio::test]
+async fn test_integration_mint_freemint_supply_cap_exceeded() {
+    let mut ctx = TestContext::new().await;
+
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCreation {
+            contract_type: ContractType::Asset(AssetContract::FreeMint(AssetContractFreeMint {
+                supply_cap: Some(50),
+                amount_per_mint: 50,
+                divisibility: 18,
+                live_time: 0,
+            })),
+        },
+    };
+
+    let block_tx_contract = ctx.build_and_mine_message(message).await;
+
+    // first mint
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCall {
+            contract: block_tx_contract.to_tuple(),
+            call_type: CallType::Mint(MintOption {
+                pointer: 0,
+                oracle_message: None,
+            }),
+        },
+    };
+    ctx.build_and_mine_message(message).await;
+
+    // second mint should be execeeded the supply cap
+    // and the total minted should be still 1
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCall {
+            contract: block_tx_contract.to_tuple(),
+            call_type: CallType::Mint(MintOption {
+                pointer: 0,
+                oracle_message: None,
+            }),
+        },
+    };
+    let overflow_block_tx = ctx.build_and_mine_message(message).await;
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    let asset_contract_data: Result<AssetContractData, DatabaseError> =
+        ctx.indexer.lock().await.database.lock().await.get(
+            ASSET_CONTRACT_DATA_PREFIX,
+            block_tx_contract.to_string().as_str(),
+        );
+    let data_free_mint = match asset_contract_data.expect("Free mint data should exist") {
+        AssetContractData::FreeMint(free_mint) => free_mint,
+    };
+
+    assert_eq!(data_free_mint.minted, 1);
+
+    let outcome = ctx.verify_message(overflow_block_tx).await;
+    assert_eq!(outcome.flaw.unwrap(), Flaw::SupplyCapExceeded);
+
+    ctx.drop().await;
+}
+
+#[tokio::test]
+async fn test_integration_mint_freemint_livetime_notreached() {
+    let mut ctx = TestContext::new().await;
+
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCreation {
+            contract_type: ContractType::Asset(AssetContract::FreeMint(AssetContractFreeMint {
+                supply_cap: Some(1000),
+                amount_per_mint: 50,
+                divisibility: 18,
+                live_time: 5,
+            })),
+        },
+    };
+
+    let block_tx_contract = ctx.build_and_mine_message(message).await;
+
+    // first mint not reach the live time
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCall {
+            contract: block_tx_contract.to_tuple(),
+            call_type: CallType::Mint(MintOption {
+                pointer: 0,
+                oracle_message: None,
+            }),
+        },
+    };
+    let notreached_block_tx = ctx.build_and_mine_message(message).await;
+    println!("Not reached livetime block tx: {:?}", notreached_block_tx);
+
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCall {
+            contract: block_tx_contract.to_tuple(),
+            call_type: CallType::Mint(MintOption {
+                pointer: 0,
+                oracle_message: None,
+            }),
+        },
+    };
+    ctx.build_and_mine_message(message).await;
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    let asset_contract_data: Result<AssetContractData, DatabaseError> =
+        ctx.indexer.lock().await.database.lock().await.get(
+            ASSET_CONTRACT_DATA_PREFIX,
+            block_tx_contract.to_string().as_str(),
+        );
+    let data_free_mint = match asset_contract_data.expect("Free mint data should exist") {
+        AssetContractData::FreeMint(free_mint) => free_mint,
+    };
+
+    let outcome = ctx.verify_message(notreached_block_tx).await;
+    assert_eq!(outcome.flaw.unwrap(), Flaw::LiveTimeNotReached);
+
+    assert_eq!(data_free_mint.minted, 1);
+
+    ctx.drop().await;
 }
 
 #[tokio::test]

@@ -17,6 +17,7 @@ mod types;
 mod updater;
 
 pub use api::*;
+pub use flaw::*;
 pub use indexer::*;
 pub use store::*;
 pub use transaction::*;
