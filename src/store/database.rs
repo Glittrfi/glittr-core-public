@@ -20,7 +20,9 @@ pub enum DatabaseError {
     DeserializeFailed,
 }
 
-// TODO: implment error handling
+// TODO: 
+// - implment error handling
+// - hash the key
 impl Database {
     pub fn new(path: String) -> Self {
         Self {
