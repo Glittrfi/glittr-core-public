@@ -174,7 +174,7 @@ impl Updater {
             .database
             .lock()
             .await
-            .get(ASSET_LIST_PREFIX, &outpoint.to_str());
+            .get(ASSET_LIST_PREFIX, &outpoint.to_string());
 
         match result {
             Ok(data) => Ok(data),
@@ -187,7 +187,7 @@ impl Updater {
         self.database
             .lock()
             .await
-            .put(ASSET_LIST_PREFIX, &outpoint.to_str(), asset_list);
+            .put(ASSET_LIST_PREFIX, &outpoint.to_string(), asset_list);
     }
 
     async fn get_message(&self, contract_id: &BlockTxTuple) -> Result<OpReturnMessage, Flaw> {

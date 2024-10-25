@@ -1,5 +1,4 @@
 use std::str::FromStr;
-
 use message::MintOption;
 
 use super::*;
@@ -65,7 +64,7 @@ impl Updater {
         mint_option: &MintOption,
     ) -> Option<Flaw> {
         // check livetime
-        if asset.live_time > block_tx.block  {
+        if asset.live_time > block_tx.block {
             return Some(Flaw::LiveTimeNotReached);
         }
 
@@ -115,12 +114,35 @@ impl Updater {
         &self,
         pbs: AssetContractPurchaseBurnSwap,
         tx: &Transaction,
+        contract_id: &BlockTxTuple,
         mint_option: MintOption,
-    ) -> Result<MintResult, Flaw> {
-        // TODO: given the utxo, how you would know if the utxo contains glittr asset. will be implemented on transfer.
+    ) -> Option<Flaw> {
+        // TODO: All glittr asset transfer logic here is temporary, MUST change when we have transfer logic implemented
+        let mut total_in_value_glittr_asset: u32 = 0;
         let mut total_received_value: u128 = 0;
+
         let mut out_value: u128 = 0;
-        let mut txout: Option<u32> = None;
+        let mut vout: Option<u32> = None;
+
+        // VALIDATE INPUT
+        match pbs.input_asset {
+            InputAsset::GlittrAsset(asset_contract_id) => {
+                for txin in tx.input.iter() {
+                    if let Some(asset_list) = self.get_asset_list(&Outpoint {
+                        txid: txin.previous_output.txid.to_string(),
+                        vout: txin.previous_output.vout,
+                    }).await.ok() {
+                        let block_tx = BlockTx::from_tuple(asset_contract_id);
+                        let amount = asset_list.list.get(&block_tx.to_str()).unwrap_or(&0);
+                        total_in_value_glittr_asset = *amount;
+                    }
+                }
+            }
+            // No need to validate RawBtc
+            InputAsset::RawBTC => {}
+            // Validated below on oracle mint
+            InputAsset::Metaprotocol => {}
+        };
 
         // VALIDATE OUTPUT
         match pbs.transfer_scheme {
@@ -134,20 +156,24 @@ impl Updater {
                             InputAsset::RawBTC => {
                                 total_received_value = output.value.to_sat() as u128;
                             }
-                            InputAsset::GlittrAsset(_) => todo!(),
+                            InputAsset::GlittrAsset(..) => {
+                                // TODO(transfer): simulate transfer function, check if assets are sent here
+                                // for now assume transfering glittr asset success
+                                total_received_value = total_in_value_glittr_asset as u128;
+                            }
                             InputAsset::Metaprotocol => {
-                                // TODO: handle transfer for each and every metaprotocol (ordinal, runes)
+                                // TODO(transfer): handle transfer for each and every metaprotocol (ordinal, runes)
                                 // need to copy the transfer mechanics for each, make sure the sat is burned
                             }
                         }
 
                         if mint_option.pointer != pos as u32 {
                             // NOTE: all asset always went to the first non-op-return txout if the pointer is invalid (for burn)
-                            txout = Some(mint_option.pointer);
+                            vout = Some(mint_option.pointer);
                             break;
                         }
-                    } else if txout.is_none() {
-                        txout = Some(pos as u32);
+                    } else if vout.is_none() {
+                        vout = Some(pos as u32);
                     }
                 }
             }
@@ -168,29 +194,24 @@ impl Updater {
                                 InputAsset::RawBTC => {
                                     total_received_value = output.value.to_sat() as u128;
                                 }
-                                InputAsset::GlittrAsset(_) => todo!(),
+                                InputAsset::GlittrAsset(..) => {
+                                    // TODO(transfer): simulate transfer function, check if assets are sent here
+                                    // for now assume transfering glittr asset success
+                                    total_received_value = total_in_value_glittr_asset as u128;
+                                }
                                 InputAsset::Metaprotocol => {
-                                    // TODO: handle transfer for each and every metaprotocol (ordinal, runes)
+                                    // TODO(transfer): handle transfer for each and every metaprotocol (ordinal, runes)
                                     // need to copy the transfer mechanics for each, make sure the sat is burned
                                 }
                             }
                         }
                     }
                 }
-                txout = Some(mint_option.pointer);
+                vout = Some(mint_option.pointer);
             }
         }
 
-        if txout.unwrap() > tx.output.len() as u32 {
-            return Err(Flaw::PointerOverflow);
-        }
-
-        // VALIDATE INPUT
-        match pbs.input_asset {
-            InputAsset::GlittrAsset(_) => todo!(),
-            _ => (), // validated below
-        };
-
+        // VALIDATE OUT_VALUE
         if let asset_contract::TransferRatioType::Fixed { ratio } = pbs.transfer_ratio_type {
             out_value = (total_received_value * ratio.0) / ratio.1;
         } else if let asset_contract::TransferRatioType::Oracle { pubkey, setting } =
@@ -201,8 +222,7 @@ impl Updater {
                     let pubkey: XOnlyPublicKey =
                         XOnlyPublicKey::from_slice(pubkey.as_slice()).unwrap();
 
-                    if let Ok(signature) = Signature::from_slice(&oracle_message_signed.signature)
-                    {
+                    if let Ok(signature) = Signature::from_slice(&oracle_message_signed.signature) {
                         let secp = Secp256k1::new();
 
                         let msg = Message::from_digest_slice(
@@ -242,12 +262,32 @@ impl Updater {
             };
 
             if !verified {
-                return Err(Flaw::OracleMintFailed);
+                return Some(Flaw::OracleMintFailed);
             }
         }
 
-        // TODO: save the mint result on asset tracker (wait for jon)
-        Ok(MintResult { out_value, txout: txout.unwrap() })
+        if vout.unwrap() > tx.output.len() as u32 {
+            return Some(Flaw::PointerOverflow);
+        }
+
+        let outpoint = Outpoint {
+            txid: tx.compute_txid().to_string(),
+            vout: vout.unwrap(),
+        };
+
+        // set the outpoint
+        let flaw = self
+            .update_asset_list_for_mint(contract_id, &outpoint, out_value as u32)
+            .await;
+        if flaw.is_some() {
+            return flaw;
+        }
+
+        // Ok(MintResult {
+        //     out_value,
+        //     txout: vout.unwrap(),
+        // })
+        None
     }
 
     pub async fn mint(
@@ -266,9 +306,14 @@ impl Updater {
                             self.mint_free_mint(free_mint, tx, block_tx, contract_id, mint_option)
                                 .await
                         }
-                        AssetContract::PurchaseBurnSwap(asset_contract_purchase_burn_swap) => {
-                            self.mint_purchase_burn_swap(asset_contract_purchase_burn_swap, tx, mint_option.clone()).await.err()
-                        }
+                        AssetContract::PurchaseBurnSwap(purchase_burn_swap) => self
+                            .mint_purchase_burn_swap(
+                                purchase_burn_swap,
+                                tx,
+                                contract_id,
+                                mint_option.clone(),
+                            )
+                            .await,
                         AssetContract::Preallocated { .. } => Some(Flaw::NotImplemented),
                     },
                 },
