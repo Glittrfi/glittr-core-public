@@ -63,8 +63,8 @@ impl Updater {
         mint_option: &MintOption,
     ) -> Option<Flaw> {
         // check livetime
-        if block_tx.block > asset.live_time {
-            return Some(Flaw::LiveTimeExceeded);
+        if asset.live_time > block_tx.block  {
+            return Some(Flaw::LiveTimeNotReached);
         }
 
         let mut free_mint_data = match self.get_free_mint_data(contract_id).await {

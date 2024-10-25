@@ -214,7 +214,7 @@ async fn test_integration_mint_freemint() {
                 supply_cap: Some(1000),
                 amount_per_mint: 10,
                 divisibility: 18,
-                live_time: 100,
+                live_time: 0,
             })),
         },
     };
@@ -274,7 +274,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
                 supply_cap: Some(50),
                 amount_per_mint: 50,
                 divisibility: 18,
-                live_time: 100,
+                live_time: 0,
             })),
         },
     };
@@ -320,7 +320,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
 }
 
 #[tokio::test]
-async fn test_integration_mint_freemint_livetime_exceeded() {
+async fn test_integration_mint_freemint_livetime_notreached() {
     let mut ctx = TestContext::new().await;
 
     let message = OpReturnMessage {
@@ -329,14 +329,23 @@ async fn test_integration_mint_freemint_livetime_exceeded() {
                 supply_cap: Some(1000),
                 amount_per_mint: 50,
                 divisibility: 18,
-                live_time: 4,
+                live_time: 5,
             })),
         },
     };
 
     let block_tx_contract = ctx.build_and_mine_message(message).await;
 
-    // first mint
+    // first mint not reach the live time
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCall {
+            contract: block_tx_contract.to_tuple(),
+            call_type: CallType::Mint(MintOption { pointer: 0 }),
+        },
+    };
+    let notreached_block_tx = ctx.build_and_mine_message(message).await;
+    println!("Not reached livetime block tx: {:?}", notreached_block_tx);
+
     let message = OpReturnMessage {
         tx_type: TxType::ContractCall {
             contract: block_tx_contract.to_tuple(),
@@ -344,17 +353,6 @@ async fn test_integration_mint_freemint_livetime_exceeded() {
         },
     };
     ctx.build_and_mine_message(message).await;
-
-    // second mint should be execeeded the livetime 
-    // and the total minted should be still 1
-    let message = OpReturnMessage {
-        tx_type: TxType::ContractCall {
-            contract: block_tx_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption { pointer: 0 }),
-        },
-    };
-    let overflow_block_tx = ctx.build_and_mine_message(message).await;
-    println!("Overflow block tx: {:?}", overflow_block_tx);
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
 
@@ -367,10 +365,10 @@ async fn test_integration_mint_freemint_livetime_exceeded() {
         AssetContractData::FreeMint(free_mint) => free_mint,
     };
 
-    assert_eq!(data_free_mint.minted, 1);
+    let outcome = ctx.verify_message(notreached_block_tx).await;
+    assert_eq!(outcome.flaw.unwrap(), Flaw::LiveTimeNotReached);
 
-    let outcome = ctx.verify_message(overflow_block_tx).await;
-    assert_eq!(outcome.flaw.unwrap(), Flaw::LiveTimeExceeded);
+    assert_eq!(data_free_mint.minted, 1);
 
     ctx.drop().await;
 }
