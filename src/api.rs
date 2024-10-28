@@ -50,7 +50,7 @@ async fn tx_result(
         return Err(StatusCode::NOT_FOUND);
     };
 
-    let message: Result<OpReturnMessage, DatabaseError> = state
+    let message: Result<MessageDataOutcome, DatabaseError> = state
         .database
         .lock()
         .await
@@ -67,7 +67,7 @@ async fn tx_result(
 
 async fn get_block_tx(
     State(state): State<APIState>,
-    Path((block, tx) ): Path<(u64, u32)>,
+    Path((block, tx)): Path<(u64, u32)>,
 ) -> Result<Json<Value>, StatusCode> {
     let message: Result<OpReturnMessage, DatabaseError> = state
         .database
