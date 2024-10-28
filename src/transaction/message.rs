@@ -8,18 +8,25 @@ use bitcoin::{
     ScriptBuf, Transaction,
 };
 use bitcoincore_rpc::jsonrpc::serde_json::{self, Deserializer};
-use constants::{GLITTR_FIRST_BLOCK_HEIGHT, OP_RETURN_MAGIC_PREFIX};
+use constants::OP_RETURN_MAGIC_PREFIX;
+use flaw::Flaw;
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum ContractType {
     Asset(AssetContract),
 }
 
-#[derive(Deserialize, Serialize, Clone, Copy)]
+#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct MintOption {
+    pub pointer: u32
+}
+
+#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum CallType {
-    Mint,
+    Mint(MintOption),
     Burn,
     Swap,
 }
@@ -28,7 +35,7 @@ pub enum CallType {
 /// Asset: This is a block:tx reference to the contract where the asset was created
 /// N outputs: Number of output utxos to receive assets
 /// Amount: Vector of values assigning shares of the transfer to the appropriate UTXO outputs
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum TxType {
     Transfer {
@@ -45,20 +52,21 @@ pub enum TxType {
     },
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct OpReturnMessage {
     pub tx_type: TxType,
 }
 
 impl CallType {
-    pub fn validate(&self) -> bool {
-        true
+    pub fn validate(&self) -> Option<Flaw> {
+        None
     }
 }
 
 impl OpReturnMessage {
-    pub fn parse_tx(tx: &Transaction) -> Result<OpReturnMessage, Box<dyn Error>> {
+    pub fn parse_tx(tx: &Transaction) -> Result<OpReturnMessage, Flaw> {
         let mut payload = Vec::new();
+
         for output in tx.output.iter() {
             let mut instructions = output.script_pubkey.instructions();
 
@@ -81,10 +89,10 @@ impl OpReturnMessage {
                         payload.extend_from_slice(push.as_bytes());
                     }
                     Ok(Instruction::Op(op)) => {
-                        return Err(format!("Invalid instruction {}", op).into());
+                        return Err(Flaw::InvalidInstruction(op.to_string()));
                     }
                     Err(_) => {
-                        return Err("Invalid script".into());
+                        return Err(Flaw::InvalidScript);
                     }
                 }
             }
@@ -96,16 +104,16 @@ impl OpReturnMessage {
 
         match message {
             Ok(message) => Ok(message),
-            Err(error) => Err(error.into()),
+            Err(_) => Err(Flaw::FailedDeserialization),
         }
     }
 
-    pub fn validate(&self) -> bool {
+    pub fn validate(&self) -> Option<Flaw> {
         match self.tx_type.clone() {
             TxType::Transfer {
-                asset,
-                n_outputs,
-                amounts,
+                asset: _,
+                n_outputs: _,
+                amounts: _,
             } => {
                 // TODO: validate if asset exist
                 // TODO: validate n_outputs <  max outputs in transactions
@@ -117,15 +125,15 @@ impl OpReturnMessage {
                 }
             },
             TxType::ContractCall {
-                contract,
                 call_type,
+                ..
             } => {
-                // TODO: validate if contract exist
                 return call_type.validate();
             }
+
         }
 
-        true
+        None
     }
 
     pub fn into_script(&self) -> ScriptBuf {
@@ -150,10 +158,9 @@ impl fmt::Display for OpReturnMessage {
 #[cfg(test)]
 mod test {
     use bitcoin::{
-        consensus::deserialize, locktime, script::{self, PushBytes}, transaction::Version, Amount, Psbt, Transaction, TxOut
+        consensus::deserialize, locktime, transaction::Version, Amount, Transaction, TxOut
     };
-    use serde::Deserialize;
-
+    use crate::asset_contract::AssetContractFreeMint;
     use crate::transaction::asset_contract::AssetContract;
     use crate::transaction::message::ContractType;
     use crate::transaction::message::TxType;
@@ -164,12 +171,14 @@ mod test {
     pub fn parse_op_return_message_success() {
         let dummy_message = OpReturnMessage {
             tx_type: TxType::ContractCreation {
-                contract_type: ContractType::Asset(AssetContract::FreeMint {
-                    supply_cap: Some(1000),
-                    amount_per_mint: 10,
-                    divisibility: 18,
-                    live_time: 0,
-                }),
+                contract_type: ContractType::Asset(AssetContract::FreeMint(
+                    AssetContractFreeMint {
+                        supply_cap: Some(1000),
+                        amount_per_mint: 10,
+                        divisibility: 18,
+                        live_time: 0,
+                    },
+                )),
             },
         };
 
@@ -196,19 +205,13 @@ mod test {
             TxType::ContractCreation { contract_type } => match contract_type {
                 ContractType::Asset(asset_contract) => match asset_contract {
                     AssetContract::Preallocated { todo: _ } => panic!("not preallocated"),
-                    AssetContract::FreeMint {
-                        supply_cap,
-                        amount_per_mint,
-                        divisibility,
-                        live_time,
-                    } => {
-                        assert_eq!(supply_cap, Some(1000));
-                        assert_eq!(amount_per_mint, 10);
-                        assert_eq!(divisibility, 18);
-                        assert_eq!(live_time, 0);
+                    AssetContract::FreeMint(free_mint) => {
+                        assert_eq!(free_mint.supply_cap, Some(1000));
+                        assert_eq!(free_mint.amount_per_mint, 10);
+                        assert_eq!(free_mint.divisibility, 18);
+                        assert_eq!(free_mint.live_time, 0);
                     }
                     AssetContract::PurchaseBurnSwap {
-                        input_asset_type: _,
                         input_asset: _,
                         transfer_scheme: _,
                         transfer_ratio_type: _,

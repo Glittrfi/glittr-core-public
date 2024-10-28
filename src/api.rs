@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use super::*;
 use axum::{
-    body::{Body, HttpBody},
     extract::{Path, State},
     http::StatusCode,
     routing::{get, post},
@@ -43,23 +42,24 @@ async fn tx_result(
         .get(TRANSACTION_TO_BLOCK_TX_PREFIX, txid.as_str());
 
     let blocktx = if let Ok(blocktx) = blocktx {
-        blocktx
-    } else {
-        return Err(StatusCode::NOT_FOUND);
-    };
-
-    let message: Result<OpReturnMessage, DatabaseError> = state.database.lock().await.get(
-        MESSAGE_PREFIX,
         BlockTx {
             block: blocktx.0,
             tx: blocktx.1,
         }
-        .to_string()
-        .as_str(),
-    );
+    } else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+
+    let message: Result<OpReturnMessage, DatabaseError> = state
+        .database
+        .lock()
+        .await
+        .get(MESSAGE_PREFIX, blocktx.to_string().as_str());
 
     if let Ok(message) = message {
-        Ok(Json(json!({"is_valid": true, "message": message})))
+        Ok(Json(
+            json!({"is_valid": true, "message": message, "block_tx": blocktx.to_str()}),
+        ))
     } else {
         return Err(StatusCode::NOT_FOUND);
     }
@@ -84,7 +84,7 @@ async fn get_block_tx(
 }
 
 async fn validate_tx(
-    State(_state): State<APIState>,
+    State(state): State<APIState>,
     body: String,
 ) -> Result<Json<Value>, StatusCode> {
     let tx_bytes = if let Some(tx_bytes) = hex::decode(body).ok() {
@@ -104,16 +104,19 @@ async fn validate_tx(
     };
 
     return if let Some(op_return_message) = OpReturnMessage::parse_tx(&tx).ok() {
-        let is_valid = op_return_message.validate();
-
-        // TODO: invoke real validation using db, .e.g. process_and_validate(tx, db, is_parse: false);
-
-        if is_valid {
-            Ok(Json(json!({"is_valid": true})))
+        let mut temp_updater = Updater::new(Arc::clone(&state.database), true).await;
+        if let Some(outcome) = temp_updater
+            .index(0, 0, &tx, Ok(op_return_message))
+            .await
+            .ok()
+        {
+            if let Some(flaw) = outcome.flaw {
+                Ok(Json(json!({"is_valid": false, "msg": flaw})))
+            } else {
+                Ok(Json(json!({"is_valid": true})))
+            }
         } else {
-            Ok(Json(
-                json!({"is_valid": false, "msg": "Arguments inside the messages are invalid"}),
-            ))
+            Ok(Json(json!({"is_valid": false, "msg": "Error"})))
         }
     } else {
         Ok(Json(
