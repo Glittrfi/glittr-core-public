@@ -163,7 +163,7 @@ impl Updater {
         }
     }
 
-    async fn get_asset_list(&self, outpoint: &Outpoint) -> Result<AssetList, Flaw> {
+    pub async fn get_asset_list(&self, outpoint: &Outpoint) -> Result<AssetList, Flaw> {
         let result: Result<AssetList, DatabaseError> = self
             .database
             .lock()
@@ -205,7 +205,7 @@ impl Updater {
         }
     }
 
-    async fn get_asset_contract_data(
+    pub async fn get_asset_contract_data(
         &self,
         contract_id: &BlockTxTuple,
     ) -> Result<AssetContractData, Flaw> {
