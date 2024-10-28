@@ -20,7 +20,7 @@ pub enum ContractType {
 #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MintOption {
-    pub pointer: u32
+    pub pointer: u32,
 }
 
 #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
@@ -124,13 +124,9 @@ impl OpReturnMessage {
                     return asset_contract.validate();
                 }
             },
-            TxType::ContractCall {
-                call_type,
-                ..
-            } => {
+            TxType::ContractCall { call_type, .. } => {
                 return call_type.validate();
             }
-
         }
 
         None
@@ -157,13 +153,13 @@ impl fmt::Display for OpReturnMessage {
 
 #[cfg(test)]
 mod test {
-    use bitcoin::{
-        consensus::deserialize, locktime, transaction::Version, Amount, Transaction, TxOut
-    };
     use crate::asset_contract::AssetContractFreeMint;
     use crate::transaction::asset_contract::AssetContract;
     use crate::transaction::message::ContractType;
     use crate::transaction::message::TxType;
+    use bitcoin::{
+        consensus::deserialize, locktime, transaction::Version, Amount, Transaction, TxOut,
+    };
 
     use super::OpReturnMessage;
 

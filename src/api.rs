@@ -67,8 +67,7 @@ async fn tx_result(
 
 async fn get_block_tx(
     State(state): State<APIState>,
-    Path(block): Path<u64>,
-    Path(tx): Path<u32>,
+    Path((block, tx) ): Path<(u64, u32)>,
 ) -> Result<Json<Value>, StatusCode> {
     let message: Result<OpReturnMessage, DatabaseError> = state
         .database
