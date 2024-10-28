@@ -84,8 +84,7 @@ async fn get_block_tx(
 
 async fn get_assets(
     State(state): State<APIState>,
-    Path(txid): Path<String>,
-    Path(vout): Path<u32>,
+    Path((txid, vout)): Path<(String, u32)>,
 ) -> Result<Json<Value>, StatusCode> {
     let updater = Updater::new(state.database).await;
     let outpoint = Outpoint { txid, vout };
@@ -98,8 +97,7 @@ async fn get_assets(
 
 async fn get_asset_contract(
     State(state): State<APIState>,
-    Path(block): Path<u64>,
-    Path(tx): Path<u32>,
+    Path((block, tx)): Path<(u64, u32)>,
 ) -> Result<Json<Value>, StatusCode> {
     let updater = Updater::new(state.database).await;
     if let Some(asset_contract_data) = updater.get_asset_contract_data(&(block, tx)).await.ok() {
