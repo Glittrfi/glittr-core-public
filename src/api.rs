@@ -57,9 +57,15 @@ async fn tx_result(
         .get(MESSAGE_PREFIX, blocktx.to_string().as_str());
 
     if let Ok(message) = message {
-        Ok(Json(
-            json!({"is_valid": true, "message": message, "block_tx": blocktx.to_str()}),
-        ))
+        if let Some(_) = message.flaw {
+            Ok(Json(
+                json!({"is_valid": false, "message": message, "block_tx": blocktx.to_str()}),
+            ))
+        } else {
+            Ok(Json(
+                json!({"is_valid": true, "message": message, "block_tx": blocktx.to_str()}),
+            ))
+        }
     } else {
         return Err(StatusCode::NOT_FOUND);
     }
