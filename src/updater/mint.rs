@@ -115,6 +115,7 @@ impl Updater {
         &self,
         pbs: PurchaseBurnSwap,
         tx: &Transaction,
+        block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
         mint_option: MintOption,
     ) -> Option<Flaw> {
@@ -221,7 +222,7 @@ impl Updater {
         } else if let asset_contract::TransferRatioType::Oracle { pubkey, setting } =
             pbs.transfer_ratio_type.clone()
         {
-            let verified = if let Some(oracle_message_signed) = mint_option.oracle_message {
+            if let Some(oracle_message_signed) = mint_option.oracle_message {
                 if setting.asset_id == oracle_message_signed.message.asset_id {
                     let pubkey: XOnlyPublicKey =
                         XOnlyPublicKey::from_slice(pubkey.as_slice()).unwrap();
@@ -249,25 +250,32 @@ impl Updater {
                             }
                         }
 
-                        let below_min_in_value =
-                            total_received_value < oracle_message_signed.message.min_in_value;
+                        if block_tx.block - oracle_message_signed.message.block_height
+                            > setting.block_height_slippage as u64
+                        {
+                            return Some(Flaw::OracleMintBlockSlippageExceeded);
+                        }
 
-                        !below_min_in_value
-                            && input_found
-                            && pubkey.verify(&secp, &msg, &signature).is_ok()
+                        if total_received_value < oracle_message_signed.message.min_in_value {
+                            return Some(Flaw::OracleMintBelowMinValue);
+                        }
+
+                        if !input_found {
+                            return Some(Flaw::OracleMintInputNotFound);
+                        }
+
+                        if !pubkey.verify(&secp, &msg, &signature).is_ok() {
+                            return Some(Flaw::OracleMintSignatureFailed);
+                        }
                     } else {
-                        false
+                        return Some(Flaw::OracleMintFailed);
                     }
                 } else {
-                    false
+                    return Some(Flaw::OracleMintFailed);
                 }
             } else {
-                false
-            };
-
-            if !verified {
                 return Some(Flaw::OracleMintFailed);
-            }
+            };
         }
 
         if vout.unwrap() > tx.output.len() as u32 {
@@ -316,6 +324,7 @@ impl Updater {
                             self.mint_purchase_burn_swap(
                                 purchase,
                                 tx,
+                                block_tx,
                                 contract_id,
                                 mint_option.clone(),
                             )

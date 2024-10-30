@@ -486,6 +486,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
                             pubkey: oracle_xonly.0.serialize().to_vec(),
                             setting: OracleSetting {
                                 asset_id: Some("btc".to_string()),
+                                block_height_slippage: 5,
                             },
                         },
                     }),
@@ -518,6 +519,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
         min_in_value: (bitcoin_value - 1000) as u128,
         out_value: oracle_out_value,
         asset_id: Some("btc".to_string()),
+        block_height: height,
     };
 
     let secp: Secp256k1<secp256k1::All> = Secp256k1::new();
@@ -624,6 +626,7 @@ async fn test_metaprotocol_to_glittr_asset() {
                             pubkey: oracle_xonly.0.serialize().to_vec(),
                             setting: OracleSetting {
                                 asset_id: Some("rune:840000:3".to_string()),
+                                block_height_slippage: 5,
                             },
                         },
                     }),
@@ -656,6 +659,7 @@ async fn test_metaprotocol_to_glittr_asset() {
         min_in_value: 0,
         out_value: oracle_out_value,
         asset_id: Some("rune:840000:3".to_string()),
+        block_height: height,
     };
 
     let secp: Secp256k1<secp256k1::All> = Secp256k1::new();

@@ -39,13 +39,16 @@ pub struct OracleMessageSigned {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct OracleMessage {
+    /// the input_outpoint dictates which UTXO is being evaluated by the Oracle
     pub input_outpoint: OutPoint,
     /// min_in_value represents what the input valued at (minimum because btc value could differ (-fee))
     pub min_in_value: u128,
-    /// out_value represents the oracle's valuation of the input
+    /// out_value represents the oracle's valuation of the input e.g. for 1 btc == 72000 wusd, 72000 is the out_value
     pub out_value: u128,
-    /// ordinal_number if ordinal, rune's block_tx if rune, etc
+    /// rune's BlockTx if rune
     pub asset_id: Option<String>,
+    // the bitcoin block height when the message is signed
+    pub block_height: u64,
 }
 
 /// Transfer

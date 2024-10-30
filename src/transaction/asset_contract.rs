@@ -81,12 +81,6 @@ pub enum TransferScheme {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct OracleSetting {
-    /// set asset_id to none to fully trust the oracle, ordinal_number if ordinal, rune's block_tx if rune, etc
-    pub asset_id: Option<String>,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum TransferRatioType {
     Fixed {
@@ -96,6 +90,14 @@ pub enum TransferRatioType {
         pubkey: Vec<u8>, // compressed public key
         setting: OracleSetting,
     },
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct OracleSetting {
+    /// set asset_id to none to fully trust the oracle, ordinal_number if ordinal, rune's block_tx if rune, etc
+    pub asset_id: Option<String>,
+    /// delta block_height in which the oracle message still valid
+    pub block_height_slippage: u8,
 }
 
 /// Mix of distribution schemes only applicable for preallocated and free_mint or preallocated and purchase
