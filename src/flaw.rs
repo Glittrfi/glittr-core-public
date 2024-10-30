@@ -29,6 +29,7 @@ pub enum Flaw {
     DivideByZero,
     PubkeyInvalid,
     OracleMessageFormatInvalid,
+    SupplyCapInvalid,
 
     NotImplemented,
 }

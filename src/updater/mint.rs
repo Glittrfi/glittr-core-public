@@ -57,14 +57,14 @@ impl Updater {
 
     async fn mint_free_mint(
         &self,
-        asset: AssetContractFreeMint,
+        asset_contract: AssetContract,
         tx: &Transaction,
         block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
         mint_option: &MintOption,
     ) -> Option<Flaw> {
         // check livetime
-        if asset.live_time > block_tx.block {
+        if asset_contract.asset.live_time > block_tx.block {
             return Some(Flaw::LiveTimeNotReached);
         }
 
@@ -73,12 +73,13 @@ impl Updater {
             Err(flaw) => return Some(flaw),
         };
 
+        let free_mint = asset_contract.distribution_schemes.free_mint.unwrap();
         // check the supply
-        if let Some(supply_cap) = asset.supply_cap {
+        if let Some(supply_cap) = free_mint.supply_cap {
             let next_supply = free_mint_data
                 .minted
-                .saturating_mul(asset.amount_per_mint)
-                .saturating_add(asset.amount_per_mint);
+                .saturating_mul(free_mint.amount_per_mint)
+                .saturating_add(free_mint.amount_per_mint);
 
             if next_supply > supply_cap {
                 return Some(Flaw::SupplyCapExceeded);
@@ -97,7 +98,7 @@ impl Updater {
 
         // set the outpoint
         let flaw = self
-            .update_asset_list_for_mint(contract_id, &outpoint, asset.amount_per_mint)
+            .update_asset_list_for_mint(contract_id, &outpoint, free_mint.amount_per_mint)
             .await;
         if flaw.is_some() {
             return flaw;
@@ -112,7 +113,7 @@ impl Updater {
 
     pub async fn mint_purchase_burn_swap(
         &self,
-        pbs: AssetContractPurchaseBurnSwap,
+        pbs: PurchaseBurnSwap,
         tx: &Transaction,
         contract_id: &BlockTxTuple,
         mint_option: MintOption,
@@ -286,10 +287,6 @@ impl Updater {
             return flaw;
         }
 
-        // Ok(MintResult {
-        //     out_value,
-        //     txout: vout.unwrap(),
-        // })
         None
     }
 
@@ -304,22 +301,29 @@ impl Updater {
         match message {
             Ok(op_return_message) => match op_return_message.tx_type {
                 TxType::ContractCreation { contract_type } => match contract_type {
-                    message::ContractType::Asset(asset) => match asset {
-                        AssetContract::FreeMint(free_mint) => {
-                            self.mint_free_mint(free_mint, tx, block_tx, contract_id, mint_option)
-                                .await
-                        }
-                        AssetContract::PurchaseBurnSwap(purchase_burn_swap) => {
+                    message::ContractType::Asset(asset_contract) => {
+                        if let Some(_) = asset_contract.distribution_schemes.free_mint {
+                            self.mint_free_mint(
+                                asset_contract,
+                                tx,
+                                block_tx,
+                                contract_id,
+                                mint_option,
+                            )
+                            .await
+                        } else if let Some(purchase) = asset_contract.distribution_schemes.purchase
+                        {
                             self.mint_purchase_burn_swap(
-                                purchase_burn_swap,
+                                purchase,
                                 tx,
                                 contract_id,
                                 mint_option.clone(),
                             )
                             .await
+                        } else {
+                            Some(Flaw::NotImplemented)
                         }
-                        AssetContract::Preallocated { .. } => Some(Flaw::NotImplemented),
-                    },
+                    }
                 },
                 _ => Some(Flaw::ContractNotMatch),
             },

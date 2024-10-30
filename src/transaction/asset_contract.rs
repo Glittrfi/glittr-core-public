@@ -7,19 +7,26 @@ use super::*;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
-pub struct AssetContractFreeMint {
+pub struct FreeMint {
     pub supply_cap: Option<u32>,
     // TODO change the type to u128, need to check the serialization and deserialization since JSON
     // has a MAX number limitation.
     pub amount_per_mint: u32,
-    pub divisibility: u8,
-    pub live_time: BlockHeight,
 }
-impl AssetContractFreeMint {
-    pub fn validate(&self) -> Option<Flaw> {
+
+impl FreeMint {
+    pub fn validate(&self, asset_contract: &AssetContract) -> Option<Flaw> {
         if let Some(supply_cap) = self.supply_cap {
             if self.amount_per_mint > supply_cap {
                 return Some(Flaw::OverflowAmountPerMint);
+            }
+
+            if let Some(super_supply_cap) = asset_contract.asset.supply_cap {
+                if super_supply_cap < supply_cap {
+                    return Some(Flaw::SupplyCapInvalid);
+                }
+            } else {
+                return Some(Flaw::SupplyCapInvalid);
             }
         }
         None
@@ -28,15 +35,30 @@ impl AssetContractFreeMint {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
-pub enum AssetContract {
-    Preallocated { todo: Option<()> },
-    FreeMint(AssetContractFreeMint),
-    PurchaseBurnSwap(AssetContractPurchaseBurnSwap),
+pub struct SimpleAsset {
+    pub supply_cap: Option<u32>,
+    pub divisibility: u8,
+    pub live_time: BlockHeight,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
-pub struct AssetContractPurchaseBurnSwap {
+pub struct AssetContract {
+    pub asset: SimpleAsset,
+    pub distribution_schemes: DistributionSchemes,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct DistributionSchemes {
+    pub preallocated: Option<()>,
+    pub free_mint: Option<FreeMint>,
+    pub purchase: Option<PurchaseBurnSwap>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct PurchaseBurnSwap {
     pub input_asset: InputAsset,
     pub transfer_scheme: TransferScheme,
     pub transfer_ratio_type: TransferRatioType,
@@ -76,40 +98,41 @@ pub enum TransferRatioType {
     },
 }
 
+/// Mix of distribution schemes only applicable for preallocated and free_mint or preallocated and purchase
 impl AssetContract {
     pub fn validate(&self) -> Option<Flaw> {
-        match self {
-            AssetContract::Preallocated { todo: _ } => {
-                // TODO: add and validate preallocated
+        if self.distribution_schemes.purchase.is_some()
+            && self.distribution_schemes.free_mint.is_some()
+        {
+            return Some(Flaw::NotImplemented);
+        }
+
+        if let Some(freemint) = &self.distribution_schemes.free_mint {
+            return freemint.validate(self);
+        }
+
+        if let Some(purchase) = &self.distribution_schemes.purchase {
+            if let InputAsset::GlittrAsset(block_tx_tuple) = purchase.input_asset {
+                if block_tx_tuple.1 == 0 {
+                    return Some(Flaw::InvalidBlockTxPointer);
+                }
             }
-            AssetContract::FreeMint(free_mint) => return free_mint.validate(),
-            AssetContract::PurchaseBurnSwap(AssetContractPurchaseBurnSwap {
-                input_asset,
-                transfer_scheme,
-                transfer_ratio_type,
-            }) => {
-                if let InputAsset::GlittrAsset(block_tx_tuple) = input_asset {
-                    if block_tx_tuple.1 == 0 {
-                        return Some(Flaw::InvalidBlockTxPointer);
+
+            if let TransferScheme::Purchase(bitcoin_address) = &purchase.transfer_scheme {
+                if Address::from_str(bitcoin_address.as_str()).is_err() {
+                    return Some(Flaw::InvalidBitcoinAddress);
+                }
+            }
+
+            match &purchase.transfer_ratio_type {
+                TransferRatioType::Fixed { ratio } => {
+                    if ratio.1 == 0 {
+                        return Some(Flaw::DivideByZero);
                     }
                 }
-
-                if let TransferScheme::Purchase(bitcoin_address) = transfer_scheme {
-                    if Address::from_str(bitcoin_address.as_str()).is_err() {
-                        return Some(Flaw::InvalidBitcoinAddress);
-                    }
-                }
-
-                match &transfer_ratio_type {
-                    TransferRatioType::Fixed { ratio } => {
-                        if ratio.1 == 0 {
-                            return Some(Flaw::DivideByZero);
-                        }
-                    }
-                    TransferRatioType::Oracle { pubkey, setting: _ } => {
-                        if XOnlyPublicKey::from_slice(pubkey).is_err() {
-                            return Some(Flaw::PubkeyInvalid);
-                        }
+                TransferRatioType::Oracle { pubkey, setting: _ } => {
+                    if XOnlyPublicKey::from_slice(pubkey).is_err() {
+                        return Some(Flaw::PubkeyInvalid);
                     }
                 }
             }

@@ -145,7 +145,6 @@ impl OpReturnMessage {
                 contract: _,
                 call_type,
             } => {
-                // TODO: validate if contract exist
                 return call_type.validate();
             }
         }
@@ -176,7 +175,9 @@ impl fmt::Display for OpReturnMessage {
 mod test {
     use bitcoin::{locktime, transaction::Version, Amount, Transaction, TxOut};
 
-    use crate::asset_contract::AssetContractFreeMint;
+    use crate::asset_contract::DistributionSchemes;
+    use crate::asset_contract::FreeMint;
+    use crate::asset_contract::SimpleAsset;
     use crate::transaction::asset_contract::AssetContract;
     use crate::transaction::message::ContractType;
     use crate::transaction::message::TxType;
@@ -187,14 +188,21 @@ mod test {
     pub fn parse_op_return_message_success() {
         let dummy_message = OpReturnMessage {
             tx_type: TxType::ContractCreation {
-                contract_type: ContractType::Asset(AssetContract::FreeMint(
-                    AssetContractFreeMint {
+                contract_type: ContractType::Asset(AssetContract {
+                    asset: SimpleAsset {
                         supply_cap: Some(1000),
-                        amount_per_mint: 10,
                         divisibility: 18,
                         live_time: 0,
                     },
-                )),
+                    distribution_schemes: DistributionSchemes {
+                        free_mint: Some(FreeMint {
+                            supply_cap: Some(1000),
+                            amount_per_mint: 10,
+                        }),
+                        preallocated: None,
+                        purchase: None,
+                    },
+                }),
             },
         };
 
@@ -219,16 +227,14 @@ mod test {
                 amounts: _,
             } => panic!("not transfer"),
             TxType::ContractCreation { contract_type } => match contract_type {
-                ContractType::Asset(asset_contract) => match asset_contract {
-                    AssetContract::Preallocated { todo: _ } => panic!("not preallocated"),
-                    AssetContract::FreeMint(free_mint) => {
-                        assert_eq!(free_mint.supply_cap, Some(1000));
-                        assert_eq!(free_mint.amount_per_mint, 10);
-                        assert_eq!(free_mint.divisibility, 18);
-                        assert_eq!(free_mint.live_time, 0);
-                    }
-                    AssetContract::PurchaseBurnSwap(_) => panic!("not purchase burn swap"),
-                },
+                ContractType::Asset(asset_contract) => {
+                    let free_mint = asset_contract.distribution_schemes.free_mint.unwrap();
+                    assert_eq!(asset_contract.asset.supply_cap, Some(1000));
+                    assert_eq!(asset_contract.asset.divisibility, 18);
+                    assert_eq!(asset_contract.asset.live_time, 0);
+                    assert_eq!(free_mint.supply_cap, Some(1000));
+                    assert_eq!(free_mint.amount_per_mint, 10);
+                }
             },
             TxType::ContractCall {
                 contract: _,

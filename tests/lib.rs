@@ -12,8 +12,8 @@ use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
 
 use glittr::{
     asset_contract::{
-        AssetContract, AssetContractFreeMint, AssetContractPurchaseBurnSwap, InputAsset,
-        OracleSetting, TransferRatioType, TransferScheme,
+        AssetContract, DistributionSchemes, FreeMint, InputAsset, OracleSetting, PurchaseBurnSwap,
+        SimpleAsset, TransferRatioType, TransferScheme,
     },
     database::{
         Database, DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX,
@@ -95,7 +95,7 @@ impl TestContext {
         Err(())
     }
 
-    async fn build_and_mine_contract_message(&mut self, message: &OpReturnMessage) -> BlockTx {
+    async fn build_and_mine_message(&mut self, message: &OpReturnMessage) -> BlockTx {
         let height = self.core.height();
 
         self.core.broadcast_tx(TransactionTemplate {
@@ -190,16 +190,25 @@ async fn test_integration_broadcast_op_return_message_success() {
 
     let message = OpReturnMessage {
         tx_type: TxType::ContractCreation {
-            contract_type: ContractType::Asset(AssetContract::FreeMint(AssetContractFreeMint {
-                supply_cap: Some(1000),
-                amount_per_mint: 10,
-                divisibility: 18,
-                live_time: 0,
-            })),
+            contract_type: ContractType::Asset(AssetContract {
+                asset: SimpleAsset {
+                    supply_cap: Some(1000),
+                    divisibility: 18,
+                    live_time: 0,
+                },
+                distribution_schemes: DistributionSchemes {
+                    free_mint: Some(FreeMint {
+                        supply_cap: Some(1000),
+                        amount_per_mint: 10,
+                    }),
+                    preallocated: None,
+                    purchase: None,
+                },
+            }),
         },
     };
 
-    let block_tx = ctx.build_and_mine_contract_message(&message).await;
+    let block_tx = ctx.build_and_mine_message(&message).await;
     start_indexer(Arc::clone(&ctx.indexer)).await;
     ctx.verify_last_block(block_tx.block).await;
     ctx.get_and_verify_message_outcome(block_tx).await;
@@ -212,17 +221,26 @@ async fn test_integration_purchaseburnswap() {
 
     let message = OpReturnMessage {
         tx_type: TxType::ContractCreation {
-            contract_type: ContractType::Asset(AssetContract::PurchaseBurnSwap(
-                AssetContractPurchaseBurnSwap {
-                    input_asset: InputAsset::RawBTC,
-                    transfer_scheme: TransferScheme::Burn,
-                    transfer_ratio_type: TransferRatioType::Fixed { ratio: (1, 1) },
+            contract_type: ContractType::Asset(AssetContract {
+                asset: SimpleAsset {
+                    supply_cap: None,
+                    divisibility: 18,
+                    live_time: 0,
                 },
-            )),
+                distribution_schemes: DistributionSchemes {
+                    purchase: Some(PurchaseBurnSwap {
+                        input_asset: InputAsset::RawBTC,
+                        transfer_scheme: TransferScheme::Burn,
+                        transfer_ratio_type: TransferRatioType::Fixed { ratio: (1, 1) },
+                    }),
+                    preallocated: None,
+                    free_mint: None,
+                },
+            }),
         },
     };
 
-    let block_tx = ctx.build_and_mine_contract_message(&message).await;
+    let block_tx = ctx.build_and_mine_message(&message).await;
     start_indexer(Arc::clone(&ctx.indexer)).await;
     ctx.verify_last_block(block_tx.block).await;
     ctx.get_and_verify_message_outcome(block_tx).await;
@@ -236,17 +254,26 @@ async fn test_raw_btc_to_glittr_asset_burn() {
 
     let contract_message = OpReturnMessage {
         tx_type: TxType::ContractCreation {
-            contract_type: ContractType::Asset(AssetContract::PurchaseBurnSwap(
-                AssetContractPurchaseBurnSwap {
-                    input_asset: InputAsset::RawBTC,
-                    transfer_scheme: TransferScheme::Burn,
-                    transfer_ratio_type: TransferRatioType::Fixed { ratio: (1, 1) },
+            contract_type: ContractType::Asset(AssetContract {
+                asset: SimpleAsset {
+                    supply_cap: None,
+                    divisibility: 18,
+                    live_time: 0,
                 },
-            )),
+                distribution_schemes: DistributionSchemes {
+                    purchase: Some(PurchaseBurnSwap {
+                        input_asset: InputAsset::RawBTC,
+                        transfer_scheme: TransferScheme::Burn,
+                        transfer_ratio_type: TransferRatioType::Fixed { ratio: (1, 1) },
+                    }),
+                    preallocated: None,
+                    free_mint: None,
+                },
+            }),
         },
     };
 
-    let contract_id = ctx.build_and_mine_contract_message(&contract_message).await;
+    let contract_id = ctx.build_and_mine_message(&contract_message).await;
 
     let minter_address = get_bitcoin_address();
 
@@ -336,17 +363,26 @@ async fn test_raw_btc_to_glittr_asset_purchase() {
     let contract_treasury = get_bitcoin_address();
     let contract_message = OpReturnMessage {
         tx_type: TxType::ContractCreation {
-            contract_type: ContractType::Asset(AssetContract::PurchaseBurnSwap(
-                AssetContractPurchaseBurnSwap {
-                    input_asset: InputAsset::RawBTC,
-                    transfer_scheme: TransferScheme::Purchase(contract_treasury.to_string()),
-                    transfer_ratio_type: TransferRatioType::Fixed { ratio: (1, 1) },
+            contract_type: ContractType::Asset(AssetContract {
+                asset: SimpleAsset {
+                    supply_cap: None,
+                    divisibility: 18,
+                    live_time: 0,
                 },
-            )),
+                distribution_schemes: DistributionSchemes {
+                    purchase: Some(PurchaseBurnSwap {
+                        input_asset: InputAsset::RawBTC,
+                        transfer_scheme: TransferScheme::Purchase(contract_treasury.to_string()),
+                        transfer_ratio_type: TransferRatioType::Fixed { ratio: (1, 1) },
+                    }),
+                    preallocated: None,
+                    free_mint: None,
+                },
+            }),
         },
     };
 
-    let contract_id = ctx.build_and_mine_contract_message(&contract_message).await;
+    let contract_id = ctx.build_and_mine_message(&contract_message).await;
 
     let mint_message = OpReturnMessage {
         tx_type: TxType::ContractCall {
@@ -436,22 +472,31 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
     let oracle_xonly = XOnlyPublicKey::from_keypair(&oracle_keypair);
     let contract_message = OpReturnMessage {
         tx_type: TxType::ContractCreation {
-            contract_type: ContractType::Asset(AssetContract::PurchaseBurnSwap(
-                AssetContractPurchaseBurnSwap {
-                    input_asset: InputAsset::RawBTC,
-                    transfer_scheme: TransferScheme::Burn,
-                    transfer_ratio_type: TransferRatioType::Oracle {
-                        pubkey: oracle_xonly.0.serialize().to_vec(),
-                        setting: OracleSetting {
-                            asset_id: Some("btc".to_string()),
-                        },
-                    },
+            contract_type: ContractType::Asset(AssetContract {
+                asset: SimpleAsset {
+                    supply_cap: None,
+                    divisibility: 18,
+                    live_time: 0,
                 },
-            )),
+                distribution_schemes: DistributionSchemes {
+                    purchase: Some(PurchaseBurnSwap {
+                        input_asset: InputAsset::RawBTC,
+                        transfer_scheme: TransferScheme::Burn,
+                        transfer_ratio_type: TransferRatioType::Oracle {
+                            pubkey: oracle_xonly.0.serialize().to_vec(),
+                            setting: OracleSetting {
+                                asset_id: Some("btc".to_string()),
+                            },
+                        },
+                    }),
+                    preallocated: None,
+                    free_mint: None,
+                },
+            }),
         },
     };
 
-    let contract_id = ctx.build_and_mine_contract_message(&contract_message).await;
+    let contract_id = ctx.build_and_mine_message(&contract_message).await;
 
     let minter_address = get_bitcoin_address();
 
@@ -565,22 +610,31 @@ async fn test_metaprotocol_to_glittr_asset() {
     let oracle_xonly = XOnlyPublicKey::from_keypair(&oracle_keypair);
     let contract_message = OpReturnMessage {
         tx_type: TxType::ContractCreation {
-            contract_type: ContractType::Asset(AssetContract::PurchaseBurnSwap(
-                AssetContractPurchaseBurnSwap {
-                    input_asset: InputAsset::Metaprotocol,
-                    transfer_scheme: TransferScheme::Burn,
-                    transfer_ratio_type: TransferRatioType::Oracle {
-                        pubkey: oracle_xonly.0.serialize().to_vec(),
-                        setting: OracleSetting {
-                            asset_id: Some("rune:840000:3".to_string()),
-                        },
-                    },
+            contract_type: ContractType::Asset(AssetContract {
+                asset: SimpleAsset {
+                    supply_cap: None,
+                    divisibility: 18,
+                    live_time: 0,
                 },
-            )),
+                distribution_schemes: DistributionSchemes {
+                    purchase: Some(PurchaseBurnSwap {
+                        input_asset: InputAsset::Metaprotocol,
+                        transfer_scheme: TransferScheme::Burn,
+                        transfer_ratio_type: TransferRatioType::Oracle {
+                            pubkey: oracle_xonly.0.serialize().to_vec(),
+                            setting: OracleSetting {
+                                asset_id: Some("rune:840000:3".to_string()),
+                            },
+                        },
+                    }),
+                    preallocated: None,
+                    free_mint: None,
+                },
+            }),
         },
     };
 
-    let contract_id = ctx.build_and_mine_contract_message(&contract_message).await;
+    let contract_id = ctx.build_and_mine_message(&contract_message).await;
 
     let minter_address = get_bitcoin_address();
 
@@ -691,16 +745,25 @@ async fn test_integration_freemint() {
 
     let message = OpReturnMessage {
         tx_type: TxType::ContractCreation {
-            contract_type: ContractType::Asset(AssetContract::FreeMint(AssetContractFreeMint {
-                supply_cap: Some(1000),
-                amount_per_mint: 10,
-                divisibility: 18,
-                live_time: 0,
-            })),
+            contract_type: ContractType::Asset(AssetContract {
+                asset: SimpleAsset {
+                    supply_cap: Some(1000),
+                    divisibility: 18,
+                    live_time: 0,
+                },
+                distribution_schemes: DistributionSchemes {
+                    free_mint: Some(FreeMint {
+                        supply_cap: Some(1000),
+                        amount_per_mint: 10,
+                    }),
+                    preallocated: None,
+                    purchase: None,
+                },
+            }),
         },
     };
 
-    let block_tx = ctx.build_and_mine_contract_message(&message).await;
+    let block_tx = ctx.build_and_mine_message(&message).await;
     start_indexer(Arc::clone(&ctx.indexer)).await;
     ctx.verify_last_block(block_tx.block).await;
     ctx.get_and_verify_message_outcome(block_tx).await;
@@ -715,19 +778,27 @@ async fn test_integration_preallocated() {
 #[tokio::test]
 async fn test_integration_mint_freemint() {
     let mut ctx = TestContext::new().await;
-
     let message = OpReturnMessage {
         tx_type: TxType::ContractCreation {
-            contract_type: ContractType::Asset(AssetContract::FreeMint(AssetContractFreeMint {
-                supply_cap: Some(1000),
-                amount_per_mint: 10,
-                divisibility: 18,
-                live_time: 0,
-            })),
+            contract_type: ContractType::Asset(AssetContract {
+                asset: SimpleAsset {
+                    supply_cap: Some(1000),
+                    divisibility: 18,
+                    live_time: 0,
+                },
+                distribution_schemes: DistributionSchemes {
+                    free_mint: Some(FreeMint {
+                        supply_cap: Some(1000),
+                        amount_per_mint: 10,
+                    }),
+                    preallocated: None,
+                    purchase: None,
+                },
+            }),
         },
     };
 
-    let block_tx_contract = ctx.build_and_mine_contract_message(&message).await;
+    let block_tx_contract = ctx.build_and_mine_message(&message).await;
 
     let total_mints = 10;
 
@@ -741,7 +812,7 @@ async fn test_integration_mint_freemint() {
                 }),
             },
         };
-        ctx.build_and_mine_contract_message(&message).await;
+        ctx.build_and_mine_message(&message).await;
     }
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
@@ -780,16 +851,25 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
 
     let message = OpReturnMessage {
         tx_type: TxType::ContractCreation {
-            contract_type: ContractType::Asset(AssetContract::FreeMint(AssetContractFreeMint {
-                supply_cap: Some(50),
-                amount_per_mint: 50,
-                divisibility: 18,
-                live_time: 0,
-            })),
+            contract_type: ContractType::Asset(AssetContract {
+                asset: SimpleAsset {
+                    supply_cap: Some(50),
+                    divisibility: 18,
+                    live_time: 0,
+                },
+                distribution_schemes: DistributionSchemes {
+                    free_mint: Some(FreeMint {
+                        supply_cap: Some(50),
+                        amount_per_mint: 50,
+                    }),
+                    preallocated: None,
+                    purchase: None,
+                },
+            }),
         },
     };
 
-    let block_tx_contract = ctx.build_and_mine_contract_message(&message).await;
+    let block_tx_contract = ctx.build_and_mine_message(&message).await;
 
     // first mint
     let message = OpReturnMessage {
@@ -801,7 +881,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
             }),
         },
     };
-    ctx.build_and_mine_contract_message(&message).await;
+    ctx.build_and_mine_message(&message).await;
 
     // second mint should be execeeded the supply cap
     // and the total minted should be still 1
@@ -814,7 +894,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
             }),
         },
     };
-    let overflow_block_tx = ctx.build_and_mine_contract_message(&message).await;
+    let overflow_block_tx = ctx.build_and_mine_message(&message).await;
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
 
@@ -840,16 +920,25 @@ async fn test_integration_mint_freemint_livetime_notreached() {
 
     let message = OpReturnMessage {
         tx_type: TxType::ContractCreation {
-            contract_type: ContractType::Asset(AssetContract::FreeMint(AssetContractFreeMint {
-                supply_cap: Some(1000),
-                amount_per_mint: 50,
-                divisibility: 18,
-                live_time: 5,
-            })),
+            contract_type: ContractType::Asset(AssetContract {
+                asset: SimpleAsset {
+                    supply_cap: Some(1000),
+                    divisibility: 18,
+                    live_time: 5,
+                },
+                distribution_schemes: DistributionSchemes {
+                    free_mint: Some(FreeMint {
+                        supply_cap: Some(1000),
+                        amount_per_mint: 50,
+                    }),
+                    preallocated: None,
+                    purchase: None,
+                },
+            }),
         },
     };
 
-    let block_tx_contract = ctx.build_and_mine_contract_message(&message).await;
+    let block_tx_contract = ctx.build_and_mine_message(&message).await;
 
     // first mint not reach the live time
     let message = OpReturnMessage {
@@ -861,7 +950,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
             }),
         },
     };
-    let notreached_block_tx = ctx.build_and_mine_contract_message(&message).await;
+    let notreached_block_tx = ctx.build_and_mine_message(&message).await;
     println!("Not reached livetime block tx: {:?}", notreached_block_tx);
 
     let message = OpReturnMessage {
@@ -873,7 +962,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
             }),
         },
     };
-    ctx.build_and_mine_contract_message(&message).await;
+    ctx.build_and_mine_message(&message).await;
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
 

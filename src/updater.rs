@@ -2,9 +2,7 @@ mod mint;
 
 use std::collections::HashMap;
 
-use asset_contract::{
-    AssetContract, AssetContractFreeMint, AssetContractPurchaseBurnSwap, InputAsset,
-};
+use asset_contract::{AssetContract, InputAsset, PurchaseBurnSwap};
 use bitcoin::{
     hashes::{sha256, Hash},
     key::Secp256k1,
@@ -96,11 +94,10 @@ impl Updater {
                     TxType::ContractCreation { contract_type } => {
                         log::info!("Process contract creation");
                         if let ContractType::Asset(asset_contract) = contract_type {
-                            if let AssetContract::PurchaseBurnSwap(
-                                AssetContractPurchaseBurnSwap { input_asset, .. },
-                            ) = asset_contract
-                            {
-                                if let InputAsset::GlittrAsset(block_tx_tuple) = input_asset {
+                            if let Some(purchase) = asset_contract.distribution_schemes.purchase {
+                                if let InputAsset::GlittrAsset(block_tx_tuple) =
+                                    purchase.input_asset
+                                {
                                     if let Ok(tx_type) =
                                         self.get_message_txtype(block_tx_tuple).await
                                     {
