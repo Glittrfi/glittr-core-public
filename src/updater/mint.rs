@@ -8,7 +8,7 @@ impl Updater {
         &self,
         contract_id: &BlockTxTuple,
         outpoint: &Outpoint,
-        amount: u32,
+        amount: u128,
     ) -> Option<Flaw> {
         let mut asset_list = match self.get_asset_list(outpoint).await {
             Ok(data) => data,
@@ -48,15 +48,15 @@ impl Updater {
         if let Some(supply_cap) = free_mint.supply_cap {
             let next_supply = free_mint_data
                 .minted_supply
-                .saturating_add(free_mint.amount_per_mint as u128);
+                .saturating_add(free_mint.amount_per_mint.0);
 
-            if next_supply > supply_cap as u128 {
+            if next_supply > supply_cap.0 {
                 return Some(Flaw::SupplyCapExceeded);
             }
         }
         free_mint_data.minted_supply = free_mint_data
             .minted_supply
-            .saturating_add(free_mint.amount_per_mint as u128);
+            .saturating_add(free_mint.amount_per_mint.0);
 
         // check pointer overflow
         if mint_option.pointer >= tx.output.len() as u32 {
@@ -69,7 +69,7 @@ impl Updater {
 
         // set the outpoint
         let flaw = self
-            .update_asset_list_for_mint(contract_id, &outpoint, free_mint.amount_per_mint)
+            .update_asset_list_for_mint(contract_id, &outpoint, free_mint.amount_per_mint.0)
             .await;
         if flaw.is_some() {
             return flaw;
@@ -92,7 +92,7 @@ impl Updater {
         mint_option: MintOption,
     ) -> Option<Flaw> {
         // TODO: All glittr asset transfer logic here is temporary, MUST change when we have transfer logic implemented
-        let mut total_in_value_glittr_asset: u32 = 0;
+        let mut total_in_value_glittr_asset: u128 = 0;
         let mut total_received_value: u128 = 0;
 
         let mut out_value: u128 = 0;
@@ -268,7 +268,7 @@ impl Updater {
             // check the supply
             let next_supply = asset_contract_data.minted_supply.saturating_add(out_value);
 
-            if next_supply > supply_cap as u128 {
+            if next_supply > supply_cap.0 {
                 return Some(Flaw::SupplyCapExceeded);
             }
 
@@ -281,7 +281,7 @@ impl Updater {
 
         // set the outpoint
         let flaw = self
-            .update_asset_list_for_mint(contract_id, &outpoint, out_value as u32)
+            .update_asset_list_for_mint(contract_id, &outpoint, out_value)
             .await;
         if flaw.is_some() {
             return flaw;

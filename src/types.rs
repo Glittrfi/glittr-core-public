@@ -1,5 +1,7 @@
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 #[derive(Clone, Copy, Debug)]
 pub struct BlockTx {
     pub block: u64,
@@ -67,5 +69,29 @@ impl Outpoint {
             txid: txid.to_string(),
             vout: vout.parse().expect("Invalid Outpoint vout format"),
         }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct U128(pub u128);
+
+impl Serialize for U128 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.0.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for U128 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s: String = Deserialize::deserialize(deserializer)?;
+        Ok(Self(str::parse::<u128>(&s).map_err(|err| {
+            serde::de::Error::custom(err.to_string())
+        })?))
     }
 }

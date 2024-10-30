@@ -8,21 +8,21 @@ use super::*;
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct FreeMint {
-    pub supply_cap: Option<u32>,
+    pub supply_cap: Option<U128>,
     // TODO change the type to u128, need to check the serialization and deserialization since JSON
     // has a MAX number limitation.
-    pub amount_per_mint: u32,
+    pub amount_per_mint: U128,
 }
 
 impl FreeMint {
     pub fn validate(&self, asset_contract: &AssetContract) -> Option<Flaw> {
-        if let Some(supply_cap) = self.supply_cap {
-            if self.amount_per_mint > supply_cap {
+        if let Some(supply_cap) = &self.supply_cap {
+            if self.amount_per_mint.0 > supply_cap.0 {
                 return Some(Flaw::OverflowAmountPerMint);
             }
 
-            if let Some(super_supply_cap) = asset_contract.asset.supply_cap {
-                if super_supply_cap < supply_cap {
+            if let Some(super_supply_cap) = &asset_contract.asset.supply_cap {
+                if super_supply_cap.0 < supply_cap.0 {
                     return Some(Flaw::SupplyCapInvalid);
                 }
             } else {
@@ -36,7 +36,7 @@ impl FreeMint {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct SimpleAsset {
-    pub supply_cap: Option<u32>,
+    pub supply_cap: Option<U128>,
     pub divisibility: u8,
     pub live_time: BlockHeight,
 }

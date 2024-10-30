@@ -61,7 +61,7 @@ pub enum TxType {
     Transfer {
         asset: BlockTxTuple,
         n_outputs: u32,
-        amounts: Vec<u32>,
+        amounts: Vec<U128>,
     },
     ContractCreation {
         contract_type: ContractType,
@@ -184,6 +184,7 @@ mod test {
     use crate::transaction::asset_contract::AssetContract;
     use crate::transaction::message::ContractType;
     use crate::transaction::message::TxType;
+    use crate::U128;
 
     use super::OpReturnMessage;
 
@@ -193,14 +194,14 @@ mod test {
             tx_type: TxType::ContractCreation {
                 contract_type: ContractType::Asset(AssetContract {
                     asset: SimpleAsset {
-                        supply_cap: Some(1000),
+                        supply_cap: Some(U128(1000)),
                         divisibility: 18,
                         live_time: 0,
                     },
                     distribution_schemes: DistributionSchemes {
                         free_mint: Some(FreeMint {
-                            supply_cap: Some(1000),
-                            amount_per_mint: 10,
+                            supply_cap: Some(U128(1000)),
+                            amount_per_mint: U128(10),
                         }),
                         preallocated: None,
                         purchase: None,
@@ -232,11 +233,11 @@ mod test {
             TxType::ContractCreation { contract_type } => match contract_type {
                 ContractType::Asset(asset_contract) => {
                     let free_mint = asset_contract.distribution_schemes.free_mint.unwrap();
-                    assert_eq!(asset_contract.asset.supply_cap, Some(1000));
+                    assert_eq!(asset_contract.asset.supply_cap, Some(U128(1000)));
                     assert_eq!(asset_contract.asset.divisibility, 18);
                     assert_eq!(asset_contract.asset.live_time, 0);
-                    assert_eq!(free_mint.supply_cap, Some(1000));
-                    assert_eq!(free_mint.amount_per_mint, 10);
+                    assert_eq!(free_mint.supply_cap, Some(U128(1000)));
+                    assert_eq!(free_mint.amount_per_mint, U128(10));
                 }
             },
             TxType::ContractCall {

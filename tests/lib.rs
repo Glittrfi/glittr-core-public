@@ -23,7 +23,7 @@ use glittr::{
         CallType, ContractType, MintOption, OpReturnMessage, OracleMessage, OracleMessageSigned,
         TxType,
     },
-    AssetContractData, AssetList, BlockTx, Flaw, Indexer, MessageDataOutcome, Outpoint,
+    AssetContractData, AssetList, BlockTx, Flaw, Indexer, MessageDataOutcome, Outpoint, U128,
 };
 
 // Test utilities
@@ -192,14 +192,14 @@ async fn test_integration_broadcast_op_return_message_success() {
         tx_type: TxType::ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
                 asset: SimpleAsset {
-                    supply_cap: Some(1000),
+                    supply_cap: Some(U128(1000)),
                     divisibility: 18,
                     live_time: 0,
                 },
                 distribution_schemes: DistributionSchemes {
                     free_mint: Some(FreeMint {
-                        supply_cap: Some(1000),
-                        amount_per_mint: 10,
+                        supply_cap: Some(U128(1000)),
+                        amount_per_mint: U128(10),
                     }),
                     preallocated: None,
                     purchase: None,
@@ -207,6 +207,7 @@ async fn test_integration_broadcast_op_return_message_success() {
             }),
         },
     };
+    println!("{}", message);
 
     let block_tx = ctx.build_and_mine_message(&message).await;
     start_indexer(Arc::clone(&ctx.indexer)).await;
@@ -338,7 +339,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
     let outpoint_str = asset_lists[0].0.clone();
     let out_value = *asset_lists[0].1.list.get(&contract_id.to_str()).unwrap();
 
-    assert!(out_value == (bitcoin_value - fee - dust) as u32);
+    assert!(out_value == (bitcoin_value - fee - dust) as u128);
     assert!(
         outpoint_str
             == format!(
@@ -445,7 +446,7 @@ async fn test_raw_btc_to_glittr_asset_purchase() {
     let outpoint_str = asset_lists[0].0.clone();
     let out_value = *asset_lists[0].1.list.get(&contract_id.to_str()).unwrap();
 
-    assert!(out_value == (bitcoin_value - fee) as u32);
+    assert!(out_value == (bitcoin_value - fee) as u128);
     assert!(
         outpoint_str
             == format!(
@@ -586,7 +587,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
     let outpoint_str = asset_lists[0].0.clone();
     let out_value = *asset_lists[0].1.list.get(&contract_id.to_str()).unwrap();
 
-    assert!(out_value == (oracle_out_value) as u32);
+    assert!(out_value == oracle_out_value);
     assert!(
         outpoint_str
             == format!(
@@ -726,7 +727,7 @@ async fn test_metaprotocol_to_glittr_asset() {
     let outpoint_str = asset_lists[0].0.clone();
     let out_value = *asset_lists[0].1.list.get(&contract_id.to_str()).unwrap();
 
-    assert!(out_value == (oracle_out_value) as u32);
+    assert!(out_value == oracle_out_value);
     assert!(
         outpoint_str
             == format!(
@@ -751,14 +752,14 @@ async fn test_integration_freemint() {
         tx_type: TxType::ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
                 asset: SimpleAsset {
-                    supply_cap: Some(1000),
+                    supply_cap: Some(U128(1000)),
                     divisibility: 18,
                     live_time: 0,
                 },
                 distribution_schemes: DistributionSchemes {
                     free_mint: Some(FreeMint {
-                        supply_cap: Some(1000),
-                        amount_per_mint: 10,
+                        supply_cap: Some(U128(1000)),
+                        amount_per_mint: U128(10),
                     }),
                     preallocated: None,
                     purchase: None,
@@ -786,14 +787,14 @@ async fn test_integration_mint_freemint() {
         tx_type: TxType::ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
                 asset: SimpleAsset {
-                    supply_cap: Some(1000),
+                    supply_cap: Some(U128(1000)),
                     divisibility: 18,
                     live_time: 0,
                 },
                 distribution_schemes: DistributionSchemes {
                     free_mint: Some(FreeMint {
-                        supply_cap: Some(1000),
-                        amount_per_mint: 10,
+                        supply_cap: Some(U128(1000)),
+                        amount_per_mint: U128(10),
                     }),
                     preallocated: None,
                     purchase: None,
@@ -856,14 +857,14 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
         tx_type: TxType::ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
                 asset: SimpleAsset {
-                    supply_cap: Some(50),
+                    supply_cap: Some(U128(50)),
                     divisibility: 18,
                     live_time: 0,
                 },
                 distribution_schemes: DistributionSchemes {
                     free_mint: Some(FreeMint {
-                        supply_cap: Some(50),
-                        amount_per_mint: 50,
+                        supply_cap: Some(U128(50)),
+                        amount_per_mint: U128(50),
                     }),
                     preallocated: None,
                     purchase: None,
@@ -924,14 +925,14 @@ async fn test_integration_mint_freemint_livetime_notreached() {
         tx_type: TxType::ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
                 asset: SimpleAsset {
-                    supply_cap: Some(1000),
+                    supply_cap: Some(U128(1000)),
                     divisibility: 18,
                     live_time: 5,
                 },
                 distribution_schemes: DistributionSchemes {
                     free_mint: Some(FreeMint {
-                        supply_cap: Some(1000),
-                        amount_per_mint: 50,
+                        supply_cap: Some(U128(1000)),
+                        amount_per_mint: U128(50),
                     }),
                     preallocated: None,
                     purchase: None,
