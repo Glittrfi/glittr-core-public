@@ -22,15 +22,9 @@ use super::*;
 
 #[derive(Deserialize, Serialize, Clone, Default, Debug)]
 #[serde(rename_all = "snake_case")]
-pub struct AssetContractDataFreeMint {
-    pub minted: u32,
-    pub burned: u32,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-#[serde(rename_all = "snake_case")]
-pub enum AssetContractData {
-    FreeMint(AssetContractDataFreeMint),
+pub struct AssetContractData {
+    pub minted_supply: u128,
+    pub burned_supply: u128,
 }
 
 #[derive(Deserialize, Serialize, Clone, Default, Debug)]
@@ -225,7 +219,7 @@ impl Updater {
 
         match data {
             Ok(data) => Ok(data),
-            Err(DatabaseError::NotFound) => Err(Flaw::AssetContractDataNotFound),
+            Err(DatabaseError::NotFound) => Ok(AssetContractData::default()),
             Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
         }
     }

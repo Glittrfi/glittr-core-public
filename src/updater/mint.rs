@@ -4,24 +4,6 @@ use std::str::FromStr;
 use super::*;
 
 impl Updater {
-    async fn get_free_mint_data(
-        &self,
-        contract_id: &BlockTxTuple,
-    ) -> Result<AssetContractDataFreeMint, Flaw> {
-        let data = match self.get_asset_contract_data(contract_id).await {
-            Ok(data) => data,
-            Err(flaw) => match flaw {
-                Flaw::AssetContractDataNotFound => return Ok(AssetContractDataFreeMint::default()),
-                _ => return Err(flaw),
-            },
-        };
-
-        match data {
-            AssetContractData::FreeMint(free_mint) => Ok(free_mint),
-            // TODO: add error when enum type doesn't match
-        }
-    }
-
     async fn update_asset_list_for_mint(
         &self,
         contract_id: &BlockTxTuple,
@@ -43,18 +25,6 @@ impl Updater {
         None
     }
 
-    async fn update_asset_contract_data_for_free_mint(
-        &self,
-        contract_id: &BlockTxTuple,
-        free_mint_data: &AssetContractDataFreeMint,
-    ) {
-        self.set_asset_contract_data(
-            contract_id,
-            &AssetContractData::FreeMint(free_mint_data.clone()),
-        )
-        .await
-    }
-
     async fn mint_free_mint(
         &self,
         asset_contract: AssetContract,
@@ -68,7 +38,7 @@ impl Updater {
             return Some(Flaw::LiveTimeNotReached);
         }
 
-        let mut free_mint_data = match self.get_free_mint_data(contract_id).await {
+        let mut free_mint_data = match self.get_asset_contract_data(contract_id).await {
             Ok(data) => data,
             Err(flaw) => return Some(flaw),
         };
@@ -77,15 +47,16 @@ impl Updater {
         // check the supply
         if let Some(supply_cap) = free_mint.supply_cap {
             let next_supply = free_mint_data
-                .minted
-                .saturating_mul(free_mint.amount_per_mint)
-                .saturating_add(free_mint.amount_per_mint);
+                .minted_supply
+                .saturating_add(free_mint.amount_per_mint as u128);
 
-            if next_supply > supply_cap {
+            if next_supply > supply_cap as u128 {
                 return Some(Flaw::SupplyCapExceeded);
             }
         }
-        free_mint_data.minted = free_mint_data.minted.saturating_add(1);
+        free_mint_data.minted_supply = free_mint_data
+            .minted_supply
+            .saturating_add(free_mint.amount_per_mint as u128);
 
         // check pointer overflow
         if mint_option.pointer >= tx.output.len() as u32 {
@@ -105,7 +76,7 @@ impl Updater {
         }
 
         // update the mint data
-        self.update_asset_contract_data_for_free_mint(contract_id, &free_mint_data)
+        self.set_asset_contract_data(contract_id, &free_mint_data)
             .await;
 
         None
@@ -113,7 +84,8 @@ impl Updater {
 
     pub async fn mint_purchase_burn_swap(
         &self,
-        pbs: PurchaseBurnSwap,
+        asset_contract: AssetContract,
+        purchase: PurchaseBurnSwap,
         tx: &Transaction,
         block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
@@ -127,7 +99,7 @@ impl Updater {
         let mut vout: Option<u32> = None;
 
         // VALIDATE INPUT
-        match pbs.input_asset {
+        match purchase.input_asset {
             InputAsset::GlittrAsset(asset_contract_id) => {
                 for txin in tx.input.iter() {
                     if let Ok(asset_list) = self
@@ -150,14 +122,14 @@ impl Updater {
         };
 
         // VALIDATE OUTPUT
-        match pbs.transfer_scheme {
+        match purchase.transfer_scheme {
             // Ensure that the asset is set to burn
             asset_contract::TransferScheme::Burn => {
                 for (pos, output) in tx.output.iter().enumerate() {
                     let mut instructions = output.script_pubkey.instructions();
 
                     if instructions.next() == Some(Ok(Instruction::Op(opcodes::all::OP_RETURN))) {
-                        match pbs.input_asset {
+                        match purchase.input_asset {
                             InputAsset::RawBTC => {
                                 total_received_value = output.value.to_sat() as u128;
                             }
@@ -195,7 +167,7 @@ impl Updater {
 
                     if let Ok(address_from_script) = address_from_script {
                         if address == address_from_script {
-                            match pbs.input_asset {
+                            match purchase.input_asset {
                                 InputAsset::RawBTC => {
                                     total_received_value = output.value.to_sat() as u128;
                                 }
@@ -217,10 +189,10 @@ impl Updater {
         }
 
         // VALIDATE OUT_VALUE
-        if let asset_contract::TransferRatioType::Fixed { ratio } = pbs.transfer_ratio_type {
+        if let asset_contract::TransferRatioType::Fixed { ratio } = purchase.transfer_ratio_type {
             out_value = (total_received_value * ratio.0) / ratio.1;
         } else if let asset_contract::TransferRatioType::Oracle { pubkey, setting } =
-            pbs.transfer_ratio_type.clone()
+            purchase.transfer_ratio_type.clone()
         {
             if let Some(oracle_message_signed) = mint_option.oracle_message {
                 if setting.asset_id == oracle_message_signed.message.asset_id {
@@ -287,6 +259,26 @@ impl Updater {
             vout: vout.unwrap(),
         };
 
+        if let Some(supply_cap) = asset_contract.asset.supply_cap {
+            let mut asset_contract_data = match self.get_asset_contract_data(contract_id).await {
+                Ok(data) => data,
+                Err(flaw) => return Some(flaw),
+            };
+
+            // check the supply
+            let next_supply = asset_contract_data.minted_supply.saturating_add(out_value);
+
+            if next_supply > supply_cap as u128 {
+                return Some(Flaw::SupplyCapExceeded);
+            }
+
+            asset_contract_data.minted_supply =
+                asset_contract_data.minted_supply.saturating_add(out_value);
+
+            self.set_asset_contract_data(contract_id, &asset_contract_data)
+                .await;
+        }
+
         // set the outpoint
         let flaw = self
             .update_asset_list_for_mint(contract_id, &outpoint, out_value as u32)
@@ -319,9 +311,11 @@ impl Updater {
                                 mint_option,
                             )
                             .await
-                        } else if let Some(purchase) = asset_contract.distribution_schemes.purchase
+                        } else if let Some(purchase) =
+                            asset_contract.distribution_schemes.purchase.clone()
                         {
                             self.mint_purchase_burn_swap(
+                                asset_contract,
                                 purchase,
                                 tx,
                                 block_tx,

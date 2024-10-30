@@ -826,8 +826,7 @@ async fn test_integration_mint_freemint() {
             ASSET_CONTRACT_DATA_PREFIX,
             block_tx_contract.to_string().as_str(),
         );
-    let AssetContractData::FreeMint(data_free_mint) =
-        asset_contract_data.expect("Free mint data should exist");
+    let data_free_mint = asset_contract_data.expect("Free mint data should exist");
 
     let asset_list: Result<Vec<(String, AssetList)>, DatabaseError> = ctx
         .indexer
@@ -843,8 +842,8 @@ async fn test_integration_mint_freemint() {
         println!("Mint output: {}: {:?}", k, v);
     }
 
-    assert_eq!(data_free_mint.minted, total_mints);
-    assert_eq!(asset_lists.len() as u32, total_mints);
+    assert_eq!(data_free_mint.minted_supply, total_mints * 10);
+    assert_eq!(asset_lists.len() as u32, total_mints as u32);
 
     ctx.drop().await;
 }
@@ -907,10 +906,9 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
             ASSET_CONTRACT_DATA_PREFIX,
             block_tx_contract.to_string().as_str(),
         );
-    let AssetContractData::FreeMint(data_free_mint) =
-        asset_contract_data.expect("Free mint data should exist");
+    let data_free_mint = asset_contract_data.expect("Free mint data should exist");
 
-    assert_eq!(data_free_mint.minted, 1);
+    assert_eq!(data_free_mint.minted_supply, 1 * 50);
 
     let outcome = ctx.get_and_verify_message_outcome(overflow_block_tx).await;
     assert_eq!(outcome.flaw.unwrap(), Flaw::SupplyCapExceeded);
@@ -975,15 +973,14 @@ async fn test_integration_mint_freemint_livetime_notreached() {
             ASSET_CONTRACT_DATA_PREFIX,
             block_tx_contract.to_string().as_str(),
         );
-    let AssetContractData::FreeMint(data_free_mint) =
-        asset_contract_data.expect("Free mint data should exist");
+    let data_free_mint = asset_contract_data.expect("Free mint data should exist");
 
     let outcome = ctx
         .get_and_verify_message_outcome(notreached_block_tx)
         .await;
     assert_eq!(outcome.flaw.unwrap(), Flaw::LiveTimeNotReached);
 
-    assert_eq!(data_free_mint.minted, 1);
+    assert_eq!(data_free_mint.minted_supply, 50);
 
     ctx.drop().await;
 }
