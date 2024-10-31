@@ -111,7 +111,7 @@ impl Updater {
                     {
                         let block_tx = BlockTx::from_tuple(asset_contract_id);
                         let amount = asset_list.list.get(&block_tx.to_str()).unwrap_or(&0);
-                        total_in_value_glittr_asset = *amount;
+                        total_in_value_glittr_asset += *amount;
                     }
                 }
             }

@@ -72,6 +72,9 @@ impl Outpoint {
     }
 }
 
+
+/// U128 is wrapped u128, represented as string when serialized
+/// This is because JSON only supports up to u32 as integer representation
 #[derive(Clone, Debug, PartialEq)]
 pub struct U128(pub u128);
 

@@ -39,7 +39,7 @@ pub struct MessageDataOutcome {
     pub message: Option<OpReturnMessage>,
     pub flaw: Option<Flaw>,
 }
-pub struct MintResult {
+pub struct PBSMintResult {
     pub out_value: u128,
     pub txout: u32,
 }
