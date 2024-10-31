@@ -41,11 +41,80 @@ pub struct MessageDataOutcome {
 
 pub struct Updater {
     pub database: Arc<Mutex<Database>>,
+
+    unallocated_asset_list: AssetList,
+    allocated_asset_list: HashMap<u32, AssetList>,
 }
 
 impl Updater {
     pub async fn new(database: Arc<Mutex<Database>>) -> Self {
-        Updater { database }
+        Updater {
+            database,
+            unallocated_asset_list: AssetList::default(),
+            allocated_asset_list: HashMap::new(),
+        }
+    }
+
+    pub async fn unallocate_asset(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
+        for tx_input in tx.input.iter() {
+            let outpoint = &Outpoint {
+                txid: tx_input.previous_output.txid.to_string(),
+                vout: tx_input.previous_output.vout,
+            };
+
+            if let Ok(asset_list) = self.get_asset_list(outpoint).await {
+                for asset in asset_list.list.iter() {
+                    let previous_amount =
+                        self.unallocated_asset_list.list.get(asset.0).unwrap_or(&0);
+                    self.unallocated_asset_list.list.insert(
+                        asset.0.to_string(),
+                        previous_amount.saturating_add(*asset.1),
+                    );
+                }
+            }
+
+            self.delete_asset(outpoint).await;
+        }
+
+        Ok(())
+    }
+
+    pub async fn allocate_new_asset(&mut self, vout: u32, contract_id: &BlockTxTuple, amount: u32) {
+        let block_tx = BlockTx::from_tuple(*contract_id);
+        let default_asset = AssetList::default();
+
+        let mut asset = self
+            .allocated_asset_list
+            .get(&vout)
+            .unwrap_or(&default_asset)
+            .clone();
+
+        let previous_amount = asset.list.get(&block_tx.to_str()).unwrap_or(&0);
+        asset
+            .list
+            .insert(block_tx.to_str(), previous_amount.saturating_add(amount));
+
+        println!("Allocating new asset: {:?}", asset);
+
+        self.allocated_asset_list.insert(vout, asset);
+    }
+
+    pub async fn commit_asset(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
+        let txid = tx.compute_txid().to_string();
+        for asset in self.allocated_asset_list.iter() {
+            let outpoint = &Outpoint {
+                txid: txid.clone(),
+                vout: *asset.0,
+            };
+
+            self.set_asset_list(outpoint, asset.1).await;
+        }
+        // TODO: unallocated asset should be be empty, otherwise it will be burned
+
+        // reset allocated asset list
+        self.allocated_asset_list = HashMap::new();
+
+        Ok(())
     }
 
     // run modules here
@@ -161,6 +230,13 @@ impl Updater {
         } else {
             return Ok(outcome.message.unwrap().tx_type);
         }
+    }
+
+    async fn delete_asset(&self, outpoint: &Outpoint) {
+        self.database
+            .lock()
+            .await
+            .delete(ASSET_LIST_PREFIX, &outpoint.to_str());
     }
 
     async fn get_asset_list(&self, outpoint: &Outpoint) -> Result<AssetList, Flaw> {
