@@ -23,6 +23,8 @@ pub async fn run_api(database: Arc<Mutex<Database>>) -> Result<(), std::io::Erro
         .route("/health", get(health))
         .route("/tx/:txid", get(tx_result))
         .route("/blocktx/:block/:tx", get(get_block_tx))
+        .route("/assets/:txid/:vout", get(get_assets))
+        .route("/asset-contract/:block/:tx", get(get_asset_contract))
         .route("/validate-tx", post(validate_tx))
         .with_state(shared_state);
     log::info!("API is listening on {}", CONFIG.api_url);
@@ -83,6 +85,31 @@ async fn get_block_tx(
 
     if let Ok(message) = message {
         Ok(Json(json!({"is_valid": true, "message": message})))
+    } else {
+        return Err(StatusCode::NOT_FOUND);
+    }
+}
+
+async fn get_assets(
+    State(state): State<APIState>,
+    Path((txid, vout)): Path<(String, u32)>,
+) -> Result<Json<Value>, StatusCode> {
+    let updater = Updater::new(state.database, true).await;
+    let outpoint = Outpoint { txid, vout };
+    if let Some(asset_list) = updater.get_asset_list(&outpoint).await.ok() {
+        Ok(Json(json!({"assets": asset_list})))
+    } else {
+        return Err(StatusCode::NOT_FOUND);
+    }
+}
+
+async fn get_asset_contract(
+    State(state): State<APIState>,
+    Path((block, tx)): Path<(u64, u32)>,
+) -> Result<Json<Value>, StatusCode> {
+    let updater = Updater::new(state.database, true).await;
+    if let Some(asset_contract_data) = updater.get_asset_contract_data(&(block, tx)).await.ok() {
+        Ok(Json(json!({"asset": asset_contract_data})))
     } else {
         return Err(StatusCode::NOT_FOUND);
     }
