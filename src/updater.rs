@@ -41,11 +41,15 @@ pub struct MessageDataOutcome {
 
 pub struct Updater {
     pub database: Arc<Mutex<Database>>,
+    pub is_read_only: bool,
 }
 
 impl Updater {
-    pub async fn new(database: Arc<Mutex<Database>>) -> Self {
-        Updater { database }
+    pub async fn new(database: Arc<Mutex<Database>>, is_read_only: bool) -> Self {
+        Updater {
+            database,
+            is_read_only,
+        }
     }
 
     // run modules here
@@ -55,7 +59,7 @@ impl Updater {
         tx_index: u32,
         tx: &Transaction,
         message_result: Result<OpReturnMessage, Flaw>,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<MessageDataOutcome, Box<dyn Error>> {
         let mut outcome = MessageDataOutcome {
             message: None,
             flaw: None,
@@ -126,18 +130,20 @@ impl Updater {
             outcome.flaw = Some(message_result.unwrap_err());
         }
 
-        self.database
-            .lock()
-            .await
-            .put(MESSAGE_PREFIX, block_tx.to_string().as_str(), outcome);
+        if !self.is_read_only {
+            self.database
+                .lock()
+                .await
+                .put(MESSAGE_PREFIX, block_tx.to_string().as_str(), outcome.clone());
 
-        self.database.lock().await.put(
-            TRANSACTION_TO_BLOCK_TX_PREFIX,
-            tx.compute_txid().to_string().as_str(),
-            block_tx.to_tuple(),
-        );
+            self.database.lock().await.put(
+                TRANSACTION_TO_BLOCK_TX_PREFIX,
+                tx.compute_txid().to_string().as_str(),
+                block_tx.to_tuple(),
+            );
+        }
 
-        Ok(())
+        Ok(outcome)
     }
 
     async fn get_message_txtype(&self, block_tx: BlockTxTuple) -> Result<TxType, Flaw> {
@@ -178,10 +184,12 @@ impl Updater {
     }
 
     async fn set_asset_list(&self, outpoint: &Outpoint, asset_list: &AssetList) {
-        self.database
-            .lock()
-            .await
-            .put(ASSET_LIST_PREFIX, &outpoint.to_str(), asset_list);
+        if !self.is_read_only {
+            self.database
+                .lock()
+                .await
+                .put(ASSET_LIST_PREFIX, &outpoint.to_str(), asset_list);
+        }
     }
 
     async fn get_message(&self, contract_id: &BlockTxTuple) -> Result<OpReturnMessage, Flaw> {
@@ -228,11 +236,13 @@ impl Updater {
         contract_id: &BlockTxTuple,
         asset_contract_data: &AssetContractData,
     ) {
-        let contract_key = BlockTx::from_tuple(*contract_id).to_string();
-        self.database.lock().await.put(
-            ASSET_CONTRACT_DATA_PREFIX,
-            &contract_key,
-            asset_contract_data,
-        );
+        if !self.is_read_only {
+            let contract_key = BlockTx::from_tuple(*contract_id).to_string();
+            self.database.lock().await.put(
+                ASSET_CONTRACT_DATA_PREFIX,
+                &contract_key,
+                asset_contract_data,
+            );
+        }
     }
 }

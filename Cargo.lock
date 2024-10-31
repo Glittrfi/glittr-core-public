@@ -773,6 +773,7 @@ dependencies = [
  "borsh-derive",
  "config",
  "env_logger",
+ "hex",
  "lazy_static",
  "log",
  "mockcore",
