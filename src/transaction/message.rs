@@ -17,6 +17,7 @@ pub enum ContractType {
     Asset(AssetContract),
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct MintOption {
     pub pointer: u32,

@@ -5,6 +5,7 @@ use flaw::Flaw;
 
 use super::*;
 
+#[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct FreeMint {
@@ -92,6 +93,7 @@ pub enum TransferRatioType {
     },
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct OracleSetting {
     /// set asset_id to none to fully trust the oracle, ordinal_number if ordinal, rune's block_tx if rune, etc

@@ -1,5 +1,8 @@
 use bitcoin::{
-    hashes::{sha256, Hash}, key::{rand, Keypair, Secp256k1}, secp256k1::{self, Message, SecretKey}, Address, OutPoint, PrivateKey, PublicKey, ScriptBuf, Transaction, Witness, XOnlyPublicKey
+    hashes::{sha256, Hash},
+    key::{rand, Keypair, Secp256k1},
+    secp256k1::{self, Message, SecretKey},
+    Address, OutPoint, PrivateKey, PublicKey, ScriptBuf, Transaction, Witness, XOnlyPublicKey,
 };
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use mockcore::{Handle, TransactionTemplate};
