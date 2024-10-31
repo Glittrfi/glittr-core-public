@@ -144,10 +144,7 @@ impl OpReturnMessage {
                     return asset_contract.validate();
                 }
             },
-            TxType::ContractCall {
-                contract: _,
-                call_type,
-            } => {
+            TxType::ContractCall { call_type, .. } => {
                 return call_type.validate();
             }
         }
@@ -176,6 +173,7 @@ impl fmt::Display for OpReturnMessage {
 
 #[cfg(test)]
 mod test {
+    use bitcoin::consensus::deserialize;
     use bitcoin::{locktime, transaction::Version, Amount, Transaction, TxOut};
 
     use crate::asset_contract::DistributionSchemes;
@@ -245,5 +243,16 @@ mod test {
                 call_type: _,
             } => panic!("not contract call"),
         }
+    }
+
+    #[test]
+    pub fn validate_op_return_message_from_tx_hex_success() {
+        let tx_bytes = hex::decode("02000000018fadc57a81127e5c69373de674bd48d874b13698199d4ed2841a9da53714c5960000000000ffffffff02cac0000000000000736a06474c495454524c697b2274785f74797065223a7b22636f6e74726163745f63616c6c223a7b22636f6e7472616374223a5b332c315d2c2263616c6c5f74797065223a7b226d696e74223a7b22706f696e746572223a302c226f7261636c655f6d657373616765223a6e756c6c7d7d7d7d7d2202000000000000160014cbc188f7a134a6d52afca200090171fb7ab171a600000000").unwrap();
+
+        let tx: Transaction = deserialize(&tx_bytes).unwrap();
+
+        let op_return_message = OpReturnMessage::parse_tx(&tx);
+
+        assert!(op_return_message.is_ok());
     }
 }

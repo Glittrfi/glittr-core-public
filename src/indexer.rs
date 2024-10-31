@@ -43,7 +43,7 @@ impl Indexer {
     }
 
     pub async fn run_indexer(&mut self) -> Result<(), Box<dyn Error>> {
-        let mut updater = Updater::new(self.database.clone()).await;
+        let mut updater = Updater::new(self.database.clone(), false).await;
 
         log::info!("Indexer start");
         loop {
