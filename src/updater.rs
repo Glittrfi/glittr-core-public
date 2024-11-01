@@ -47,7 +47,7 @@ pub struct PBSMintResult {
 #[derive(Deserialize, Serialize, Clone, Default, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct VestingContractData {
-    pub claimed_allocations: HashMap<Pubkey, u128>,
+    pub claimed_allocations: HashMap<String, u128>,
 }
 
 pub struct Updater {
@@ -138,6 +138,12 @@ impl Updater {
         }
 
         if !self.is_read_only {
+            log::info!(
+                "# Outcome {:?}, {:?} at {}",
+                outcome.flaw,
+                outcome.message,
+                block_tx
+            );
             self.database.lock().await.put(
                 MESSAGE_PREFIX,
                 block_tx.to_string().as_str(),
