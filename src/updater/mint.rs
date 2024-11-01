@@ -190,7 +190,7 @@ impl Updater {
 
         // VALIDATE OUT_VALUE
         if let asset_contract::TransferRatioType::Fixed { ratio } = purchase.transfer_ratio_type {
-            out_value = (total_received_value * ratio.0) / ratio.1;
+            out_value = (total_received_value * ratio.0 as u128) / ratio.1 as u128;
         } else if let asset_contract::TransferRatioType::Oracle { pubkey, setting } =
             purchase.transfer_ratio_type.clone()
         {

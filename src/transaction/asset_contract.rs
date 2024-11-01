@@ -5,6 +5,70 @@ use flaw::Flaw;
 
 use super::*;
 
+/// Pre-allocated (e.g. allowing anyone who owns certain ordinals to claim, or literally hardcoding for TGE)
+/// * Allocations & amounts -> For now, just a list of public keys
+///     Formatted {public key: amount} or if multiple keys getting same allocation {key, key, key: amount1}, {key, key: amount2}
+/// If total allocation is less than supply cap, the remainder is a free mint
+/// * Time lock or vesting schedule
+///    - Time lock (Block height)
+/// * Vesting schedule
+///    - List of floats (percentage unlock)
+///    - List of block heights
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct Preallocated {
+    // TODO: optimize for multiple pubkey getting the same allocation
+    allocations: Vec<(U128, Pubkey)>, // (allocation, pubkey)
+    vesting_plan: VestingPlan,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub enum VestingPlan {
+    Timelock(RelativeOrAbsoluteBlockHeight),
+    Scheduled(Vec<(Ratio, RelativeOrAbsoluteBlockHeight)>),
+}
+
+impl Preallocated {
+    pub fn validate(&self, asset_contract: &AssetContract) -> Option<Flaw> {
+        if let VestingPlan::Scheduled(schedules) = &self.vesting_plan {
+            if self.allocations.len() != schedules.len() {
+                return Some(Flaw::PreallocatedLengthInvalid);
+            }
+        }
+
+        if let Some(supply_cap) = &asset_contract.asset.supply_cap {
+            let mut total_allocations = 0;
+            for alloc in &self.allocations {
+                total_allocations += alloc.0 .0;
+            }
+
+            if total_allocations > supply_cap.0 {
+                return Some(Flaw::SupplyCapInvalid);
+            }
+
+            if total_allocations < supply_cap.0 {
+                let remainder = supply_cap.0 - total_allocations;
+                if let Some(free_mint) = &asset_contract.distribution_schemes.free_mint {
+                    if let Some(free_mint_supply_cap) = &free_mint.supply_cap {
+                        if free_mint_supply_cap.0 > remainder {
+                            return Some(Flaw::SupplyCapInvalid);
+                        }
+                    } else {
+                        return Some(Flaw::SupplyCapInvalid);
+                    }
+                } else {
+                    return Some(Flaw::PreallocatedSupplyRemainderWithoutFreeMint);
+                }
+            }
+        } else {
+            return Some(Flaw::SupplyCapInvalid);
+        }
+
+        None
+    }
+}
+
 #[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -52,7 +116,7 @@ pub struct AssetContract {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct DistributionSchemes {
-    pub preallocated: Option<()>,
+    pub preallocated: Option<Preallocated>,
     pub free_mint: Option<FreeMint>,
     pub purchase: Option<PurchaseBurnSwap>,
 }
@@ -88,7 +152,7 @@ pub enum TransferRatioType {
         ratio: Ratio, // out_value = input_value * ratio
     },
     Oracle {
-        pubkey: Vec<u8>, // compressed public key
+        pubkey: Pubkey, // compressed public key
         setting: OracleSetting,
     },
 }
@@ -109,6 +173,10 @@ impl AssetContract {
             && self.distribution_schemes.free_mint.is_some()
         {
             return Some(Flaw::NotImplemented);
+        }
+
+        if let Some(preallocated) = &self.distribution_schemes.preallocated {
+            return preallocated.validate(self);
         }
 
         if let Some(freemint) = &self.distribution_schemes.free_mint {

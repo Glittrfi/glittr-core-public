@@ -8,10 +8,14 @@ pub struct BlockTx {
     pub tx: u32,
 }
 
-pub type Ratio = (u128, u128);
+pub type Ratio = (u64, u64);
 pub type BlockTxTuple = (u64, u32);
 pub type BlockHeight = u64;
 pub type BitcoinAddress = String;
+pub type Pubkey = Vec<u8>;
+
+/// negative indicates relative block height, delta from mined contract's block height
+pub type RelativeOrAbsoluteBlockHeight = i64;
 
 impl fmt::Display for BlockTx {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
