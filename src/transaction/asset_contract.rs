@@ -129,6 +129,37 @@ pub struct PurchaseBurnSwap {
     pub transfer_ratio_type: TransferRatioType,
 }
 
+impl PurchaseBurnSwap {
+    pub fn validate(&self) -> Option<Flaw> {
+        if let InputAsset::GlittrAsset(block_tx_tuple) = self.input_asset {
+            if block_tx_tuple.1 == 0 {
+                return Some(Flaw::InvalidBlockTxPointer);
+            }
+        }
+
+        if let TransferScheme::Purchase(bitcoin_address) = &self.transfer_scheme {
+            if Address::from_str(bitcoin_address.as_str()).is_err() {
+                return Some(Flaw::InvalidBitcoinAddress);
+            }
+        }
+
+        match &self.transfer_ratio_type {
+            TransferRatioType::Fixed { ratio } => {
+                if ratio.1 == 0 {
+                    return Some(Flaw::DivideByZero);
+                }
+            }
+            TransferRatioType::Oracle { pubkey, setting: _ } => {
+                if XOnlyPublicKey::from_slice(pubkey).is_err() {
+                    return Some(Flaw::PubkeyInvalid);
+                }
+            }
+        }
+
+        None
+    }
+}
+
 #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum InputAsset {
@@ -184,30 +215,7 @@ impl AssetContract {
         }
 
         if let Some(purchase) = &self.distribution_schemes.purchase {
-            if let InputAsset::GlittrAsset(block_tx_tuple) = purchase.input_asset {
-                if block_tx_tuple.1 == 0 {
-                    return Some(Flaw::InvalidBlockTxPointer);
-                }
-            }
-
-            if let TransferScheme::Purchase(bitcoin_address) = &purchase.transfer_scheme {
-                if Address::from_str(bitcoin_address.as_str()).is_err() {
-                    return Some(Flaw::InvalidBitcoinAddress);
-                }
-            }
-
-            match &purchase.transfer_ratio_type {
-                TransferRatioType::Fixed { ratio } => {
-                    if ratio.1 == 0 {
-                        return Some(Flaw::DivideByZero);
-                    }
-                }
-                TransferRatioType::Oracle { pubkey, setting: _ } => {
-                    if XOnlyPublicKey::from_slice(pubkey).is_err() {
-                        return Some(Flaw::PubkeyInvalid);
-                    }
-                }
-            }
+            return purchase.validate();
         }
 
         None
