@@ -1,6 +1,7 @@
 use asset_contract::Preallocated;
+use bitcoin::hex::{Case, DisplayHex};
 use message::MintOption;
-use std::{result, str::FromStr};
+use std::str::FromStr;
 
 use super::*;
 
@@ -346,7 +347,7 @@ impl Updater {
         let mut vesting_contract_data = self.get_vesting_contract_data(contract_id).await.unwrap();
         let mut claimed_allocation = *vesting_contract_data
             .claimed_allocations
-            .get(&owner_pub_key)
+            .get(&owner_pub_key.to_hex_string(Case::Lower))
             .unwrap_or(&0);
 
         let out_value: u128 = match &preallocated.vesting_plan {
@@ -403,7 +404,7 @@ impl Updater {
         claimed_allocation += out_value;
         vesting_contract_data
             .claimed_allocations
-            .insert(owner_pub_key, claimed_allocation);
+            .insert(owner_pub_key.to_hex_string(Case::Lower), claimed_allocation);
         self.set_vesting_contract_data(contract_id, &vesting_contract_data)
             .await;
 
@@ -495,7 +496,6 @@ impl Updater {
                         if result_purchase.is_none() {
                             return result_purchase;
                         }
-
 
                         if result_preallocated != Some(Flaw::NotImplemented) {
                             result_preallocated
