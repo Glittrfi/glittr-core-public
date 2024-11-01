@@ -31,12 +31,6 @@ pub enum VestingPlan {
 
 impl Preallocated {
     pub fn validate(&self, asset_contract: &AssetContract) -> Option<Flaw> {
-        if let VestingPlan::Scheduled(schedules) = &self.vesting_plan {
-            if self.allocations.len() != schedules.len() {
-                return Some(Flaw::PreallocatedLengthInvalid);
-            }
-        }
-
         if let Some(supply_cap) = &asset_contract.asset.supply_cap {
             let mut total_allocations = 0;
             for alloc in &self.allocations {
