@@ -36,7 +36,6 @@ pub enum Flaw {
     PubkeyInvalid,
     OracleMessageFormatInvalid,
     SupplyCapInvalid,
-    PreallocatedLengthInvalid,
     PreallocatedSupplyRemainderWithoutFreeMint,
 
     NotImplemented,
