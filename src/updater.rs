@@ -3,13 +3,13 @@ mod mint;
 use std::collections::HashMap;
 
 use asset_contract::{AssetContract, AssetContractFreeMint, InputAsset};
-use bitcoin::Transaction;
+use bitcoin::{opcodes, script::Instruction, Transaction, TxOut};
 use database::{
     DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, MESSAGE_PREFIX,
     TRANSACTION_TO_BLOCK_TX_PREFIX,
 };
 use flaw::Flaw;
-use message::{CallType, ContractType, OpReturnMessage, TxType};
+use message::{CallType, ContractType, OpReturnMessage, TxType, TxTypeTransfer};
 
 use super::*;
 
@@ -81,22 +81,32 @@ impl Updater {
 
     pub async fn allocate_new_asset(&mut self, vout: u32, contract_id: &BlockTxTuple, amount: u32) {
         let block_tx = BlockTx::from_tuple(*contract_id);
-        let default_asset = AssetList::default();
 
-        let mut asset = self
-            .allocated_asset_list
-            .get(&vout)
-            .unwrap_or(&default_asset)
-            .clone();
+        let asset = self.allocated_asset_list
+            .entry(vout)
+            .or_insert_with(AssetList::default);
+        
+        let previous_amount = asset.list.entry(block_tx.to_str()).or_insert(0);
+        *previous_amount = previous_amount.saturating_add(amount);
+    }
 
-        let previous_amount = asset.list.get(&block_tx.to_str()).unwrap_or(&0);
-        asset
-            .list
-            .insert(block_tx.to_str(), previous_amount.saturating_add(amount));
+    pub async fn move_allocation(&mut self, vout: u32, contract_id: &BlockTxTuple, max_amount: u32) {
+        let block_tx = BlockTx::from_tuple(*contract_id);
+        let Some(asset) = self.unallocated_asset_list.list.get_mut(&block_tx.to_string()) else {
+            return 
+        };
 
-        println!("Allocating new asset: {:?}", asset);
+        let amount = max_amount.min(*asset);
+        if amount == 0 {
+            return 
+        }
 
-        self.allocated_asset_list.insert(vout, asset);
+        *asset = asset.saturating_sub(amount);
+        if *asset == 0 {
+            self.unallocated_asset_list.list.remove(&block_tx.to_string());
+        }
+
+        self.allocate_new_asset(vout, contract_id, amount).await;
     }
 
     pub async fn commit_asset(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
@@ -109,12 +119,42 @@ impl Updater {
 
             self.set_asset_list(outpoint, asset.1).await;
         }
-        // TODO: unallocated asset should be be empty, otherwise it will be burned
+
+        // move unallocated to first non op_return index (fallback)
+        let list = self.unallocated_asset_list.list.clone();
+        for asset in list.iter(){
+            let block_tx = BlockTx::from_str(asset.0);
+
+            if let Some(vout) = self.first_non_op_return_index(tx){
+                self.move_allocation(vout, &block_tx.to_tuple(), *asset.1).await;
+            } else {
+                log::info!("No non op_return index found, unallocated asset is lost");
+            }
+        }
 
         // reset allocated asset list
         self.allocated_asset_list = HashMap::new();
 
         Ok(())
+    }
+
+    fn is_op_return_index(&self, output: &TxOut) -> bool {
+        let mut instructions = output.script_pubkey.instructions();
+        if instructions.next() != Some(Ok(Instruction::Op(opcodes::all::OP_RETURN))) {
+            return true 
+        }
+
+        return false
+    }
+
+    fn first_non_op_return_index(&self, tx: &Transaction) -> Option<u32>{
+        for (i, output) in tx.output.iter().enumerate() {
+            if self.is_op_return_index(output) {
+                return Some(i as u32);
+            };
+        }
+
+        return None
     }
 
     // run modules here
@@ -141,14 +181,7 @@ impl Updater {
                 outcome.flaw = Some(flaw);
             } else {
                 outcome.flaw = match message.tx_type {
-                    TxType::Transfer {
-                        asset: _,
-                        n_outputs: _,
-                        amounts: _,
-                    } => {
-                        log::info!("Process transfer");
-                        None
-                    }
+                    TxType::Transfer(transfers) => self.transfers(tx, transfers).await,
                     TxType::ContractCreation { contract_type } => {
                         log::info!("Process contract creation");
                         if let ContractType::Asset(asset_contract) = contract_type {
@@ -208,6 +241,29 @@ impl Updater {
 
         Ok(())
     }
+
+    pub async fn transfers(
+        &mut self,
+        tx: &Transaction,
+        transfers: Vec<TxTypeTransfer>,
+    ) -> Option<Flaw> {
+        let mut overflow_i = Vec::new();
+
+        for (i, transfer) in transfers.iter().enumerate() {
+            if transfer.output > tx.output.len() as u32 {
+                overflow_i.push(i as u32);
+                continue
+            }
+            self.move_allocation(transfer.output, &transfer.asset, transfer.amount).await;
+        }
+
+        if overflow_i.len() > 0 {
+            return Some(Flaw::OutputOverflow(overflow_i));
+        }
+
+        None
+    }
+
 
     async fn get_message_txtype(&self, block_tx: BlockTxTuple) -> Result<TxType, Flaw> {
         let outcome: MessageDataOutcome = self

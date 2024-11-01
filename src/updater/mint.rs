@@ -68,6 +68,10 @@ impl Updater {
         if mint_option.pointer >= tx.output.len() as u32 {
             return Some(Flaw::PointerOverflow);
         }
+        // check invalid pointer if the target index is op_return output
+        if self.is_op_return_index(&tx.output[mint_option.pointer as usize]){
+            return Some(Flaw::InvalidPointer);
+        }
 
         // allocate enw asset for the mint
         self.allocate_new_asset(mint_option.pointer, contract_id, asset.amount_per_mint)
