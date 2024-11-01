@@ -909,7 +909,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
         );
     let data_free_mint = asset_contract_data.expect("Free mint data should exist");
 
-    assert_eq!(data_free_mint.minted_supply, 1 * 50);
+    assert_eq!(data_free_mint.minted_supply, 50);
 
     let outcome = ctx.get_and_verify_message_outcome(overflow_block_tx).await;
     assert_eq!(outcome.flaw.unwrap(), Flaw::SupplyCapExceeded);

@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{collections::HashMap, str::FromStr};
 
 use bitcoin::{Address, XOnlyPublicKey};
 use flaw::Flaw;
@@ -19,8 +19,8 @@ use super::*;
 #[serde(rename_all = "snake_case")]
 pub struct Preallocated {
     // TODO: optimize for multiple pubkey getting the same allocation
-    allocations: Vec<(U128, Pubkey)>, // (allocation, pubkey)
-    vesting_plan: VestingPlan,
+    pub allocations: HashMap<U128, Vec<Pubkey>>,
+    pub vesting_plan: VestingPlan,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -40,7 +40,7 @@ impl Preallocated {
         if let Some(supply_cap) = &asset_contract.asset.supply_cap {
             let mut total_allocations = 0;
             for alloc in &self.allocations {
-                total_allocations += alloc.0 .0;
+                total_allocations += alloc.0 .0 * alloc.1.len() as u128;
             }
 
             if total_allocations > supply_cap.0 {
