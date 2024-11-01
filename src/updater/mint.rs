@@ -1,6 +1,6 @@
 use asset_contract::Preallocated;
 use message::MintOption;
-use std::str::FromStr;
+use std::{result, str::FromStr};
 
 use super::*;
 
@@ -496,11 +496,14 @@ impl Updater {
                             return result_purchase;
                         }
 
-                        [result_preallocated, result_free_mint, result_purchase]
-                                .into_iter()
-                                .find(|flaw| flaw != &Some(Flaw::NotImplemented));
 
-                        Some(Flaw::NotImplemented)
+                        if result_preallocated != Some(Flaw::NotImplemented) {
+                            result_preallocated
+                        } else if result_free_mint != Some(Flaw::NotImplemented) {
+                            result_free_mint
+                        } else {
+                            result_purchase
+                        }
                     }
                 },
                 _ => Some(Flaw::ContractNotMatch),
