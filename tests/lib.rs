@@ -227,7 +227,7 @@ async fn test_integration_mint_freemint() {
         let message = OpReturnMessage {
             tx_type: TxType::ContractCall {
                 contract: block_tx_contract.to_tuple(),
-                call_type: CallType::Mint(MintOption { pointer: 0 }),
+                call_type: CallType::Mint(MintOption { pointer: 1 }),
             },
         };
         ctx.build_and_mine_message(message).await;
@@ -285,7 +285,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
     let message = OpReturnMessage {
         tx_type: TxType::ContractCall {
             contract: block_tx_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption { pointer: 0 }),
+            call_type: CallType::Mint(MintOption { pointer: 1 }),
         },
     };
     ctx.build_and_mine_message(message).await;
@@ -295,7 +295,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
     let message = OpReturnMessage {
         tx_type: TxType::ContractCall {
             contract: block_tx_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption { pointer: 0 }),
+            call_type: CallType::Mint(MintOption { pointer: 1 }),
         },
     };
     let overflow_block_tx = ctx.build_and_mine_message(message).await;
@@ -340,7 +340,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
     let message = OpReturnMessage {
         tx_type: TxType::ContractCall {
             contract: block_tx_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption { pointer: 0 }),
+            call_type: CallType::Mint(MintOption { pointer: 1 }),
         },
     };
     let notreached_block_tx = ctx.build_and_mine_message(message).await;
@@ -349,7 +349,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
     let message = OpReturnMessage {
         tx_type: TxType::ContractCall {
             contract: block_tx_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption { pointer: 0 }),
+            call_type: CallType::Mint(MintOption { pointer: 1 }),
         },
     };
     ctx.build_and_mine_message(message).await;
@@ -369,6 +369,40 @@ async fn test_integration_mint_freemint_livetime_notreached() {
     assert_eq!(outcome.flaw.unwrap(), Flaw::LiveTimeNotReached);
 
     assert_eq!(data_free_mint.minted, 1);
+
+    ctx.drop().await;
+}
+
+#[tokio::test]
+async fn test_integration_mint_freemint_invalidpointer() {
+    let mut ctx = TestContext::new().await;
+
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCreation {
+            contract_type: ContractType::Asset(AssetContract::FreeMint(AssetContractFreeMint {
+                supply_cap: Some(1000),
+                amount_per_mint: 50,
+                divisibility: 18,
+                live_time: 0,
+            })),
+        },
+    };
+
+    let block_tx_contract = ctx.build_and_mine_message(message).await;
+
+    // set pointer to index 0 (op_return output), it should be error 
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCall {
+            contract: block_tx_contract.to_tuple(),
+            call_type: CallType::Mint(MintOption { pointer: 0 }),
+        },
+    };
+    let invalid_pointer_block_tx = ctx.build_and_mine_message(message).await;
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    let outcome = ctx.verify_message(invalid_pointer_block_tx).await;
+    assert_eq!(outcome.flaw.unwrap(), Flaw::InvalidPointer);
 
     ctx.drop().await;
 }
