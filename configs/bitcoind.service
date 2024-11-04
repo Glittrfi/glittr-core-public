@@ -1,0 +1,19 @@
+[Unit]
+Description=Bitcoin daemon
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/bitcoind
+Type=simple
+User=bitcoind
+Group=bitcoind
+Restart=on-failure
+PrivateTmp=true
+PrivateDevices=true
+MemoryDenyWriteExecute=true
+RestartSec=5s
+TimeoutStopSec=10m
+Type=simple
+
+[Install]
+WantedBy=multi-user.target

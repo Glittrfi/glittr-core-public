@@ -120,11 +120,7 @@ impl OpReturnMessage {
                     return asset_contract.validate();
                 }
             },
-            TxType::ContractCall {
-                contract: _,
-                call_type,
-            } => {
-                // TODO: validate if contract exist
+            TxType::ContractCall { call_type, .. } => {
                 return call_type.validate();
             }
         }
@@ -153,12 +149,13 @@ impl fmt::Display for OpReturnMessage {
 
 #[cfg(test)]
 mod test {
-    use bitcoin::{locktime, transaction::Version, Amount, Transaction, TxOut};
-
     use crate::asset_contract::AssetContractFreeMint;
     use crate::transaction::asset_contract::AssetContract;
     use crate::transaction::message::ContractType;
     use crate::transaction::message::TxType;
+    use bitcoin::{
+        consensus::deserialize, locktime, transaction::Version, Amount, Transaction, TxOut,
+    };
 
     use super::OpReturnMessage;
 
@@ -214,5 +211,16 @@ mod test {
                 call_type: _,
             } => panic!("not contract call"),
         }
+    }
+
+    #[test]
+    pub fn validate_op_return_message_from_tx_hex_success() {
+        let tx_bytes = hex::decode("0200000001ce9f8af57c1988692745ff72a5d190b04e1137a5d29855f71beda45c8032f1db010000006a47304402206e9d49fea6da1d4f2925787b4b291f8450dccd18387205f5b7a7c91e6d61b25602201e7a99d167c0da5efeff9a381d888d27bd6b95e2d5dec261a0e7f20f72db3c8e0121032bcbd9cfbdbd9eff2bda9935f6cc2a6fa0c908da3aaa50aed80d68b0afb3451affffffff0200000000000000009e6a06474c495454524c947b2274785f74797065223a7b22636f6e74726163745f6372656174696f6e223a7b22636f6e74726163745f74797065223a7b226173736574223a7b22667265655f6d696e74223a7b22737570706c795f636170223a313030302c22616d6f756e745f7065725f6d696e74223a31302c2264697669736962696c697479223a31382c226c6976655f74696d65223a307d7d7d7d7d7d98ecfa02000000001976a9147bbfdf910e1d5f7b2fa2172315eb712f8ab30ae488ac00000000").unwrap();
+
+        let tx: Transaction = deserialize(&tx_bytes).unwrap();
+
+        let op_return_message = OpReturnMessage::parse_tx(&tx);
+
+        assert!(op_return_message.is_ok());
     }
 }

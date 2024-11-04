@@ -1,0 +1,19 @@
+[Unit]
+Description=Electrum daemon
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/electrs -vvvv --db-dir /home/bitcoind/electrs-db/ --daemon-dir=/home/bitcoind/bitcoin-27.0/data -vvvv --cors * --network regtest user:password --http-addr 0.0.0.0:3000
+Type=simple
+User=bitcoind
+Group=bitcoind
+Restart=on-failure
+PrivateTmp=true
+PrivateDevices=true
+MemoryDenyWriteExecute=true
+RestartSec=5s
+TimeoutStopSec=10m
+Type=simple
+
+[Install]
+WantedBy=multi-user.target
