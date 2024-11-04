@@ -1,6 +1,6 @@
 use bitcoin::Witness;
 use mockcore::{Handle, TransactionTemplate};
-use std::{sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tempfile::TempDir;
 use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
 
@@ -12,8 +12,8 @@ use glittr::{
         Database, DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX,
         INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX,
     },
-    message::{CallType, ContractType, MintOption, OpReturnMessage, TxType},
-    AssetContractData, AssetList, BlockTx, Flaw, Indexer, MessageDataOutcome,
+    message::{CallType, ContractType, MintOption, OpReturnMessage, TxType, TxTypeTransfer},
+    AssetContractData, AssetList, BlockTx, Flaw, Indexer, MessageDataOutcome, Outpoint,
 };
 
 // Test utilities
@@ -53,7 +53,7 @@ impl TestContext {
             op_return: Some(message.into_script()),
             op_return_index: Some(0),
             op_return_value: Some(0),
-            output_values: &[0, 100],
+            output_values: &[0, 1000],
             outputs: 2,
             p2tr: false,
             recipient: None,
@@ -78,6 +78,47 @@ impl TestContext {
             .get(MESSAGE_PREFIX, block_tx.to_string().as_str());
 
         message.expect("Message should exist")
+    }
+
+    async fn get_asset_map(&self) -> HashMap<String, AssetList> {
+        let asset_map: Result<HashMap<String, AssetList>, DatabaseError> = self
+            .indexer
+            .lock()
+            .await
+            .database
+            .lock()
+            .await
+            .expensive_find_by_prefix(ASSET_LIST_PREFIX)
+            .map(|vec| {
+                vec.into_iter()
+                    .map(|(k, v)| {
+                        (
+                            k.trim_start_matches(&format!("{}:", ASSET_LIST_PREFIX))
+                                .to_string(),
+                            v,
+                        )
+                    })
+                    .collect()
+            });
+        asset_map.expect("asset map should exist")
+    }
+
+    fn verify_asset_output(
+        &self,
+        asset_lists: &HashMap<String, AssetList>,
+        block_tx_contract: &BlockTx,
+        outpoint: &Outpoint,
+        expected_value: u32,
+    ) {
+        let asset_output = asset_lists
+            .get(&outpoint.to_string())
+            .expect(&format!("Asset output {} should exist", outpoint.vout));
+
+        let value_output = asset_output
+            .list
+            .get(&block_tx_contract.to_string())
+            .unwrap();
+        assert_eq!(*value_output, expected_value);
     }
 
     async fn verify_last_block(&self, expected_height: u64) {
@@ -257,7 +298,7 @@ async fn test_integration_mint_freemint() {
     for (k, v) in &asset_lists {
         println!("Mint output: {}: {:?}", k, v);
     }
-    
+
     assert_eq!(data_free_mint.minted, total_mints);
     assert_eq!(asset_lists.len() as u32, total_mints);
 
@@ -390,7 +431,7 @@ async fn test_integration_mint_freemint_invalidpointer() {
 
     let block_tx_contract = ctx.build_and_mine_message(message).await;
 
-    // set pointer to index 0 (op_return output), it should be error 
+    // set pointer to index 0 (op_return output), it should be error
     let message = OpReturnMessage {
         tx_type: TxType::ContractCall {
             contract: block_tx_contract.to_tuple(),
@@ -408,8 +449,288 @@ async fn test_integration_mint_freemint_invalidpointer() {
 }
 
 #[tokio::test]
-async fn test_integration_transfer() {
-    // TODO: Implement using TestContext
+async fn test_integration_transfer_normal() {
+    let mut ctx = TestContext::new().await;
+
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCreation {
+            contract_type: ContractType::Asset(AssetContract::FreeMint(AssetContractFreeMint {
+                supply_cap: Some(100_000),
+                amount_per_mint: 20_000,
+                divisibility: 18,
+                live_time: 0,
+            })),
+        },
+    };
+    let block_tx_contract = ctx.build_and_mine_message(message).await;
+
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCall {
+            contract: block_tx_contract.to_tuple(),
+            call_type: CallType::Mint(MintOption { pointer: 1 }),
+        },
+    };
+    let mint_block_tx = ctx.build_and_mine_message(message).await;
+
+    let message = OpReturnMessage {
+        tx_type: TxType::Transfer(
+            [
+                TxTypeTransfer {
+                    asset: block_tx_contract.to_tuple(),
+                    output: 1,
+                    amount: 10_000,
+                },
+                TxTypeTransfer {
+                    asset: block_tx_contract.to_tuple(),
+                    output: 2,
+                    amount: 2_000,
+                },
+                TxTypeTransfer {
+                    asset: block_tx_contract.to_tuple(),
+                    output: 2,
+                    amount: 500,
+                },
+                TxTypeTransfer {
+                    asset: block_tx_contract.to_tuple(),
+                    output: 3,
+                    amount: 8_000,
+                },
+            ]
+            .to_vec(),
+        ),
+    };
+
+    // outputs have 4 outputs
+    // - index 0: op_return
+    // - index 1..3: outputs
+    let new_output_txid = ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[
+            (mint_block_tx.block as usize, 1, 1, Witness::new()), // UTXO contain assets
+            (mint_block_tx.block as usize, 0, 0, Witness::new()),
+        ],
+        op_return: Some(message.into_script()),
+        op_return_index: Some(0),
+        op_return_value: Some(0),
+        output_values: &[1000, 1000, 1000],
+        outputs: 3,
+        p2tr: false,
+        recipient: None,
+    });
+    ctx.core.mine_blocks(1);
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    let asset_map = ctx.get_asset_map().await;
+
+    let mut total_amount = 0;
+    for (_, v) in &asset_map {
+        let value = v.list.get(&block_tx_contract.to_string()).unwrap();
+        total_amount += value
+    }
+    // the total amount should be 20,000, same as before splitting
+    assert_eq!(total_amount, 20_000);
+
+    ctx.verify_asset_output(
+        &asset_map,
+        &block_tx_contract,
+        &Outpoint {
+            txid: new_output_txid.to_string(),
+            vout: 1,
+        },
+        10_000,
+    );
+
+    ctx.verify_asset_output(
+        &asset_map,
+        &block_tx_contract,
+        &Outpoint {
+            txid: new_output_txid.to_string(),
+            vout: 2,
+        },
+        2500,
+    );
+
+    // this expected 7500 not 8_000 because the remaining asset or unallocated < amount
+    // transferred value picks MIN(remainder, amount)
+    ctx.verify_asset_output(
+        &asset_map,
+        &block_tx_contract,
+        &Outpoint {
+            txid: new_output_txid.to_string(),
+            vout: 3,
+        },
+        7500,
+    );
+
+    ctx.drop().await;
+}
+
+#[tokio::test]
+async fn test_integration_transfer_overflow_output() {
+    let mut ctx = TestContext::new().await;
+
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCreation {
+            contract_type: ContractType::Asset(AssetContract::FreeMint(AssetContractFreeMint {
+                supply_cap: Some(100_000),
+                amount_per_mint: 20_000,
+                divisibility: 18,
+                live_time: 0,
+            })),
+        },
+    };
+    let block_tx_contract = ctx.build_and_mine_message(message).await;
+
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCall {
+            contract: block_tx_contract.to_tuple(),
+            call_type: CallType::Mint(MintOption { pointer: 1 }),
+        },
+    };
+    let mint_block_tx = ctx.build_and_mine_message(message).await;
+
+    let message = OpReturnMessage {
+        tx_type: TxType::Transfer(
+            [
+                TxTypeTransfer {
+                    asset: block_tx_contract.to_tuple(),
+                    output: 1,
+                    amount: 10_000,
+                },
+                TxTypeTransfer {
+                    asset: block_tx_contract.to_tuple(),
+                    output: 2, // will overflow the output
+                    amount: 2_000,
+                },
+            ]
+            .to_vec(),
+        ),
+    };
+
+    // outputs have 2 outputs
+    // - index 0: op_return
+    // - index 1: output
+    let new_output_txid = ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[
+            (mint_block_tx.block as usize, 1, 1, Witness::new()), // UTXO contain assets
+            (mint_block_tx.block as usize, 0, 0, Witness::new()),
+        ],
+        op_return: Some(message.into_script()),
+        op_return_index: Some(0),
+        op_return_value: Some(0),
+        output_values: &[1000],
+        outputs: 1,
+        p2tr: false,
+        recipient: None,
+    });
+    ctx.core.mine_blocks(1);
+    let height = ctx.core.height();
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    let outcome = ctx
+        .verify_message(BlockTx {
+            block: height,
+            tx: 1,
+        })
+        .await;
+    assert_eq!(outcome.flaw.unwrap(), Flaw::OutputOverflow([1].to_vec()));
+
+    let asset_map = ctx.get_asset_map().await;
+
+    let mut total_amount = 0;
+    for (_, v) in &asset_map {
+        let value = v.list.get(&block_tx_contract.to_string()).unwrap();
+        total_amount += value
+    }
+    // the total amount should be 20,000, same as before splitting
+    assert_eq!(total_amount, 20_000);
+
+
+    // transfer: 10_000
+    // remainder asset to the first non_op_return index (this index or output): 10_000
+    // total: 20_000
+    ctx.verify_asset_output(
+        &asset_map,
+        &block_tx_contract,
+        &Outpoint {
+            txid: new_output_txid.to_string(),
+            vout: 1,
+        },
+        20_000,
+    );
+
+    ctx.drop().await;
+}
+
+#[tokio::test]
+async fn test_integration_transfer_utxo() {
+    let mut ctx = TestContext::new().await;
+
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCreation {
+            contract_type: ContractType::Asset(AssetContract::FreeMint(AssetContractFreeMint {
+                supply_cap: Some(100_000),
+                amount_per_mint: 20_000,
+                divisibility: 18,
+                live_time: 0,
+            })),
+        },
+    };
+    let block_tx_contract = ctx.build_and_mine_message(message).await;
+
+    let message = OpReturnMessage {
+        tx_type: TxType::ContractCall {
+            contract: block_tx_contract.to_tuple(),
+            call_type: CallType::Mint(MintOption { pointer: 1 }),
+        },
+    };
+    let mint_block_tx = ctx.build_and_mine_message(message).await;
+
+    // outputs have 2 outputs
+    // - index 0: output target (default fallback) first non_op_return output
+    // - index 1: output
+    let new_output_txid = ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[
+            (mint_block_tx.block as usize, 1, 1, Witness::new()), // UTXO contain assets
+            (mint_block_tx.block as usize, 0, 0, Witness::new()),
+        ],
+        op_return: None,
+        op_return_index: None,
+        op_return_value: None,
+        output_values: &[1000, 1000],
+        outputs: 2,
+        p2tr: false,
+        recipient: None,
+    });
+    ctx.core.mine_blocks(1);
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    let asset_map = ctx.get_asset_map().await;
+
+    let mut total_amount = 0;
+    for (_, v) in &asset_map {
+        let value = v.list.get(&block_tx_contract.to_string()).unwrap();
+        total_amount += value
+    }
+    // the total amount should be 20,000, same as before splitting
+    assert_eq!(total_amount, 20_000);
+
+    ctx.verify_asset_output(
+        &asset_map,
+        &block_tx_contract,
+        &Outpoint {
+            txid: new_output_txid.to_string(),
+            vout: 0,
+        },
+        20_000,
+    );
+
+    ctx.drop().await;
 }
 
 #[tokio::test]

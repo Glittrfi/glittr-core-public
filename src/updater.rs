@@ -32,7 +32,7 @@ pub struct AssetList {
     pub list: HashMap<String, u32>,
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MessageDataOutcome {
     pub message: Option<OpReturnMessage>,
@@ -110,16 +110,6 @@ impl Updater {
     }
 
     pub async fn commit_asset(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
-        let txid = tx.compute_txid().to_string();
-        for asset in self.allocated_asset_list.iter() {
-            let outpoint = &Outpoint {
-                txid: txid.clone(),
-                vout: *asset.0,
-            };
-
-            self.set_asset_list(outpoint, asset.1).await;
-        }
-
         // move unallocated to first non op_return index (fallback)
         let list = self.unallocated_asset_list.list.clone();
         for asset in list.iter(){
@@ -130,6 +120,16 @@ impl Updater {
             } else {
                 log::info!("No non op_return index found, unallocated asset is lost");
             }
+        }
+
+        let txid = tx.compute_txid().to_string();
+        for asset in self.allocated_asset_list.iter() {
+            let outpoint = &Outpoint {
+                txid: txid.clone(),
+                vout: *asset.0,
+            };
+
+            self.set_asset_list(outpoint, asset.1).await;
         }
 
         // reset allocated asset list
@@ -250,7 +250,7 @@ impl Updater {
         let mut overflow_i = Vec::new();
 
         for (i, transfer) in transfers.iter().enumerate() {
-            if transfer.output > tx.output.len() as u32 {
+            if transfer.output >= tx.output.len() as u32 {
                 overflow_i.push(i as u32);
                 continue
             }
