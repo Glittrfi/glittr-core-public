@@ -140,7 +140,7 @@ impl Updater {
 
     fn is_op_return_index(&self, output: &TxOut) -> bool {
         let mut instructions = output.script_pubkey.instructions();
-        if instructions.next() != Some(Ok(Instruction::Op(opcodes::all::OP_RETURN))) {
+        if instructions.next() == Some(Ok(Instruction::Op(opcodes::all::OP_RETURN))) {
             return true 
         }
 
@@ -149,7 +149,7 @@ impl Updater {
 
     fn first_non_op_return_index(&self, tx: &Transaction) -> Option<u32>{
         for (i, output) in tx.output.iter().enumerate() {
-            if self.is_op_return_index(output) {
+            if !self.is_op_return_index(output) {
                 return Some(i as u32);
             };
         }
