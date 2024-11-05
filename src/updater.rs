@@ -76,6 +76,7 @@ impl Updater {
                 }
             }
 
+            // TODO: Implement a backup mechanism to recover when downtime occurs
             self.delete_asset(outpoint).await;
         }
 
@@ -135,7 +136,8 @@ impl Updater {
             self.set_asset_list(outpoint, asset.1).await;
         }
 
-        // reset allocated asset list
+        // reset asset list
+        self.unallocated_asset_list = AssetList::default();
         self.allocated_asset_list = HashMap::new();
 
         Ok(())
