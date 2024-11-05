@@ -21,27 +21,6 @@ impl Updater {
         }
     }
 
-    async fn update_asset_list_for_mint(
-        &self,
-        contract_id: &BlockTxTuple,
-        outpoint: &Outpoint,
-        amount: u32,
-    ) -> Option<Flaw> {
-        let mut asset_list = match self.get_asset_list(outpoint).await {
-            Ok(data) => data,
-            Err(flaw) => return Some(flaw),
-        };
-        let block_tx = BlockTx::from_tuple(*contract_id);
-        let previous_amount = asset_list.list.get(&block_tx.to_str()).unwrap_or(&0);
-
-        asset_list
-            .list
-            .insert(block_tx.to_str(), previous_amount.saturating_add(amount));
-        self.set_asset_list(outpoint, &asset_list).await;
-
-        None
-    }
-
     async fn update_asset_contract_data_for_free_mint(
         &self,
         contract_id: &BlockTxTuple,
@@ -55,7 +34,7 @@ impl Updater {
     }
 
     async fn mint_free_mint(
-        &self,
+        &mut self,
         asset: AssetContractFreeMint,
         tx: &Transaction,
         block_tx: &BlockTx,
@@ -63,7 +42,7 @@ impl Updater {
         mint_option: &MintOption,
     ) -> Option<Flaw> {
         // check livetime
-        if asset.live_time > block_tx.block  {
+        if asset.live_time > block_tx.block {
             return Some(Flaw::LiveTimeNotReached);
         }
 
@@ -89,18 +68,14 @@ impl Updater {
         if mint_option.pointer >= tx.output.len() as u32 {
             return Some(Flaw::PointerOverflow);
         }
-        let outpoint = Outpoint {
-            txid: tx.compute_txid().to_string(),
-            vout: mint_option.pointer,
-        };
-
-        // set the outpoint
-        let flaw = self
-            .update_asset_list_for_mint(contract_id, &outpoint, asset.amount_per_mint)
-            .await;
-        if flaw.is_some() {
-            return flaw;
+        // check invalid pointer if the target index is op_return output
+        if self.is_op_return_index(&tx.output[mint_option.pointer as usize]){
+            return Some(Flaw::InvalidPointer);
         }
+
+        // allocate enw asset for the mint
+        self.allocate_new_asset(mint_option.pointer, contract_id, asset.amount_per_mint)
+            .await;
 
         // update the mint data
         self.update_asset_contract_data_for_free_mint(contract_id, &free_mint_data)

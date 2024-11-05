@@ -11,12 +11,17 @@ pub enum Flaw {
     InvalidBlockTxPointer,
     ReferencingFlawedBlockTx,
     InvalidBitcoinAddress,
+
+    // transfer
+    OutputOverflow(Vec<u32>),
+
     // call type
     MessageInvalid,
     ContractNotMatch,
     ContractNotFound,
     AssetContractDataNotFound,
     PointerOverflow,
+    InvalidPointer,
 
     // call type::mint
     SupplyCapExceeded,
