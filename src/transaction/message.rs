@@ -178,8 +178,6 @@ mod test {
             },
         };
 
-        println!("{}", dummy_message.to_string());
-
         let tx = Transaction {
             input: Vec::new(),
             lock_time: locktime::absolute::LockTime::ZERO,
