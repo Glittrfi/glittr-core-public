@@ -2,7 +2,7 @@
 
 use config::CONFIG;
 use serde::{Deserialize, Serialize};
-use std::{error::Error, sync::Arc, thread};
+use std::{env, error::Error, sync::Arc, thread};
 use store::database::Database;
 use tokio::sync::Mutex;
 
@@ -26,6 +26,9 @@ pub use updater::*;
 
 #[tokio::main]
 pub async fn run() -> Result<(), Box<dyn Error>> {
+    if env::var("RUST_LOG").is_err() {
+        env::set_var("RUST_LOG", "info")
+    }
     env_logger::init();
 
     let database = Arc::new(Mutex::new(Database::new(CONFIG.rocks_db_path.clone())));

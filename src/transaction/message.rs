@@ -54,16 +54,20 @@ pub struct OracleMessage {
 
 /// Transfer
 /// Asset: This is a block:tx reference to the contract where the asset was created
-/// N outputs: Number of output utxos to receive assets
-/// Amount: Vector of values assigning shares of the transfer to the appropriate UTXO outputs
+/// Output index of output to receive asset
+/// Amount: value assigning shares of the transfer to the appropriate UTXO output
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct TxTypeTransfer {
+    pub asset: BlockTxTuple,
+    pub output: u32,
+    pub amount: U128,
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum TxType {
-    Transfer {
-        asset: BlockTxTuple,
-        n_outputs: u32,
-        amounts: Vec<U128>,
-    },
+    Transfer(Vec<TxTypeTransfer>),
     ContractCreation {
         contract_type: ContractType,
     },
@@ -131,15 +135,7 @@ impl OpReturnMessage {
 
     pub fn validate(&self) -> Option<Flaw> {
         match self.tx_type.clone() {
-            TxType::Transfer {
-                asset: _,
-                n_outputs: _,
-                amounts: _,
-            } => {
-                // TODO: validate if asset exist
-                // TODO: validate n_outputs <  max outputs in transactions
-                // TODO: validate if amounts from input
-            }
+            TxType::Transfer(_) => {}
             TxType::ContractCreation { contract_type } => match contract_type {
                 ContractType::Asset(asset_contract) => {
                     return asset_contract.validate();
@@ -209,8 +205,6 @@ mod test {
             },
         };
 
-        println!("{}", dummy_message);
-
         let tx = Transaction {
             input: Vec::new(),
             lock_time: locktime::absolute::LockTime::ZERO,
@@ -224,11 +218,7 @@ mod test {
         let parsed = OpReturnMessage::parse_tx(&tx);
 
         match parsed.unwrap().tx_type {
-            TxType::Transfer {
-                asset: _,
-                n_outputs: _,
-                amounts: _,
-            } => panic!("not transfer"),
+            TxType::Transfer(_) => panic!("not transfer"),
             TxType::ContractCreation { contract_type } => match contract_type {
                 ContractType::Asset(asset_contract) => {
                     let free_mint = asset_contract.distribution_schemes.free_mint.unwrap();

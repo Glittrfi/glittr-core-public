@@ -26,7 +26,7 @@ impl Updater {
     }
 
     async fn mint_free_mint(
-        &self,
+        &mut self,
         asset_contract: AssetContract,
         tx: &Transaction,
         block_tx: &BlockTx,
@@ -62,20 +62,17 @@ impl Updater {
         if mint_option.pointer >= tx.output.len() as u32 {
             return Some(Flaw::PointerOverflow);
         }
-        let outpoint = Outpoint {
-            txid: tx.compute_txid().to_string(),
-            vout: mint_option.pointer,
-        };
-
-        // set the outpoint
-        let flaw = self
-            .update_asset_list_for_mint(contract_id, &outpoint, free_mint.amount_per_mint.0)
-            .await;
-        if flaw.is_some() {
-            return flaw;
+        // check invalid pointer if the target index is op_return output
+        if self.is_op_return_index(&tx.output[mint_option.pointer as usize]){
+            return Some(Flaw::InvalidPointer);
         }
 
+        // allocate enw asset for the mint
+        self.allocate_new_asset(mint_option.pointer, contract_id, free_mint.amount_per_mint.0)
+            .await;
+
         // update the mint data
+        println!("set asset contract data");
         self.set_asset_contract_data(contract_id, &free_mint_data)
             .await;
 

@@ -4,19 +4,14 @@ use std::collections::HashMap;
 
 use asset_contract::{AssetContract, InputAsset, PurchaseBurnSwap};
 use bitcoin::{
-    hashes::{sha256, Hash},
-    key::Secp256k1,
-    opcodes,
-    script::Instruction,
-    secp256k1::{schnorr::Signature, Message},
-    Address, Transaction, XOnlyPublicKey,
+    hashes::{sha256, Hash}, key::Secp256k1, opcodes, script::Instruction, secp256k1::{schnorr::Signature, Message}, Address, Transaction, TxOut, XOnlyPublicKey
 };
 use database::{
     DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, MESSAGE_PREFIX,
     TRANSACTION_TO_BLOCK_TX_PREFIX,
 };
 use flaw::Flaw;
-use message::{CallType, ContractType, OpReturnMessage, TxType};
+use message::{CallType, ContractType, OpReturnMessage, TxType, TxTypeTransfer};
 
 use super::*;
 
@@ -33,7 +28,7 @@ pub struct AssetList {
     pub list: HashMap<String, u128>,
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MessageDataOutcome {
     pub message: Option<OpReturnMessage>,
@@ -46,7 +41,10 @@ pub struct PBSMintResult {
 
 pub struct Updater {
     pub database: Arc<Mutex<Database>>,
-    pub is_read_only: bool,
+    is_read_only: bool,
+
+    unallocated_asset_list: AssetList,
+    allocated_asset_list: HashMap<u32, AssetList>,
 }
 
 impl Updater {
@@ -54,7 +52,114 @@ impl Updater {
         Updater {
             database,
             is_read_only,
+
+            unallocated_asset_list: AssetList::default(),
+            allocated_asset_list: HashMap::new(),
         }
+    }
+
+    pub async fn unallocate_asset(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
+        for tx_input in tx.input.iter() {
+            let outpoint = &Outpoint {
+                txid: tx_input.previous_output.txid.to_string(),
+                vout: tx_input.previous_output.vout,
+            };
+
+            if let Ok(asset_list) = self.get_asset_list(outpoint).await {
+                for asset in asset_list.list.iter() {
+                    let previous_amount =
+                        self.unallocated_asset_list.list.get(asset.0).unwrap_or(&0);
+                    self.unallocated_asset_list.list.insert(
+                        asset.0.to_string(),
+                        previous_amount.saturating_add(*asset.1),
+                    );
+                }
+            }
+
+            // TODO: Implement a backup mechanism to recover when downtime occurs
+            self.delete_asset(outpoint).await;
+        }
+
+        Ok(())
+    }
+
+    pub async fn allocate_new_asset(&mut self, vout: u32, contract_id: &BlockTxTuple, amount: u128) {
+        let block_tx = BlockTx::from_tuple(*contract_id);
+
+        let asset = self.allocated_asset_list
+            .entry(vout)
+            .or_insert_with(AssetList::default);
+        
+        let previous_amount = asset.list.entry(block_tx.to_str()).or_insert(0);
+        *previous_amount = previous_amount.saturating_add(amount);
+    }
+
+    pub async fn move_allocation(&mut self, vout: u32, contract_id: &BlockTxTuple, max_amount: u128) {
+        let block_tx = BlockTx::from_tuple(*contract_id);
+        let Some(asset) = self.unallocated_asset_list.list.get_mut(&block_tx.to_string()) else {
+            return 
+        };
+
+        let amount = max_amount.min(*asset);
+        if amount == 0 {
+            return 
+        }
+
+        *asset = asset.saturating_sub(amount);
+        if *asset == 0 {
+            self.unallocated_asset_list.list.remove(&block_tx.to_string());
+        }
+
+        self.allocate_new_asset(vout, contract_id, amount).await;
+    }
+
+    pub async fn commit_asset(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
+        // move unallocated to first non op_return index (fallback)
+        let list = self.unallocated_asset_list.list.clone();
+        for asset in list.iter(){
+            let block_tx = BlockTx::from_str(asset.0);
+
+            if let Some(vout) = self.first_non_op_return_index(tx){
+                self.move_allocation(vout, &block_tx.to_tuple(), *asset.1).await;
+            } else {
+                log::info!("No non op_return index found, unallocated asset is lost");
+            }
+        }
+
+        let txid = tx.compute_txid().to_string();
+        for asset in self.allocated_asset_list.iter() {
+            let outpoint = &Outpoint {
+                txid: txid.clone(),
+                vout: *asset.0,
+            };
+
+            self.set_asset_list(outpoint, asset.1).await;
+        }
+
+        // reset asset list
+        self.unallocated_asset_list = AssetList::default();
+        self.allocated_asset_list = HashMap::new();
+
+        Ok(())
+    }
+
+    fn is_op_return_index(&self, output: &TxOut) -> bool {
+        let mut instructions = output.script_pubkey.instructions();
+        if instructions.next() == Some(Ok(Instruction::Op(opcodes::all::OP_RETURN))) {
+            return true 
+        }
+
+        return false
+    }
+
+    fn first_non_op_return_index(&self, tx: &Transaction) -> Option<u32>{
+        for (i, output) in tx.output.iter().enumerate() {
+            if !self.is_op_return_index(output) {
+                return Some(i as u32);
+            };
+        }
+
+        return None
     }
 
     // run modules here
@@ -81,14 +186,7 @@ impl Updater {
                 outcome.flaw = Some(flaw);
             } else {
                 outcome.flaw = match message.tx_type {
-                    TxType::Transfer {
-                        asset: _,
-                        n_outputs: _,
-                        amounts: _,
-                    } => {
-                        log::info!("Process transfer");
-                        None
-                    }
+                    TxType::Transfer(transfers) => self.transfers(tx, transfers).await,
                     TxType::ContractCreation { contract_type } => {
                         log::info!("Process contract creation");
                         if let ContractType::Asset(asset_contract) = contract_type {
@@ -147,6 +245,29 @@ impl Updater {
         Ok(outcome)
     }
 
+    pub async fn transfers(
+        &mut self,
+        tx: &Transaction,
+        transfers: Vec<TxTypeTransfer>,
+    ) -> Option<Flaw> {
+        let mut overflow_i = Vec::new();
+
+        for (i, transfer) in transfers.iter().enumerate() {
+            if transfer.output >= tx.output.len() as u32 {
+                overflow_i.push(i as u32);
+                continue
+            }
+            self.move_allocation(transfer.output, &transfer.asset, transfer.amount.0).await;
+        }
+
+        if overflow_i.len() > 0 {
+            return Some(Flaw::OutputOverflow(overflow_i));
+        }
+
+        None
+    }
+
+
     async fn get_message_txtype(&self, block_tx: BlockTxTuple) -> Result<TxType, Flaw> {
         let outcome: MessageDataOutcome = self
             .database
@@ -167,6 +288,15 @@ impl Updater {
             Err(Flaw::ReferencingFlawedBlockTx)
         } else {
             Ok(outcome.message.unwrap().tx_type)
+        }
+    }
+
+    async fn delete_asset(&self, outpoint: &Outpoint) {
+        if !self.is_read_only {
+            self.database
+                .lock()
+                .await
+                .delete(ASSET_LIST_PREFIX, &outpoint.to_string());
         }
     }
 
