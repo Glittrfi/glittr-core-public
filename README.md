@@ -2,6 +2,11 @@
 
 ## Building
 
+Install prerequisites (example for ubuntu/debian)
+```bash
+sudo apt install clang build-essential
+```
+
 Install rust:
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
