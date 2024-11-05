@@ -90,4 +90,10 @@ impl Database {
 
         Ok(results)
     }
+
+    pub fn delete(&mut self, prefix: &str, key: &str) {
+        self.db
+            .delete(format!("{}:{}", prefix, key))
+            .expect("Error deleting data from database");
+    }
 }

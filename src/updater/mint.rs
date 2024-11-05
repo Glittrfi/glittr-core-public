@@ -6,29 +6,8 @@ use std::str::FromStr;
 use super::*;
 
 impl Updater {
-    async fn update_asset_list_for_mint(
-        &self,
-        contract_id: &BlockTxTuple,
-        outpoint: &Outpoint,
-        amount: u128,
-    ) -> Option<Flaw> {
-        let mut asset_list = match self.get_asset_list(outpoint).await {
-            Ok(data) => data,
-            Err(flaw) => return Some(flaw),
-        };
-        let block_tx = BlockTx::from_tuple(*contract_id);
-        let previous_amount = asset_list.list.get(&block_tx.to_str()).unwrap_or(&0);
-
-        asset_list
-            .list
-            .insert(block_tx.to_str(), previous_amount.saturating_add(amount));
-        self.set_asset_list(outpoint, &asset_list).await;
-
-        None
-    }
-
     async fn mint_free_mint(
-        &self,
+        &mut self,
         asset_contract: &AssetContract,
         tx: &Transaction,
         block_tx: &BlockTx,
@@ -68,18 +47,18 @@ impl Updater {
         if mint_option.pointer >= tx.output.len() as u32 {
             return Some(Flaw::PointerOverflow);
         }
-        let outpoint = Outpoint {
-            txid: tx.compute_txid().to_string(),
-            vout: mint_option.pointer,
-        };
-
-        // set the outpoint
-        let flaw = self
-            .update_asset_list_for_mint(contract_id, &outpoint, free_mint.amount_per_mint.0)
-            .await;
-        if flaw.is_some() {
-            return flaw;
+        // check invalid pointer if the target index is op_return output
+        if self.is_op_return_index(&tx.output[mint_option.pointer as usize]) {
+            return Some(Flaw::InvalidPointer);
         }
+
+        // allocate enw asset for the mint
+        self.allocate_new_asset(
+            mint_option.pointer,
+            contract_id,
+            free_mint.amount_per_mint.0,
+        )
+        .await;
 
         // update the mint data
         self.set_asset_contract_data(contract_id, &free_mint_data)
@@ -89,7 +68,7 @@ impl Updater {
     }
 
     pub async fn mint_purchase_burn_swap(
-        &self,
+        &mut self,
         asset_contract: &AssetContract,
         purchase: &PurchaseBurnSwap,
         tx: &Transaction,
@@ -101,7 +80,7 @@ impl Updater {
         let mut total_in_value_glittr_asset: u128 = 0;
         let mut total_received_value: u128 = 0;
 
-        let mut out_value: u128 = 0;
+        let out_value: u128;
         let mut vout: Option<u32> = None;
 
         // VALIDATE INPUT
@@ -195,75 +174,74 @@ impl Updater {
         }
 
         // VALIDATE OUT_VALUE
-        if let asset_contract::TransferRatioType::Fixed { ratio } = purchase.transfer_ratio_type {
-            out_value = (total_received_value * ratio.0 as u128) / ratio.1 as u128;
-        } else if let asset_contract::TransferRatioType::Oracle { pubkey, setting } =
-            purchase.transfer_ratio_type.clone()
-        {
-            if let Some(oracle_message_signed) = mint_option.oracle_message {
-                if setting.asset_id == oracle_message_signed.message.asset_id {
-                    let pubkey: XOnlyPublicKey =
-                        XOnlyPublicKey::from_slice(pubkey.as_slice()).unwrap();
+        match &purchase.transfer_ratio_type {
+            asset_contract::TransferRatioType::Fixed { ratio } => {
+                out_value = (total_received_value * ratio.0 as u128) / ratio.1 as u128;
+            }
+            asset_contract::TransferRatioType::Oracle { pubkey, setting } => {
+                if let Some(oracle_message_signed) = mint_option.oracle_message {
+                    if setting.asset_id == oracle_message_signed.message.asset_id {
+                        let pubkey: XOnlyPublicKey =
+                            XOnlyPublicKey::from_slice(pubkey.as_slice()).unwrap();
 
-                    if let Ok(signature) = Signature::from_slice(&oracle_message_signed.signature) {
-                        let secp = Secp256k1::new();
-
-                        let msg = Message::from_digest_slice(
-                            sha256::Hash::hash(
-                                serde_json::to_string(&oracle_message_signed.message)
-                                    .unwrap()
-                                    .as_bytes(),
-                            )
-                            .as_byte_array(),
-                        )
-                        .unwrap();
-
-                        out_value = oracle_message_signed.message.out_value;
-
-                        let mut input_found = false;
-                        for txin in tx.input.iter() {
-                            if txin.previous_output == oracle_message_signed.message.input_outpoint
-                            {
-                                input_found = true;
-                            }
-                        }
-
-                        if block_tx.block - oracle_message_signed.message.block_height
-                            > setting.block_height_slippage as u64
+                        if let Ok(signature) =
+                            Signature::from_slice(&oracle_message_signed.signature)
                         {
-                            return Some(Flaw::OracleMintBlockSlippageExceeded);
-                        }
+                            let secp = Secp256k1::new();
 
-                        if total_received_value < oracle_message_signed.message.min_in_value {
-                            return Some(Flaw::OracleMintBelowMinValue);
-                        }
+                            let msg = Message::from_digest_slice(
+                                sha256::Hash::hash(
+                                    serde_json::to_string(&oracle_message_signed.message)
+                                        .unwrap()
+                                        .as_bytes(),
+                                )
+                                .as_byte_array(),
+                            )
+                            .unwrap();
 
-                        if !input_found {
-                            return Some(Flaw::OracleMintInputNotFound);
-                        }
+                            out_value = oracle_message_signed.message.out_value;
 
-                        if pubkey.verify(&secp, &msg, &signature).is_err() {
-                            return Some(Flaw::OracleMintSignatureFailed);
+                            let mut input_found = false;
+                            for txin in tx.input.iter() {
+                                if txin.previous_output
+                                    == oracle_message_signed.message.input_outpoint
+                                {
+                                    input_found = true;
+                                }
+                            }
+
+                            if block_tx.block - oracle_message_signed.message.block_height
+                                > setting.block_height_slippage as u64
+                            {
+                                return Some(Flaw::OracleMintBlockSlippageExceeded);
+                            }
+
+                            if total_received_value < oracle_message_signed.message.min_in_value {
+                                return Some(Flaw::OracleMintBelowMinValue);
+                            }
+
+                            if !input_found {
+                                return Some(Flaw::OracleMintInputNotFound);
+                            }
+
+                            if !pubkey.verify(&secp, &msg, &signature).is_ok() {
+                                return Some(Flaw::OracleMintSignatureFailed);
+                            }
+                        } else {
+                            return Some(Flaw::OracleMintFailed);
                         }
                     } else {
                         return Some(Flaw::OracleMintFailed);
                     }
                 } else {
                     return Some(Flaw::OracleMintFailed);
-                }
-            } else {
-                return Some(Flaw::OracleMintFailed);
-            };
+                };
+            }
         }
 
         if vout.unwrap() > tx.output.len() as u32 {
             return Some(Flaw::PointerOverflow);
         }
-
-        let outpoint = Outpoint {
-            txid: tx.compute_txid().to_string(),
-            vout: vout.unwrap(),
-        };
 
         if let Some(supply_cap) = &asset_contract.asset.supply_cap {
             let mut asset_contract_data = match self.get_asset_contract_data(contract_id).await {
@@ -286,18 +264,15 @@ impl Updater {
         }
 
         // set the outpoint
-        let flaw = self
-            .update_asset_list_for_mint(contract_id, &outpoint, out_value)
+
+        self.allocate_new_asset(vout.unwrap(), contract_id, out_value)
             .await;
-        if flaw.is_some() {
-            return flaw;
-        }
 
         None
     }
 
     pub async fn mint_preallocated(
-        &self,
+        &mut self,
         asset_contract: &AssetContract,
         preallocated: &Preallocated,
         tx: &Transaction,
@@ -412,18 +387,9 @@ impl Updater {
         if mint_option.pointer >= tx.output.len() as u32 {
             return Some(Flaw::PointerOverflow);
         }
-        let outpoint = Outpoint {
-            txid: tx.compute_txid().to_string(),
-            vout: mint_option.pointer,
-        };
 
-        // set the outpoint
-        let flaw = self
-            .update_asset_list_for_mint(contract_id, &outpoint, out_value)
+        self.allocate_new_asset(mint_option.pointer, contract_id, out_value)
             .await;
-        if flaw.is_some() {
-            return flaw;
-        }
 
         None
     }

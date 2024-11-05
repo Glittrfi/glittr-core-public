@@ -46,7 +46,7 @@ impl Indexer {
     pub async fn run_indexer(&mut self) -> Result<(), Box<dyn Error>> {
         let mut updater = Updater::new(self.database.clone(), false).await;
 
-        log::info!("Indexer start");
+        log::info!("Indexing start");
         loop {
             let current_block_tip = self.rpc.get_block_count()?;
 
@@ -70,11 +70,10 @@ impl Indexer {
 
                 for (pos, tx) in block.txdata.iter().enumerate() {
                     let message = OpReturnMessage::parse_tx(tx);
-                    // TODO:
-                    // - invalidate assets previous inputs (if any)
-                    // - use the pointer to move the assets
-                    // - burn the assets if the pointer is not specified
+
+                    updater.unallocate_asset(tx).await?;
                     updater.index(block_height, pos as u32, tx, message).await?;
+                    updater.commit_asset(tx).await?;
                 }
 
                 self.last_indexed_block = Some(block_height);
