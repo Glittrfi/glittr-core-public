@@ -10,8 +10,6 @@ use super::*;
 #[serde(rename_all = "snake_case")]
 pub struct FreeMint {
     pub supply_cap: Option<U128>,
-    // TODO change the type to u128, need to check the serialization and deserialization since JSON
-    // has a MAX number limitation.
     pub amount_per_mint: U128,
 }
 
