@@ -2,8 +2,10 @@ mod mint;
 
 use std::collections::HashMap;
 
-use asset_contract::{AssetContract, AssetContractFreeMint, InputAsset};
-use bitcoin::{opcodes, script::Instruction, Transaction, TxOut};
+use asset_contract::{AssetContract, InputAsset, PurchaseBurnSwap};
+use bitcoin::{
+    hashes::{sha256, Hash}, key::Secp256k1, opcodes, script::Instruction, secp256k1::{schnorr::Signature, Message}, Address, Transaction, TxOut, XOnlyPublicKey
+};
 use database::{
     DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, MESSAGE_PREFIX,
     TRANSACTION_TO_BLOCK_TX_PREFIX,
@@ -15,21 +17,15 @@ use super::*;
 
 #[derive(Deserialize, Serialize, Clone, Default, Debug)]
 #[serde(rename_all = "snake_case")]
-pub struct AssetContractDataFreeMint {
-    pub minted: u32,
-    pub burned: u32,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-#[serde(rename_all = "snake_case")]
-pub enum AssetContractData {
-    FreeMint(AssetContractDataFreeMint),
+pub struct AssetContractData {
+    pub minted_supply: u128,
+    pub burned_supply: u128,
 }
 
 #[derive(Deserialize, Serialize, Clone, Default, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct AssetList {
-    pub list: HashMap<String, u32>,
+    pub list: HashMap<String, u128>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -37,6 +33,10 @@ pub struct AssetList {
 pub struct MessageDataOutcome {
     pub message: Option<OpReturnMessage>,
     pub flaw: Option<Flaw>,
+}
+pub struct PBSMintResult {
+    pub out_value: u128,
+    pub txout: u32,
 }
 
 pub struct Updater {
@@ -83,7 +83,7 @@ impl Updater {
         Ok(())
     }
 
-    pub async fn allocate_new_asset(&mut self, vout: u32, contract_id: &BlockTxTuple, amount: u32) {
+    pub async fn allocate_new_asset(&mut self, vout: u32, contract_id: &BlockTxTuple, amount: u128) {
         let block_tx = BlockTx::from_tuple(*contract_id);
 
         let asset = self.allocated_asset_list
@@ -94,7 +94,7 @@ impl Updater {
         *previous_amount = previous_amount.saturating_add(amount);
     }
 
-    pub async fn move_allocation(&mut self, vout: u32, contract_id: &BlockTxTuple, max_amount: u32) {
+    pub async fn move_allocation(&mut self, vout: u32, contract_id: &BlockTxTuple, max_amount: u128) {
         let block_tx = BlockTx::from_tuple(*contract_id);
         let Some(asset) = self.unallocated_asset_list.list.get_mut(&block_tx.to_string()) else {
             return 
@@ -190,22 +190,18 @@ impl Updater {
                     TxType::ContractCreation { contract_type } => {
                         log::info!("Process contract creation");
                         if let ContractType::Asset(asset_contract) = contract_type {
-                            if let AssetContract::PurchaseBurnSwap { input_asset, .. } =
-                                asset_contract
-                            {
-                                if let InputAsset::GlittrAsset(block_tx_tuple) = input_asset {
-                                    if let Some(tx_type) =
-                                        self.get_message_txtype(block_tx_tuple).await.ok()
+                            if let Some(purchase) = asset_contract.distribution_schemes.purchase {
+                                if let InputAsset::GlittrAsset(block_tx_tuple) =
+                                    purchase.input_asset
+                                {
+                                    if let Ok(tx_type) =
+                                        self.get_message_txtype(block_tx_tuple).await
                                     {
                                         match tx_type {
                                             TxType::ContractCreation { .. } => None,
                                             _ => Some(Flaw::ReferencingFlawedBlockTx),
                                         };
                                     }
-                                } else if let InputAsset::Rune(_block_tx_tuple) = input_asset {
-                                    // NOTE: design decision, IMO we shouldn't check if rune exist as validation
-                                    // since rune is a separate meta-protocol
-                                    // validating rune is exist / not here means our core must index runes
                                 }
                             }
                         }
@@ -216,7 +212,7 @@ impl Updater {
                         call_type,
                     } => match call_type {
                         CallType::Mint(mint_option) => {
-                            self.mint(tx, &block_tx, &contract, &mint_option).await
+                            self.mint(tx, block_tx, &contract, &mint_option).await
                         }
                         CallType::Burn => {
                             log::info!("Process call type burn");
@@ -261,7 +257,7 @@ impl Updater {
                 overflow_i.push(i as u32);
                 continue
             }
-            self.move_allocation(transfer.output, &transfer.asset, transfer.amount).await;
+            self.move_allocation(transfer.output, &transfer.asset, transfer.amount.0).await;
         }
 
         if overflow_i.len() > 0 {
@@ -289,9 +285,9 @@ impl Updater {
             .unwrap();
 
         if outcome.flaw.is_some() {
-            return Err(Flaw::ReferencingFlawedBlockTx);
+            Err(Flaw::ReferencingFlawedBlockTx)
         } else {
-            return Ok(outcome.message.unwrap().tx_type);
+            Ok(outcome.message.unwrap().tx_type)
         }
     }
 
@@ -300,7 +296,7 @@ impl Updater {
             self.database
                 .lock()
                 .await
-                .delete(ASSET_LIST_PREFIX, &outpoint.to_str());
+                .delete(ASSET_LIST_PREFIX, &outpoint.to_string());
         }
     }
 
@@ -309,7 +305,7 @@ impl Updater {
             .database
             .lock()
             .await
-            .get(ASSET_LIST_PREFIX, &outpoint.to_str());
+            .get(ASSET_LIST_PREFIX, &outpoint.to_string());
 
         match result {
             Ok(data) => Ok(data),
@@ -323,7 +319,7 @@ impl Updater {
             self.database
                 .lock()
                 .await
-                .put(ASSET_LIST_PREFIX, &outpoint.to_str(), asset_list);
+                .put(ASSET_LIST_PREFIX, &outpoint.to_string(), asset_list);
         }
     }
 
@@ -361,7 +357,7 @@ impl Updater {
 
         match data {
             Ok(data) => Ok(data),
-            Err(DatabaseError::NotFound) => Err(Flaw::AssetContractDataNotFound),
+            Err(DatabaseError::NotFound) => Ok(AssetContractData::default()),
             Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
         }
     }

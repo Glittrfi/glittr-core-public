@@ -26,10 +26,18 @@ pub enum Flaw {
     // call type::mint
     SupplyCapExceeded,
     LiveTimeNotReached,
+    OracleMintFailed,
+    OracleMintInputNotFound,
+    OracleMintBelowMinValue,
+    OracleMintSignatureFailed,
+    OracleMintBlockSlippageExceeded,
 
     // asset contract
     OverflowAmountPerMint,
     DivideByZero,
-    PubkeyLengthInvalid,
+    PubkeyInvalid,
     OracleMessageFormatInvalid,
+    SupplyCapInvalid,
+
+    NotImplemented,
 }

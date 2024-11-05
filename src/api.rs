@@ -69,7 +69,7 @@ async fn tx_result(
             ))
         }
     } else {
-        return Err(StatusCode::NOT_FOUND);
+        Err(StatusCode::NOT_FOUND)
     }
 }
 
@@ -86,7 +86,7 @@ async fn get_block_tx(
     if let Ok(message) = message {
         Ok(Json(json!({"is_valid": true, "message": message})))
     } else {
-        return Err(StatusCode::NOT_FOUND);
+        Err(StatusCode::NOT_FOUND)
     }
 }
 

@@ -5,7 +5,7 @@ use asset_contract::AssetContract;
 use bitcoin::{
     opcodes,
     script::{self, Instruction, PushBytes},
-    ScriptBuf, Transaction,
+    OutPoint, ScriptBuf, Transaction,
 };
 use bitcoincore_rpc::jsonrpc::serde_json::{self, Deserializer};
 use constants::OP_RETURN_MAGIC_PREFIX;
@@ -17,18 +17,39 @@ pub enum ContractType {
     Asset(AssetContract),
 }
 
-#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
-#[serde(rename_all = "snake_case")]
+#[serde_with::skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct MintOption {
     pub pointer: u32,
+    pub oracle_message: Option<OracleMessageSigned>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum CallType {
     Mint(MintOption),
     Burn,
     Swap,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct OracleMessageSigned {
+    pub signature: Vec<u8>,
+    pub message: OracleMessage,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct OracleMessage {
+    /// the input_outpoint dictates which UTXO is being evaluated by the Oracle
+    pub input_outpoint: OutPoint,
+    /// min_in_value represents what the input valued at (minimum because btc value could differ (-fee))
+    pub min_in_value: u128,
+    /// out_value represents the oracle's valuation of the input e.g. for 1 btc == 72000 wusd, 72000 is the out_value
+    pub out_value: u128,
+    /// rune's BlockTx if rune
+    pub asset_id: Option<String>,
+    // the bitcoin block height when the message is signed
+    pub block_height: u64,
 }
 
 /// Transfer
@@ -40,7 +61,7 @@ pub enum CallType {
 pub struct TxTypeTransfer {
     pub asset: BlockTxTuple,
     pub output: u32,
-    pub amount: u32,
+    pub amount: U128,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -137,7 +158,7 @@ impl OpReturnMessage {
         builder = builder.push_slice(magic_prefix);
         builder = builder.push_slice(script_bytes);
 
-        return builder.into_script();
+        builder.into_script()
     }
 }
 
@@ -149,13 +170,16 @@ impl fmt::Display for OpReturnMessage {
 
 #[cfg(test)]
 mod test {
-    use crate::asset_contract::AssetContractFreeMint;
+    use bitcoin::consensus::deserialize;
+    use bitcoin::{locktime, transaction::Version, Amount, Transaction, TxOut};
+
+    use crate::asset_contract::DistributionSchemes;
+    use crate::asset_contract::FreeMint;
+    use crate::asset_contract::SimpleAsset;
     use crate::transaction::asset_contract::AssetContract;
     use crate::transaction::message::ContractType;
     use crate::transaction::message::TxType;
-    use bitcoin::{
-        consensus::deserialize, locktime, transaction::Version, Amount, Transaction, TxOut,
-    };
+    use crate::U128;
 
     use super::OpReturnMessage;
 
@@ -163,14 +187,21 @@ mod test {
     pub fn parse_op_return_message_success() {
         let dummy_message = OpReturnMessage {
             tx_type: TxType::ContractCreation {
-                contract_type: ContractType::Asset(AssetContract::FreeMint(
-                    AssetContractFreeMint {
-                        supply_cap: Some(1000),
-                        amount_per_mint: 10,
+                contract_type: ContractType::Asset(AssetContract {
+                    asset: SimpleAsset {
+                        supply_cap: Some(U128(1000)),
                         divisibility: 18,
                         live_time: 0,
                     },
-                )),
+                    distribution_schemes: DistributionSchemes {
+                        free_mint: Some(FreeMint {
+                            supply_cap: Some(U128(1000)),
+                            amount_per_mint: U128(10),
+                        }),
+                        preallocated: None,
+                        purchase: None,
+                    },
+                }),
             },
         };
 
@@ -189,20 +220,14 @@ mod test {
         match parsed.unwrap().tx_type {
             TxType::Transfer(_) => panic!("not transfer"),
             TxType::ContractCreation { contract_type } => match contract_type {
-                ContractType::Asset(asset_contract) => match asset_contract {
-                    AssetContract::Preallocated { todo: _ } => panic!("not preallocated"),
-                    AssetContract::FreeMint(free_mint) => {
-                        assert_eq!(free_mint.supply_cap, Some(1000));
-                        assert_eq!(free_mint.amount_per_mint, 10);
-                        assert_eq!(free_mint.divisibility, 18);
-                        assert_eq!(free_mint.live_time, 0);
-                    }
-                    AssetContract::PurchaseBurnSwap {
-                        input_asset: _,
-                        transfer_scheme: _,
-                        transfer_ratio_type: _,
-                    } => panic!("not purchase burn swap"),
-                },
+                ContractType::Asset(asset_contract) => {
+                    let free_mint = asset_contract.distribution_schemes.free_mint.unwrap();
+                    assert_eq!(asset_contract.asset.supply_cap, Some(U128(1000)));
+                    assert_eq!(asset_contract.asset.divisibility, 18);
+                    assert_eq!(asset_contract.asset.live_time, 0);
+                    assert_eq!(free_mint.supply_cap, Some(U128(1000)));
+                    assert_eq!(free_mint.amount_per_mint, U128(10));
+                }
             },
             TxType::ContractCall {
                 contract: _,
@@ -213,7 +238,7 @@ mod test {
 
     #[test]
     pub fn validate_op_return_message_from_tx_hex_success() {
-        let tx_bytes = hex::decode("0200000001ce9f8af57c1988692745ff72a5d190b04e1137a5d29855f71beda45c8032f1db010000006a47304402206e9d49fea6da1d4f2925787b4b291f8450dccd18387205f5b7a7c91e6d61b25602201e7a99d167c0da5efeff9a381d888d27bd6b95e2d5dec261a0e7f20f72db3c8e0121032bcbd9cfbdbd9eff2bda9935f6cc2a6fa0c908da3aaa50aed80d68b0afb3451affffffff0200000000000000009e6a06474c495454524c947b2274785f74797065223a7b22636f6e74726163745f6372656174696f6e223a7b22636f6e74726163745f74797065223a7b226173736574223a7b22667265655f6d696e74223a7b22737570706c795f636170223a313030302c22616d6f756e745f7065725f6d696e74223a31302c2264697669736962696c697479223a31382c226c6976655f74696d65223a307d7d7d7d7d7d98ecfa02000000001976a9147bbfdf910e1d5f7b2fa2172315eb712f8ab30ae488ac00000000").unwrap();
+        let tx_bytes = hex::decode("02000000018fadc57a81127e5c69373de674bd48d874b13698199d4ed2841a9da53714c5960000000000ffffffff02cac0000000000000736a06474c495454524c697b2274785f74797065223a7b22636f6e74726163745f63616c6c223a7b22636f6e7472616374223a5b332c315d2c2263616c6c5f74797065223a7b226d696e74223a7b22706f696e746572223a302c226f7261636c655f6d657373616765223a6e756c6c7d7d7d7d7d2202000000000000160014cbc188f7a134a6d52afca200090171fb7ab171a600000000").unwrap();
 
         let tx: Transaction = deserialize(&tx_bytes).unwrap();
 
