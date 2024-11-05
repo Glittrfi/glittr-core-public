@@ -20,7 +20,7 @@ impl Indexer {
         btc_rpc_username: String,
         btc_rpc_password: String,
     ) -> Result<Self, Box<dyn Error>> {
-        log::info!("Indexer start");
+        println!("Indexer start");
         let rpc = Client::new(
             btc_rpc_url.as_str(),
             Auth::UserPass(btc_rpc_username.clone(), btc_rpc_password.clone()),
@@ -45,7 +45,7 @@ impl Indexer {
     pub async fn run_indexer(&mut self) -> Result<(), Box<dyn Error>> {
         let mut updater = Updater::new(self.database.clone(), false).await;
 
-        log::info!("Indexer start");
+        println!("Indexing start");
         loop {
             let current_block_tip = self.rpc.get_block_count()?;
 
@@ -66,7 +66,7 @@ impl Indexer {
                 let block_hash = self.rpc.get_block_hash(block_height)?;
                 let block = self.rpc.get_block(&block_hash)?;
 
-                log::info!("Indexing block {}: {}", block_height, block_hash);
+                println!("Indexing block {}: {}", block_height, block_hash);
 
                 for (pos, tx) in block.txdata.iter().enumerate() {
                     let message = OpReturnMessage::parse_tx(tx);

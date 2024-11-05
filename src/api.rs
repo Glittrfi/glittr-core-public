@@ -27,7 +27,7 @@ pub async fn run_api(database: Arc<Mutex<Database>>) -> Result<(), std::io::Erro
         .route("/asset-contract/:block/:tx", get(get_asset_contract))
         .route("/validate-tx", post(validate_tx))
         .with_state(shared_state);
-    log::info!("API is listening on {}", CONFIG.api_url);
+    println!("API is listening on {}", CONFIG.api_url);
     let listener = tokio::net::TcpListener::bind(CONFIG.api_url.clone()).await?;
 
     axum::serve(listener, app).await
