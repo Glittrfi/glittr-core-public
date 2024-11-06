@@ -34,7 +34,7 @@ impl Preallocated {
         if let Some(supply_cap) = &asset_contract.asset.supply_cap {
             let mut total_allocations: u128 = 0;
             for alloc in &self.allocations {
-                total_allocations = total_allocations.saturating_add(alloc.0 .0 * alloc.1.len() as u128);
+                total_allocations = total_allocations.saturating_add(alloc.0 .0.saturating_mul(alloc.1.len() as u128));
             }
 
             if total_allocations > supply_cap.0 {
