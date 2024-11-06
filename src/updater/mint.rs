@@ -96,7 +96,7 @@ impl Updater {
         // VALIDATE OUTPUT
         match purchase.transfer_scheme {
             // Ensure that the asset is set to burn
-            asset_contract::TransferScheme::Burn => match purchase.input_asset {
+            asset_contract::TransferScheme::Burn => match &purchase.input_asset {
                 InputAsset::RawBTC => {
                     for output in tx.output.iter() {
                         let mut instructions = output.script_pubkey.instructions();
@@ -112,7 +112,7 @@ impl Updater {
                 }
                 InputAsset::Metaprotocol => {}
             },
-            asset_contract::TransferScheme::Purchase(bitcoin_address) => {
+            asset_contract::TransferScheme::Purchase(ref bitcoin_address) => {
                 for (pos, output) in tx.output.iter().enumerate() {
                     let address = Address::from_str(bitcoin_address.as_str())
                         .unwrap()
@@ -227,8 +227,30 @@ impl Updater {
             return Some(Flaw::InvalidPointer);
         }
 
-        if out_value == 0{ 
+        if out_value == 0 {
             return Some(Flaw::MintedZero);
+        }
+
+        // If transfer is burn and using glittr asset input, remove it from unallocated and add burned
+        if let asset_contract::TransferScheme::Burn = &purchase.transfer_scheme {
+            if let InputAsset::GlittrAsset(asset_contract_id) = purchase.input_asset {
+                let burned_amount = self
+                    .unallocated_asset_list
+                    .list
+                    .remove(&BlockTx::from_tuple(asset_contract_id).to_str())
+                    .unwrap_or(0);
+
+                let mut asset_contract_data_input =
+                    match self.get_asset_contract_data(&asset_contract_id).await {
+                        Ok(data) => data,
+                        Err(flaw) => return Some(flaw),
+                    };
+
+                asset_contract_data_input.burned_supply = asset_contract_data_input
+                    .burned_supply
+                    .saturating_add(burned_amount);
+                self.set_asset_contract_data(&asset_contract_id, &asset_contract_data_input).await;
+            }
         }
 
         if let Some(supply_cap) = asset_contract.asset.supply_cap {
@@ -247,6 +269,7 @@ impl Updater {
             asset_contract_data.minted_supply =
                 asset_contract_data.minted_supply.saturating_add(out_value);
 
+            
             self.set_asset_contract_data(contract_id, &asset_contract_data)
                 .await;
         }
