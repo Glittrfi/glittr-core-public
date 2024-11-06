@@ -72,7 +72,11 @@ impl Indexer {
                     let message = OpReturnMessage::parse_tx(tx);
 
                     updater.unallocate_asset(tx).await?;
-                    updater.index(block_height, pos as u32, tx, message).await?;
+
+                    if !matches!(message.as_ref(), Err(Flaw::NonGlittrMessage)) {
+                        updater.index(block_height, pos as u32, tx, message).await?;
+                    }
+
                     updater.commit_asset(tx).await?;
                 }
 

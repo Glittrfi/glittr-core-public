@@ -124,6 +124,10 @@ impl OpReturnMessage {
             break;
         }
 
+        if payload.is_empty() {
+            return Err(Flaw::NonGlittrMessage);
+        }
+
         let message =
             OpReturnMessage::deserialize(&mut Deserializer::from_slice(payload.as_slice()));
 

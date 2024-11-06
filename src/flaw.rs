@@ -40,4 +40,5 @@ pub enum Flaw {
     SupplyCapInvalid,
 
     NotImplemented,
+    NonGlittrMessage,
 }
