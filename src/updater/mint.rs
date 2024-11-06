@@ -124,7 +124,7 @@ impl Updater {
                         }
 
                         if mint_option.pointer != pos as u32 {
-                            // NOTE: all asset always went to the first non-op-return txout if the pointer is invalid (for burn)
+                            // NOTE: all asset always went to the first non-op-return txout if the pointer is invalid
                             vout = Some(mint_option.pointer);
                             break;
                         }
@@ -274,8 +274,8 @@ impl Updater {
     ) -> Option<Flaw> {
         let message = self.get_message(contract_id).await;
         match message {
-            Ok(op_return_message) => match op_return_message.tx_type {
-                TxType::ContractCreation { contract_type } => match contract_type {
+            Ok(op_return_message) => match op_return_message.contract_creation {
+                Some(contract_creation) => match contract_creation.contract_type {
                     message::ContractType::Asset(asset_contract) => {
                         if let Some(_) = asset_contract.distribution_schemes.free_mint {
                             self.mint_free_mint(
@@ -303,7 +303,7 @@ impl Updater {
                         }
                     }
                 },
-                _ => Some(Flaw::ContractNotMatch),
+                None => Some(Flaw::ContractNotMatch),
             },
             Err(flaw) => Some(flaw),
         }

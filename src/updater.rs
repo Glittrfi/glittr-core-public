@@ -4,14 +4,19 @@ use std::collections::HashMap;
 
 use asset_contract::{AssetContract, InputAsset, PurchaseBurnSwap};
 use bitcoin::{
-    hashes::{sha256, Hash}, key::Secp256k1, opcodes, script::Instruction, secp256k1::{schnorr::Signature, Message}, Address, Transaction, TxOut, XOnlyPublicKey
+    hashes::{sha256, Hash},
+    key::Secp256k1,
+    opcodes,
+    script::Instruction,
+    secp256k1::{schnorr::Signature, Message},
+    Address, Transaction, TxOut, XOnlyPublicKey,
 };
 use database::{
     DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, MESSAGE_PREFIX,
     TRANSACTION_TO_BLOCK_TX_PREFIX,
 };
 use flaw::Flaw;
-use message::{CallType, ContractType, OpReturnMessage, TxType, TxTypeTransfer};
+use message::{CallType, ContractType, OpReturnMessage, TxTypeTransfer};
 
 use super::*;
 
@@ -83,31 +88,48 @@ impl Updater {
         Ok(())
     }
 
-    pub async fn allocate_new_asset(&mut self, vout: u32, contract_id: &BlockTxTuple, amount: u128) {
+    pub async fn allocate_new_asset(
+        &mut self,
+        vout: u32,
+        contract_id: &BlockTxTuple,
+        amount: u128,
+    ) {
         let block_tx = BlockTx::from_tuple(*contract_id);
 
-        let asset = self.allocated_asset_list
+        let asset = self
+            .allocated_asset_list
             .entry(vout)
             .or_insert_with(AssetList::default);
-        
+
         let previous_amount = asset.list.entry(block_tx.to_str()).or_insert(0);
         *previous_amount = previous_amount.saturating_add(amount);
     }
 
-    pub async fn move_allocation(&mut self, vout: u32, contract_id: &BlockTxTuple, max_amount: u128) {
+    pub async fn move_allocation(
+        &mut self,
+        vout: u32,
+        contract_id: &BlockTxTuple,
+        max_amount: u128,
+    ) {
         let block_tx = BlockTx::from_tuple(*contract_id);
-        let Some(asset) = self.unallocated_asset_list.list.get_mut(&block_tx.to_string()) else {
-            return 
+        let Some(asset) = self
+            .unallocated_asset_list
+            .list
+            .get_mut(&block_tx.to_string())
+        else {
+            return;
         };
 
         let amount = max_amount.min(*asset);
         if amount == 0 {
-            return 
+            return;
         }
 
         *asset = asset.saturating_sub(amount);
         if *asset == 0 {
-            self.unallocated_asset_list.list.remove(&block_tx.to_string());
+            self.unallocated_asset_list
+                .list
+                .remove(&block_tx.to_string());
         }
 
         self.allocate_new_asset(vout, contract_id, amount).await;
@@ -116,11 +138,12 @@ impl Updater {
     pub async fn commit_asset(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
         // move unallocated to first non op_return index (fallback)
         let list = self.unallocated_asset_list.list.clone();
-        for asset in list.iter(){
+        for asset in list.iter() {
             let block_tx = BlockTx::from_str(asset.0);
 
-            if let Some(vout) = self.first_non_op_return_index(tx){
-                self.move_allocation(vout, &block_tx.to_tuple(), *asset.1).await;
+            if let Some(vout) = self.first_non_op_return_index(tx) {
+                self.move_allocation(vout, &block_tx.to_tuple(), *asset.1)
+                    .await;
             } else {
                 log::info!("No non op_return index found, unallocated asset is lost");
             }
@@ -146,20 +169,20 @@ impl Updater {
     fn is_op_return_index(&self, output: &TxOut) -> bool {
         let mut instructions = output.script_pubkey.instructions();
         if instructions.next() == Some(Ok(Instruction::Op(opcodes::all::OP_RETURN))) {
-            return true 
+            return true;
         }
 
-        return false
+        return false;
     }
 
-    fn first_non_op_return_index(&self, tx: &Transaction) -> Option<u32>{
+    fn first_non_op_return_index(&self, tx: &Transaction) -> Option<u32> {
         for (i, output) in tx.output.iter().enumerate() {
             if !self.is_op_return_index(output) {
                 return Some(i as u32);
             };
         }
 
-        return None
+        return None;
     }
 
     // run modules here
@@ -183,46 +206,50 @@ impl Updater {
         if let Ok(message) = message_result {
             outcome.message = Some(message.clone());
             if let Some(flaw) = message.validate() {
-                outcome.flaw = Some(flaw);
-            } else {
-                outcome.flaw = match message.tx_type {
-                    TxType::Transfer(transfers) => self.transfers(tx, transfers).await,
-                    TxType::ContractCreation { contract_type } => {
-                        log::info!("Process contract creation");
-                        if let ContractType::Asset(asset_contract) = contract_type {
-                            if let Some(purchase) = asset_contract.distribution_schemes.purchase {
-                                if let InputAsset::GlittrAsset(block_tx_tuple) =
-                                    purchase.input_asset
-                                {
-                                    if let Ok(tx_type) =
-                                        self.get_message_txtype(block_tx_tuple).await
-                                    {
-                                        match tx_type {
-                                            TxType::ContractCreation { .. } => None,
-                                            _ => Some(Flaw::ReferencingFlawedBlockTx),
-                                        };
-                                    }
+                outcome.flaw = Some(flaw)
+            }
+
+            if let Some(transfer) = message.transfer {
+                if outcome.flaw.is_none() {
+                    outcome.flaw = self.transfers(tx, transfer.transfers).await;
+                }
+            }
+
+            if let Some(contract_creation) = message.contract_creation {
+                if let ContractType::Asset(asset_contract) = contract_creation.contract_type {
+                    if let Some(purchase) = asset_contract.distribution_schemes.purchase {
+                        if let InputAsset::GlittrAsset(block_tx_tuple) = purchase.input_asset {
+                            let message = self.get_message(&block_tx_tuple).await;
+
+                            if let Some(message) = message.ok() {
+                                if message.contract_creation.is_none() && outcome.flaw.is_none() {
+                                    outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx)
+                                }
+                            } else {
+                                if outcome.flaw.is_none() {
+                                    outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx);
                                 }
                             }
                         }
-                        None
                     }
-                    TxType::ContractCall {
-                        contract,
-                        call_type,
-                    } => match call_type {
-                        CallType::Mint(mint_option) => {
-                            self.mint(tx, block_tx, &contract, &mint_option).await
+                }
+            }
+
+            if let Some(contract_call) = message.contract_call {
+                match contract_call.call_type {
+                    CallType::Mint(mint_option) => {
+                        if outcome.flaw.is_none() {
+                            outcome.flaw = self
+                                .mint(tx, block_tx, &contract_call.contract, &mint_option)
+                                .await;
                         }
-                        CallType::Burn => {
-                            log::info!("Process call type burn");
-                            None
-                        }
-                        CallType::Swap => {
-                            log::info!("Process call type swap");
-                            None
-                        }
-                    },
+                    }
+                    CallType::Burn => {
+                        log::info!("Process call type burn");
+                    }
+                    CallType::Swap => {
+                        log::info!("Process call type swap");
+                    }
                 }
             }
         } else {
@@ -230,10 +257,11 @@ impl Updater {
         }
 
         if !self.is_read_only {
-            self.database
-                .lock()
-                .await
-                .put(MESSAGE_PREFIX, block_tx.to_string().as_str(), outcome.clone());
+            self.database.lock().await.put(
+                MESSAGE_PREFIX,
+                block_tx.to_string().as_str(),
+                outcome.clone(),
+            );
 
             self.database.lock().await.put(
                 TRANSACTION_TO_BLOCK_TX_PREFIX,
@@ -255,9 +283,10 @@ impl Updater {
         for (i, transfer) in transfers.iter().enumerate() {
             if transfer.output >= tx.output.len() as u32 {
                 overflow_i.push(i as u32);
-                continue
+                continue;
             }
-            self.move_allocation(transfer.output, &transfer.asset, transfer.amount.0).await;
+            self.move_allocation(transfer.output, &transfer.asset, transfer.amount.0)
+                .await;
         }
 
         if overflow_i.len() > 0 {
@@ -265,30 +294,6 @@ impl Updater {
         }
 
         None
-    }
-
-
-    async fn get_message_txtype(&self, block_tx: BlockTxTuple) -> Result<TxType, Flaw> {
-        let outcome: MessageDataOutcome = self
-            .database
-            .lock()
-            .await
-            .get(
-                MESSAGE_PREFIX,
-                BlockTx {
-                    block: block_tx.0,
-                    tx: block_tx.1,
-                }
-                .to_string()
-                .as_str(),
-            )
-            .unwrap();
-
-        if outcome.flaw.is_some() {
-            Err(Flaw::ReferencingFlawedBlockTx)
-        } else {
-            Ok(outcome.message.unwrap().tx_type)
-        }
     }
 
     async fn delete_asset(&self, outpoint: &Outpoint) {
