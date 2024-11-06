@@ -12,6 +12,7 @@ pub type Ratio = (u128, u128);
 pub type BlockTxTuple = (u64, u32);
 pub type BlockHeight = u64;
 pub type BitcoinAddress = String;
+pub type BlockTxString = String;
 
 impl fmt::Display for BlockTx {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

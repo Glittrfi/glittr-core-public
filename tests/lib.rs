@@ -328,7 +328,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
         contract_call: Some(ContractCall {
             contract: contract_id.to_tuple(),
             call_type: CallType::Mint(MintOption {
-                pointer: 0,
+                pointer: 1,
                 oracle_message: None,
             }),
         }),
@@ -453,7 +453,7 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
         contract_call: Some(ContractCall {
             contract: contract_id.to_tuple(),
             call_type: CallType::Mint(MintOption {
-                pointer: 0,
+                pointer: 1,
                 oracle_message: None,
             }),
         }),
@@ -520,7 +520,7 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
                 "asset_list",
                 Outpoint {
                     txid: tx.compute_txid().to_string(),
-                    vout: 0
+                    vout: 1
                 }
                 .to_string()
             )

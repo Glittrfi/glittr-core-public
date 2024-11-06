@@ -30,7 +30,7 @@ pub struct AssetContractData {
 #[derive(Deserialize, Serialize, Clone, Default, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct AssetList {
-    pub list: HashMap<String, u128>,
+    pub list: HashMap<BlockTxString, u128>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
