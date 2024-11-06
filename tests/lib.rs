@@ -1634,6 +1634,143 @@ async fn test_integration_transfer_utxo() {
 }
 
 #[tokio::test]
+async fn test_integration_glittr_asset_mint_purchase() {
+    let mut ctx = TestContext::new().await;
+
+    // Create first contract with free mint
+    let message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            contract_type: ContractType::Asset(AssetContract {
+                asset: SimpleAsset {
+                    supply_cap: Some(U128(1000)),
+                    divisibility: 18,
+                    live_time: 0,
+                },
+                distribution_schemes: DistributionSchemes {
+                    free_mint: Some(FreeMint {
+                        supply_cap: Some(U128(1000)),
+                        amount_per_mint: U128(100),
+                    }),
+                    preallocated: None,
+                    purchase: None,
+                },
+            }),
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let first_contract = ctx.build_and_mine_message(&message).await;
+
+    // Mint first contract
+    let mint_message = OpReturnMessage {
+        contract_call: Some(ContractCall {
+            contract: first_contract.to_tuple(),
+            call_type: CallType::Mint(MintOption {
+                pointer: 1,
+                oracle_message: None,
+            }),
+        }),
+        contract_creation: None,
+        transfer: None,
+    };
+
+    let first_mint_tx = ctx.build_and_mine_message(&mint_message).await;
+
+    // Create second contract that uses first as input asset
+    let treasury_address = get_bitcoin_address();
+    let second_message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            contract_type: ContractType::Asset(AssetContract {
+                asset: SimpleAsset {
+                    supply_cap: Some(U128(500)),
+                    divisibility: 18,
+                    live_time: 0,
+                },
+                distribution_schemes: DistributionSchemes {
+                    purchase: Some(PurchaseBurnSwap {
+                        input_asset: InputAsset::GlittrAsset(first_contract.to_tuple()),
+                        transfer_scheme: TransferScheme::Purchase(treasury_address.to_string()),
+                        transfer_ratio_type: TransferRatioType::Fixed { ratio: (2, 1) },
+                    }),
+                    preallocated: None,
+                    free_mint: None,
+                },
+            }),
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let second_contract = ctx.build_and_mine_message(&second_message).await;
+
+    // Mint second contract using first contract as input
+    let second_mint_message = OpReturnMessage {
+        contract_call: Some(ContractCall {
+            contract: second_contract.to_tuple(),
+            call_type: CallType::Mint(MintOption {
+                pointer: 1,
+                oracle_message: None,
+            }),
+        }),
+        transfer: Some(Transfer {
+            transfers: [TxTypeTransfer {
+                asset: first_contract.to_tuple(),
+                output: 1,
+                amount: U128(100),
+            }]
+            .to_vec(),
+        }),
+        contract_creation: None,
+    };
+
+    ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[
+            (first_mint_tx.block as usize, 1, 1, Witness::new()), // UTXO contain assets
+            (first_mint_tx.block as usize, 0, 0, Witness::new()),
+        ],
+        op_return: Some(second_mint_message.into_script()),
+        op_return_index: Some(0),
+        op_return_value: Some(0),
+        output_values: &[1000, 1000, 1000],
+        outputs: 3,
+        p2tr: false,
+        recipient: Some(treasury_address)
+    });
+
+    ctx.core.mine_blocks(1);
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    // Verify outcomes
+    let first_outcome = ctx.get_and_verify_message_outcome(first_contract).await;
+    assert!(first_outcome.flaw.is_none());
+
+    let first_mint_outcome = ctx.get_and_verify_message_outcome(first_mint_tx).await;
+    assert!(first_mint_outcome.flaw.is_none());
+
+    let second_outcome = ctx.get_and_verify_message_outcome(second_contract).await;
+    assert!(second_outcome.flaw.is_none());
+
+    let asset_list: Result<Vec<(String, AssetList)>, DatabaseError> = ctx
+        .indexer
+        .lock()
+        .await
+        .database
+        .lock()
+        .await
+        .expensive_find_by_prefix(ASSET_LIST_PREFIX);
+    let asset_lists = asset_list.expect("asset list should exist");
+
+    for (k, v) in &asset_lists {
+        println!("Mint output: {}: {:?}", k, v);
+    }
+
+    ctx.drop().await;
+}
+
+#[tokio::test]
 async fn test_integration_burn() {
     // TODO: Implement using TestContext
 }

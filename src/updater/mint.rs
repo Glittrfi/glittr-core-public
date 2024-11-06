@@ -227,6 +227,10 @@ impl Updater {
             return Some(Flaw::InvalidPointer);
         }
 
+        if out_value == 0{ 
+            return Some(Flaw::MintedZero);
+        }
+
         if let Some(supply_cap) = asset_contract.asset.supply_cap {
             let mut asset_contract_data = match self.get_asset_contract_data(contract_id).await {
                 Ok(data) => data,
