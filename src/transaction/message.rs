@@ -64,22 +64,32 @@ pub struct TxTypeTransfer {
     pub amount: U128,
 }
 
+// TxTypes: Transfer, ContractCreation, ContractCall
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
-pub enum TxType {
-    Transfer(Vec<TxTypeTransfer>),
-    ContractCreation {
-        contract_type: ContractType,
-    },
-    ContractCall {
-        contract: BlockTxTuple,
-        call_type: CallType,
-    },
+pub struct Transfer {
+    pub transfers: Vec<TxTypeTransfer>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct ContractCreation {
+    pub contract_type: ContractType,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct ContractCall {
+    pub contract: BlockTxTuple,
+    pub call_type: CallType,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct OpReturnMessage {
-    pub tx_type: TxType,
+    pub transfer: Option<Transfer>,
+    pub contract_creation: Option<ContractCreation>,
+    pub contract_call: Option<ContractCall>,
 }
 
 impl CallType {
@@ -138,16 +148,16 @@ impl OpReturnMessage {
     }
 
     pub fn validate(&self) -> Option<Flaw> {
-        match self.tx_type.clone() {
-            TxType::Transfer(_) => {}
-            TxType::ContractCreation { contract_type } => match contract_type {
+        if let Some(contract_creation) = &self.contract_creation {
+            match &contract_creation.contract_type {
                 ContractType::Asset(asset_contract) => {
                     return asset_contract.validate();
                 }
-            },
-            TxType::ContractCall { call_type, .. } => {
-                return call_type.validate();
             }
+        }
+
+        if let Some(contract_call) = &self.contract_call {
+            return contract_call.call_type.validate();
         }
 
         None
@@ -182,15 +192,15 @@ mod test {
     use crate::asset_contract::SimpleAsset;
     use crate::transaction::asset_contract::AssetContract;
     use crate::transaction::message::ContractType;
-    use crate::transaction::message::TxType;
     use crate::U128;
 
-    use super::OpReturnMessage;
+    use super::{ContractCreation, OpReturnMessage};
 
     #[test]
     pub fn parse_op_return_message_success() {
         let dummy_message = OpReturnMessage {
-            tx_type: TxType::ContractCreation {
+            transfer: None,
+            contract_creation: Some(ContractCreation {
                 contract_type: ContractType::Asset(AssetContract {
                     asset: SimpleAsset {
                         supply_cap: Some(U128(1000)),
@@ -206,7 +216,8 @@ mod test {
                         purchase: None,
                     },
                 }),
-            },
+            }),
+            contract_call: None,
         };
 
         let tx = Transaction {
@@ -221,9 +232,8 @@ mod test {
 
         let parsed = OpReturnMessage::parse_tx(&tx);
 
-        match parsed.unwrap().tx_type {
-            TxType::Transfer(_) => panic!("not transfer"),
-            TxType::ContractCreation { contract_type } => match contract_type {
+        if let Some(contract_creation) = parsed.unwrap().contract_creation {
+            match contract_creation.contract_type {
                 ContractType::Asset(asset_contract) => {
                     let free_mint = asset_contract.distribution_schemes.free_mint.unwrap();
                     assert_eq!(asset_contract.asset.supply_cap, Some(U128(1000)));
@@ -232,11 +242,7 @@ mod test {
                     assert_eq!(free_mint.supply_cap, Some(U128(1000)));
                     assert_eq!(free_mint.amount_per_mint, U128(10));
                 }
-            },
-            TxType::ContractCall {
-                contract: _,
-                call_type: _,
-            } => panic!("not contract call"),
+            }
         }
     }
 

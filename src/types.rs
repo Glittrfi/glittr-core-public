@@ -12,6 +12,7 @@ pub type Ratio = (u64, u64);
 pub type BlockTxTuple = (u64, u32);
 pub type BlockHeight = u64;
 pub type BitcoinAddress = String;
+pub type BlockTxString = String;
 pub type Pubkey = Vec<u8>;
 
 /// negative indicates relative block height, delta from mined contract's block height
@@ -37,7 +38,7 @@ impl BlockTx {
 
     pub fn to_str(&self) -> String {
         format!("{}:{}", self.block, self.tx)
-    }
+   }
 
     // TODO: handle error
     pub fn from_str(s: &str) -> Self {

@@ -20,8 +20,8 @@ use glittr::{
         INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX,
     },
     message::{
-        CallType, ContractType, MintOption, OpReturnMessage, OracleMessage, OracleMessageSigned,
-        TxType, TxTypeTransfer,
+        CallType, ContractCall, ContractCreation, ContractType, MintOption, OpReturnMessage,
+        OracleMessage, OracleMessageSigned, Transfer, TxTypeTransfer,
     },
     AssetContractData, AssetList, BlockTx, Flaw, Indexer, MessageDataOutcome, Outpoint, Pubkey,
     U128,
@@ -233,7 +233,7 @@ async fn test_integration_broadcast_op_return_message_success() {
     let mut ctx = TestContext::new().await;
 
     let message = OpReturnMessage {
-        tx_type: TxType::ContractCreation {
+        contract_creation: Some(ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
                 asset: SimpleAsset {
                     supply_cap: Some(U128(1000)),
@@ -249,7 +249,9 @@ async fn test_integration_broadcast_op_return_message_success() {
                     purchase: None,
                 },
             }),
-        },
+        }),
+        transfer: None,
+        contract_call: None,
     };
     println!("{}", message);
 
@@ -265,10 +267,10 @@ async fn test_integration_purchaseburnswap() {
     let mut ctx = TestContext::new().await;
 
     let message = OpReturnMessage {
-        tx_type: TxType::ContractCreation {
+        contract_creation: Some(ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
                 asset: SimpleAsset {
-                    supply_cap: None,
+                    supply_cap: Some(U128(1000)),
                     divisibility: 18,
                     live_time: 0,
                 },
@@ -282,7 +284,9 @@ async fn test_integration_purchaseburnswap() {
                     free_mint: None,
                 },
             }),
-        },
+        }),
+        transfer: None,
+        contract_call: None,
     };
 
     let block_tx = ctx.build_and_mine_message(&message).await;
@@ -298,7 +302,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
     let mut ctx = TestContext::new().await;
 
     let contract_message = OpReturnMessage {
-        tx_type: TxType::ContractCreation {
+        contract_creation: Some(ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
                 asset: SimpleAsset {
                     supply_cap: None,
@@ -315,7 +319,9 @@ async fn test_raw_btc_to_glittr_asset_burn() {
                     free_mint: None,
                 },
             }),
-        },
+        }),
+        transfer: None,
+        contract_call: None,
     };
 
     let contract_id = ctx.build_and_mine_message(&contract_message).await;
@@ -323,13 +329,15 @@ async fn test_raw_btc_to_glittr_asset_burn() {
     let (minter_address, _) = get_bitcoin_address();
 
     let mint_message = OpReturnMessage {
-        tx_type: TxType::ContractCall {
+        contract_call: Some(ContractCall {
             contract: contract_id.to_tuple(),
             call_type: CallType::Mint(MintOption {
-                pointer: 0,
+                pointer: 1,
                 oracle_message: None,
             }),
-        },
+        }),
+        transfer: None,
+        contract_creation: None,
     };
 
     // prepare btc
@@ -421,7 +429,7 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
 
     let (contract_treasury, _) = get_bitcoin_address();
     let contract_message = OpReturnMessage {
-        tx_type: TxType::ContractCreation {
+        contract_creation: Some(ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
                 asset: SimpleAsset {
                     supply_cap: Some(U128(21_000_000 * 10u128.pow(8))),
@@ -438,19 +446,23 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
                     free_mint: None,
                 },
             }),
-        },
+        }),
+        transfer: None,
+        contract_call: None,
     };
 
     let contract_id = ctx.build_and_mine_message(&contract_message).await;
 
     let mint_message = OpReturnMessage {
-        tx_type: TxType::ContractCall {
+        contract_call: Some(ContractCall {
             contract: contract_id.to_tuple(),
             call_type: CallType::Mint(MintOption {
-                pointer: 0,
+                pointer: 1,
                 oracle_message: None,
             }),
-        },
+        }),
+        transfer: None,
+        contract_creation: None,
     };
 
     // prepare btc
@@ -512,7 +524,7 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
                 "asset_list",
                 Outpoint {
                     txid: tx.compute_txid().to_string(),
-                    vout: 0
+                    vout: 1
                 }
                 .to_string()
             )
@@ -530,7 +542,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
     let oracle_keypair = Keypair::new(&secp, &mut rand::thread_rng());
     let oracle_xonly = XOnlyPublicKey::from_keypair(&oracle_keypair);
     let contract_message = OpReturnMessage {
-        tx_type: TxType::ContractCreation {
+        contract_creation: Some(ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
                 asset: SimpleAsset {
                     supply_cap: None,
@@ -553,7 +565,9 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
                     free_mint: None,
                 },
             }),
-        },
+        }),
+        transfer: None,
+        contract_call: None,
     };
 
     let contract_id = ctx.build_and_mine_message(&contract_message).await;
@@ -591,7 +605,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
     let signature = secp.sign_schnorr(&msg, &oracle_keypair);
 
     let mint_message = OpReturnMessage {
-        tx_type: TxType::ContractCall {
+        contract_call: Some(ContractCall {
             contract: contract_id.to_tuple(),
             call_type: CallType::Mint(MintOption {
                 pointer: 1,
@@ -600,8 +614,11 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
                     message: oracle_message.clone(),
                 }),
             }),
-        },
+        }),
+        transfer: None,
+        contract_creation: None,
     };
+
     ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
         inputs: &[((height - 1) as usize, 0, 0, Witness::new())],
@@ -696,7 +713,7 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
 
     let (treasury_address, _) = get_bitcoin_address();
     let contract_message = OpReturnMessage {
-        tx_type: TxType::ContractCreation {
+        contract_creation: Some(ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
                 asset: SimpleAsset {
                     supply_cap: Some(U128(21_000_000 * 10u128.pow(8))),
@@ -719,7 +736,9 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
                     free_mint: None,
                 },
             }),
-        },
+        }),
+        contract_call: None,
+        transfer: None,
     };
 
     let contract_id = ctx.build_and_mine_message(&contract_message).await;
@@ -754,7 +773,7 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
     let signature = secp.sign_schnorr(&msg, &oracle_keypair);
 
     let mint_message = OpReturnMessage {
-        tx_type: TxType::ContractCall {
+        contract_call: Some(ContractCall {
             contract: contract_id.to_tuple(),
             call_type: CallType::Mint(MintOption {
                 pointer: 1,
@@ -763,7 +782,9 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
                     message: oracle_message.clone(),
                 }),
             }),
-        },
+        }),
+        contract_creation: None,
+        transfer: None,
     };
     ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
@@ -833,7 +854,7 @@ async fn test_metaprotocol_to_glittr_asset() {
     let oracle_keypair = Keypair::new(&secp, &mut rand::thread_rng());
     let oracle_xonly = XOnlyPublicKey::from_keypair(&oracle_keypair);
     let contract_message = OpReturnMessage {
-        tx_type: TxType::ContractCreation {
+        contract_creation: Some(ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
                 asset: SimpleAsset {
                     supply_cap: None,
@@ -856,7 +877,9 @@ async fn test_metaprotocol_to_glittr_asset() {
                     free_mint: None,
                 },
             }),
-        },
+        }),
+        transfer: None,
+        contract_call: None,
     };
 
     let contract_id = ctx.build_and_mine_message(&contract_message).await;
@@ -894,7 +917,7 @@ async fn test_metaprotocol_to_glittr_asset() {
     let signature = secp.sign_schnorr(&msg, &oracle_keypair);
 
     let mint_message = OpReturnMessage {
-        tx_type: TxType::ContractCall {
+        contract_call: Some(ContractCall {
             contract: contract_id.to_tuple(),
             call_type: CallType::Mint(MintOption {
                 pointer: 1,
@@ -903,7 +926,9 @@ async fn test_metaprotocol_to_glittr_asset() {
                     message: oracle_message.clone(),
                 }),
             }),
-        },
+        }),
+        transfer: None,
+        contract_creation: None,
     };
     ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
@@ -970,7 +995,7 @@ async fn test_integration_freemint() {
     let mut ctx = TestContext::new().await;
 
     let message = OpReturnMessage {
-        tx_type: TxType::ContractCreation {
+        contract_creation: Some(ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
                 asset: SimpleAsset {
                     supply_cap: Some(U128(1000)),
@@ -986,7 +1011,9 @@ async fn test_integration_freemint() {
                     purchase: None,
                 },
             }),
-        },
+        }),
+        transfer: None,
+        contract_call: None,
     };
 
     let block_tx = ctx.build_and_mine_message(&message).await;
@@ -1005,7 +1032,7 @@ async fn test_integration_preallocated() {
 async fn test_integration_mint_freemint() {
     let mut ctx = TestContext::new().await;
     let message = OpReturnMessage {
-        tx_type: TxType::ContractCreation {
+        contract_creation: Some(ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
                 asset: SimpleAsset {
                     supply_cap: Some(U128(1000)),
@@ -1021,7 +1048,9 @@ async fn test_integration_mint_freemint() {
                     purchase: None,
                 },
             }),
-        },
+        }),
+        transfer: None,
+        contract_call: None,
     };
 
     let block_tx_contract = ctx.build_and_mine_message(&message).await;
@@ -1030,13 +1059,15 @@ async fn test_integration_mint_freemint() {
 
     for _ in 0..total_mints {
         let message = OpReturnMessage {
-            tx_type: TxType::ContractCall {
+            contract_call: Some(ContractCall {
                 contract: block_tx_contract.to_tuple(),
                 call_type: CallType::Mint(MintOption {
                     pointer: 1,
                     oracle_message: None,
                 }),
-            },
+            }),
+            transfer: None,
+            contract_creation: None,
         };
         ctx.build_and_mine_message(&message).await;
     }
@@ -1075,7 +1106,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
     let mut ctx = TestContext::new().await;
 
     let message = OpReturnMessage {
-        tx_type: TxType::ContractCreation {
+        contract_creation: Some(ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
                 asset: SimpleAsset {
                     supply_cap: Some(U128(50)),
@@ -1091,33 +1122,39 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
                     purchase: None,
                 },
             }),
-        },
+        }),
+        transfer: None,
+        contract_call: None,
     };
 
     let block_tx_contract = ctx.build_and_mine_message(&message).await;
 
     // first mint
     let message = OpReturnMessage {
-        tx_type: TxType::ContractCall {
+        contract_call: Some(ContractCall {
             contract: block_tx_contract.to_tuple(),
             call_type: CallType::Mint(MintOption {
                 pointer: 1,
                 oracle_message: None,
             }),
-        },
+        }),
+        contract_creation: None,
+        transfer: None,
     };
     ctx.build_and_mine_message(&message).await;
 
     // second mint should be execeeded the supply cap
     // and the total minted should be still 1
     let message = OpReturnMessage {
-        tx_type: TxType::ContractCall {
+        contract_call: Some(ContractCall {
             contract: block_tx_contract.to_tuple(),
             call_type: CallType::Mint(MintOption {
                 pointer: 0,
                 oracle_message: None,
             }),
-        },
+        }),
+        contract_creation: None,
+        transfer: None,
     };
     let overflow_block_tx = ctx.build_and_mine_message(&message).await;
 
@@ -1143,7 +1180,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
     let mut ctx = TestContext::new().await;
 
     let message = OpReturnMessage {
-        tx_type: TxType::ContractCreation {
+        contract_creation: Some(ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
                 asset: SimpleAsset {
                     supply_cap: Some(U128(1000)),
@@ -1159,32 +1196,38 @@ async fn test_integration_mint_freemint_livetime_notreached() {
                     purchase: None,
                 },
             }),
-        },
+        }),
+        transfer: None,
+        contract_call: None,
     };
 
     let block_tx_contract = ctx.build_and_mine_message(&message).await;
 
     // first mint not reach the live time
     let message = OpReturnMessage {
-        tx_type: TxType::ContractCall {
+        contract_call: Some(ContractCall {
             contract: block_tx_contract.to_tuple(),
             call_type: CallType::Mint(MintOption {
                 pointer: 1,
                 oracle_message: None,
             }),
-        },
+        }),
+        transfer: None,
+        contract_creation: None,
     };
     let notreached_block_tx = ctx.build_and_mine_message(&message).await;
     println!("Not reached livetime block tx: {:?}", notreached_block_tx);
 
     let message = OpReturnMessage {
-        tx_type: TxType::ContractCall {
+        contract_call: Some(ContractCall {
             contract: block_tx_contract.to_tuple(),
             call_type: CallType::Mint(MintOption {
                 pointer: 1,
                 oracle_message: None,
             }),
-        },
+        }),
+        transfer: None,
+        contract_creation: None,
     };
     ctx.build_and_mine_message(&message).await;
 
@@ -1257,7 +1300,7 @@ async fn test_integration_mint_preallocated_freemint() {
         VestingPlan::Scheduled(vec![((1, 4), -4), ((1, 4), -2), ((1, 4), -3), ((1, 4), -1)]);
 
     let message = OpReturnMessage {
-        tx_type: TxType::ContractCreation {
+        contract_creation: Some(ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
                 asset: SimpleAsset {
                     supply_cap: Some(U128(1000)),
@@ -1277,20 +1320,24 @@ async fn test_integration_mint_preallocated_freemint() {
                     purchase: None,
                 },
             }),
-        },
+        }),
+        transfer: None,
+        contract_call: None
     };
 
     let block_tx_contract = ctx.build_and_mine_message(&message).await;
 
 
     let mint_message = OpReturnMessage {
-        tx_type: TxType::ContractCall {
+        contract_call: Some(ContractCall {
             contract: block_tx_contract.to_tuple(),
             call_type: CallType::Mint(MintOption {
                 pointer: 1,
                 oracle_message: None,
             }),
-        },
+        }),
+        transfer: None,
+        contract_creation: None
     };
     // give vestee money and mint
     let height = ctx.core.height();
@@ -1364,7 +1411,7 @@ async fn test_integration_mint_freemint_invalidpointer() {
     let mut ctx = TestContext::new().await;
 
     let message = OpReturnMessage {
-        tx_type: TxType::ContractCreation {
+        contract_creation: Some(ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
                 asset: SimpleAsset {
                     supply_cap: Some(U128(1000)),
@@ -1380,26 +1427,32 @@ async fn test_integration_mint_freemint_invalidpointer() {
                     purchase: None,
                 },
             }),
-        },
+        }),
+        contract_call: None,
+        transfer: None,
     };
 
     let block_tx_contract = ctx.build_and_mine_message(&message).await;
 
     // set pointer to index 0 (op_return output), it should be error
     let message = OpReturnMessage {
-        tx_type: TxType::ContractCall {
+        contract_call: Some(ContractCall {
             contract: block_tx_contract.to_tuple(),
             call_type: CallType::Mint(MintOption {
                 pointer: 0,
                 oracle_message: None,
             }),
-        },
+        }),
+        transfer: None,
+        contract_creation: None,
     };
     let invalid_pointer_block_tx = ctx.build_and_mine_message(&message).await;
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
 
-    let outcome = ctx.get_and_verify_message_outcome(invalid_pointer_block_tx).await;
+    let outcome = ctx
+        .get_and_verify_message_outcome(invalid_pointer_block_tx)
+        .await;
     assert_eq!(outcome.flaw.unwrap(), Flaw::InvalidPointer);
 
     ctx.drop().await;
@@ -1410,7 +1463,7 @@ async fn test_integration_transfer_normal() {
     let mut ctx = TestContext::new().await;
 
     let message = OpReturnMessage {
-        tx_type: TxType::ContractCreation {
+        contract_creation: Some(ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
                 asset: SimpleAsset {
                     supply_cap: Some(U128(100_000)),
@@ -1426,24 +1479,27 @@ async fn test_integration_transfer_normal() {
                     purchase: None,
                 },
             }),
-        },
+        }),
+        transfer: None,
+        contract_call: None,
     };
     let block_tx_contract = ctx.build_and_mine_message(&message).await;
 
     let message = OpReturnMessage {
-        tx_type: TxType::ContractCall {
+        contract_call: Some(ContractCall {
             contract: block_tx_contract.to_tuple(),
             call_type: CallType::Mint(MintOption {
                 pointer: 1,
                 oracle_message: None,
             }),
-        },
+        }),
+        contract_creation: None,
+        transfer: None,
     };
     let mint_block_tx = ctx.build_and_mine_message(&message).await;
-
     let message = OpReturnMessage {
-        tx_type: TxType::Transfer(
-            [
+        transfer: Some(Transfer {
+            transfers: [
                 TxTypeTransfer {
                     asset: block_tx_contract.to_tuple(),
                     output: 1,
@@ -1466,7 +1522,9 @@ async fn test_integration_transfer_normal() {
                 },
             ]
             .to_vec(),
-        ),
+        }),
+        contract_call: None,
+        contract_creation: None,
     };
 
     // outputs have 4 outputs
@@ -1540,7 +1598,7 @@ async fn test_integration_transfer_overflow_output() {
     let mut ctx = TestContext::new().await;
 
     let message = OpReturnMessage {
-        tx_type: TxType::ContractCreation {
+        contract_creation: Some(ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
                 asset: SimpleAsset {
                     supply_cap: Some(U128(100_000)),
@@ -1556,24 +1614,28 @@ async fn test_integration_transfer_overflow_output() {
                     purchase: None,
                 },
             }),
-        },
+        }),
+        transfer: None,
+        contract_call: None,
     };
     let block_tx_contract = ctx.build_and_mine_message(&message).await;
 
     let message = OpReturnMessage {
-        tx_type: TxType::ContractCall {
+        contract_call: Some(ContractCall {
             contract: block_tx_contract.to_tuple(),
             call_type: CallType::Mint(MintOption {
                 pointer: 1,
                 oracle_message: None,
             }),
-        },
+        }),
+        transfer: None,
+        contract_creation: None,
     };
     let mint_block_tx = ctx.build_and_mine_message(&message).await;
 
     let message = OpReturnMessage {
-        tx_type: TxType::Transfer(
-            [
+        transfer: Some(Transfer {
+            transfers: [
                 TxTypeTransfer {
                     asset: block_tx_contract.to_tuple(),
                     output: 1,
@@ -1581,12 +1643,14 @@ async fn test_integration_transfer_overflow_output() {
                 },
                 TxTypeTransfer {
                     asset: block_tx_contract.to_tuple(),
-                    output: 2, // will overflow the output
+                    output: 2,
                     amount: U128(2_000),
                 },
             ]
             .to_vec(),
-        ),
+        }),
+        contract_call: None,
+        contract_creation: None,
     };
 
     // outputs have 2 outputs
@@ -1650,7 +1714,7 @@ async fn test_integration_transfer_utxo() {
     let mut ctx = TestContext::new().await;
 
     let message = OpReturnMessage {
-        tx_type: TxType::ContractCreation {
+        contract_creation: Some(ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
                 asset: SimpleAsset {
                     supply_cap: Some(U128(100_000)),
@@ -1666,15 +1730,22 @@ async fn test_integration_transfer_utxo() {
                     purchase: None,
                 },
             }),
-        },
+        }),
+        contract_call: None,
+        transfer: None,
     };
     let block_tx_contract = ctx.build_and_mine_message(&message).await;
 
     let message = OpReturnMessage {
-        tx_type: TxType::ContractCall {
+        contract_call: Some(ContractCall {
             contract: block_tx_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption {pointer:1, oracle_message: None}),
-        },
+            call_type: CallType::Mint(MintOption {
+                pointer: 1,
+                oracle_message: None,
+            }),
+        }),
+        contract_creation: None,
+        transfer: None,
     };
     let mint_block_tx = ctx.build_and_mine_message(&message).await;
 
@@ -1718,6 +1789,143 @@ async fn test_integration_transfer_utxo() {
         },
         20_000,
     );
+
+    ctx.drop().await;
+}
+
+#[tokio::test]
+async fn test_integration_glittr_asset_mint_purchase() {
+    let mut ctx = TestContext::new().await;
+
+    // Create first contract with free mint
+    let message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            contract_type: ContractType::Asset(AssetContract {
+                asset: SimpleAsset {
+                    supply_cap: Some(U128(1000)),
+                    divisibility: 18,
+                    live_time: 0,
+                },
+                distribution_schemes: DistributionSchemes {
+                    free_mint: Some(FreeMint {
+                        supply_cap: Some(U128(1000)),
+                        amount_per_mint: U128(100),
+                    }),
+                    preallocated: None,
+                    purchase: None,
+                },
+            }),
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let first_contract = ctx.build_and_mine_message(&message).await;
+
+    // Mint first contract
+    let mint_message = OpReturnMessage {
+        contract_call: Some(ContractCall {
+            contract: first_contract.to_tuple(),
+            call_type: CallType::Mint(MintOption {
+                pointer: 1,
+                oracle_message: None,
+            }),
+        }),
+        contract_creation: None,
+        transfer: None,
+    };
+
+    let first_mint_tx = ctx.build_and_mine_message(&mint_message).await;
+
+    // Create second contract that uses first as input asset
+    let (treasury_address, _) = get_bitcoin_address();
+    let second_message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            contract_type: ContractType::Asset(AssetContract {
+                asset: SimpleAsset {
+                    supply_cap: Some(U128(500)),
+                    divisibility: 18,
+                    live_time: 0,
+                },
+                distribution_schemes: DistributionSchemes {
+                    purchase: Some(PurchaseBurnSwap {
+                        input_asset: InputAsset::GlittrAsset(first_contract.to_tuple()),
+                        transfer_scheme: TransferScheme::Purchase(treasury_address.to_string()),
+                        transfer_ratio_type: TransferRatioType::Fixed { ratio: (2, 1) },
+                    }),
+                    preallocated: None,
+                    free_mint: None,
+                },
+            }),
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let second_contract = ctx.build_and_mine_message(&second_message).await;
+
+    // Mint second contract using first contract as input
+    let second_mint_message = OpReturnMessage {
+        contract_call: Some(ContractCall {
+            contract: second_contract.to_tuple(),
+            call_type: CallType::Mint(MintOption {
+                pointer: 1,
+                oracle_message: None,
+            }),
+        }),
+        transfer: Some(Transfer {
+            transfers: [TxTypeTransfer {
+                asset: first_contract.to_tuple(),
+                output: 1,
+                amount: U128(100),
+            }]
+            .to_vec(),
+        }),
+        contract_creation: None,
+    };
+
+    ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[
+            (first_mint_tx.block as usize, 1, 1, Witness::new()), // UTXO contain assets
+            (first_mint_tx.block as usize, 0, 0, Witness::new()),
+        ],
+        op_return: Some(second_mint_message.into_script()),
+        op_return_index: Some(0),
+        op_return_value: Some(0),
+        output_values: &[1000, 1000, 1000],
+        outputs: 3,
+        p2tr: false,
+        recipient: Some(treasury_address)
+    });
+
+    ctx.core.mine_blocks(1);
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    // Verify outcomes
+    let first_outcome = ctx.get_and_verify_message_outcome(first_contract).await;
+    assert!(first_outcome.flaw.is_none());
+
+    let first_mint_outcome = ctx.get_and_verify_message_outcome(first_mint_tx).await;
+    assert!(first_mint_outcome.flaw.is_none());
+
+    let second_outcome = ctx.get_and_verify_message_outcome(second_contract).await;
+    assert!(second_outcome.flaw.is_none());
+
+    let asset_list: Result<Vec<(String, AssetList)>, DatabaseError> = ctx
+        .indexer
+        .lock()
+        .await
+        .database
+        .lock()
+        .await
+        .expensive_find_by_prefix(ASSET_LIST_PREFIX);
+    let asset_lists = asset_list.expect("asset list should exist");
+
+    for (k, v) in &asset_lists {
+        println!("Mint output: {}: {:?}", k, v);
+    }
 
     ctx.drop().await;
 }

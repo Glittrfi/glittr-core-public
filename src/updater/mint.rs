@@ -77,27 +77,20 @@ impl Updater {
         mint_option: MintOption,
     ) -> Option<Flaw> {
         // TODO: All glittr asset transfer logic here is temporary, MUST change when we have transfer logic implemented
-        let mut total_in_value_glittr_asset: u128 = 0;
+        let mut total_unallocated_glittr_asset: u128 = 0;
         let mut total_received_value: u128 = 0;
 
         let out_value: u128;
-        let mut vout: Option<u32> = None;
 
         // VALIDATE INPUT
         match purchase.input_asset {
             InputAsset::GlittrAsset(asset_contract_id) => {
-                for txin in tx.input.iter() {
-                    if let Ok(asset_list) = self
-                        .get_asset_list(&Outpoint {
-                            txid: txin.previous_output.txid.to_string(),
-                            vout: txin.previous_output.vout,
-                        })
-                        .await
-                    {
-                        let block_tx = BlockTx::from_tuple(asset_contract_id);
-                        let amount = asset_list.list.get(&block_tx.to_str()).unwrap_or(&0);
-                        total_in_value_glittr_asset += *amount;
-                    }
+                if let Some(amount) = self
+                    .unallocated_asset_list
+                    .list
+                    .get(&BlockTx::from_tuple(asset_contract_id).to_str())
+                {
+                    total_unallocated_glittr_asset = *amount;
                 }
             }
             // No need to validate RawBtc
@@ -109,38 +102,24 @@ impl Updater {
         // VALIDATE OUTPUT
         match &purchase.transfer_scheme {
             // Ensure that the asset is set to burn
-            asset_contract::TransferScheme::Burn => {
-                for (pos, output) in tx.output.iter().enumerate() {
-                    let mut instructions = output.script_pubkey.instructions();
+            asset_contract::TransferScheme::Burn => match &purchase.input_asset {
+                InputAsset::RawBTC => {
+                    for output in tx.output.iter() {
+                        let mut instructions = output.script_pubkey.instructions();
 
-                    if instructions.next() == Some(Ok(Instruction::Op(opcodes::all::OP_RETURN))) {
-                        match purchase.input_asset {
-                            InputAsset::RawBTC => {
-                                total_received_value = output.value.to_sat() as u128;
-                            }
-                            InputAsset::GlittrAsset(..) => {
-                                // TODO(transfer): simulate transfer function, check if assets are sent here
-                                // for now assume transfering glittr asset success
-                                total_received_value = total_in_value_glittr_asset;
-                            }
-                            InputAsset::Metaprotocol => {
-                                // TODO(transfer): handle transfer for each and every metaprotocol (ordinal, runes)
-                                // need to copy the transfer mechanics for each, make sure the sat is burned
-                            }
+                        if instructions.next() == Some(Ok(Instruction::Op(opcodes::all::OP_RETURN)))
+                        {
+                            total_received_value = output.value.to_sat() as u128;
                         }
-
-                        if mint_option.pointer != pos as u32 {
-                            // NOTE: all asset always went to the first non-op-return txout if the pointer is invalid (for burn)
-                            vout = Some(mint_option.pointer);
-                            break;
-                        }
-                    } else if vout.is_none() {
-                        vout = Some(pos as u32);
                     }
                 }
-            }
-            asset_contract::TransferScheme::Purchase(bitcoin_address) => {
-                for output in tx.output.iter() {
+                InputAsset::GlittrAsset(_) => {
+                    total_received_value = total_unallocated_glittr_asset;
+                }
+                InputAsset::Metaprotocol => {}
+            },
+            asset_contract::TransferScheme::Purchase(ref bitcoin_address) => {
+                for (pos, output) in tx.output.iter().enumerate() {
                     let address = Address::from_str(bitcoin_address.as_str())
                         .unwrap()
                         .assume_checked();
@@ -156,10 +135,17 @@ impl Updater {
                                 InputAsset::RawBTC => {
                                     total_received_value = output.value.to_sat() as u128;
                                 }
-                                InputAsset::GlittrAsset(..) => {
-                                    // TODO(transfer): simulate transfer function, check if assets are sent here
-                                    // for now assume transfering glittr asset success
-                                    total_received_value = total_in_value_glittr_asset;
+                                InputAsset::GlittrAsset(asset_contract_id) => {
+                                    if let Some(asset_list) =
+                                        self.allocated_asset_list.get(&(pos as u32))
+                                    {
+                                        if let Some(amount) = asset_list
+                                            .list
+                                            .get(&BlockTx::from_tuple(asset_contract_id).to_str())
+                                        {
+                                            total_received_value = *amount;
+                                        }
+                                    }
                                 }
                                 InputAsset::Metaprotocol => {
                                     // TODO(transfer): handle transfer for each and every metaprotocol (ordinal, runes)
@@ -169,7 +155,6 @@ impl Updater {
                         }
                     }
                 }
-                vout = Some(mint_option.pointer);
             }
         }
 
@@ -239,8 +224,39 @@ impl Updater {
             }
         }
 
-        if vout.unwrap() > tx.output.len() as u32 {
+        // check pointer overflow
+        if mint_option.pointer >= tx.output.len() as u32 {
             return Some(Flaw::PointerOverflow);
+        }
+        // check invalid pointer if the target index is op_return output
+        if self.is_op_return_index(&tx.output[mint_option.pointer as usize]) {
+            return Some(Flaw::InvalidPointer);
+        }
+
+        if out_value == 0 {
+            return Some(Flaw::MintedZero);
+        }
+
+        // If transfer is burn and using glittr asset input, remove it from unallocated and add burned
+        if let asset_contract::TransferScheme::Burn = &purchase.transfer_scheme {
+            if let InputAsset::GlittrAsset(asset_contract_id) = purchase.input_asset {
+                let burned_amount = self
+                    .unallocated_asset_list
+                    .list
+                    .remove(&BlockTx::from_tuple(asset_contract_id).to_str())
+                    .unwrap_or(0);
+
+                let mut asset_contract_data_input =
+                    match self.get_asset_contract_data(&asset_contract_id).await {
+                        Ok(data) => data,
+                        Err(flaw) => return Some(flaw),
+                    };
+
+                asset_contract_data_input.burned_supply = asset_contract_data_input
+                    .burned_supply
+                    .saturating_add(burned_amount);
+                self.set_asset_contract_data(&asset_contract_id, &asset_contract_data_input).await;
+            }
         }
 
         if let Some(supply_cap) = &asset_contract.asset.supply_cap {
@@ -259,13 +275,14 @@ impl Updater {
             asset_contract_data.minted_supply =
                 asset_contract_data.minted_supply.saturating_add(out_value);
 
+            
             self.set_asset_contract_data(contract_id, &asset_contract_data)
                 .await;
         }
 
         // set the outpoint
 
-        self.allocate_new_asset(vout.unwrap(), contract_id, out_value)
+        self.allocate_new_asset(mint_option.pointer, contract_id, out_value)
             .await;
 
         None
@@ -411,8 +428,8 @@ impl Updater {
     ) -> Option<Flaw> {
         let message = self.get_message(contract_id).await;
         match message {
-            Ok(op_return_message) => match op_return_message.tx_type {
-                TxType::ContractCreation { contract_type } => match contract_type {
+            Ok(op_return_message) => match op_return_message.contract_creation {
+                Some(contract_creation) => match contract_creation.contract_type {
                     message::ContractType::Asset(asset_contract) => {
                         let result_preallocated = if let Some(preallocated) =
                             &asset_contract.distribution_schemes.preallocated
@@ -480,7 +497,7 @@ impl Updater {
                         }
                     }
                 },
-                _ => Some(Flaw::ContractNotMatch),
+                None => Some(Flaw::ContractNotMatch),
             },
             Err(flaw) => Some(flaw),
         }

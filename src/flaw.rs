@@ -31,6 +31,7 @@ pub enum Flaw {
     OracleMintBelowMinValue,
     OracleMintSignatureFailed,
     OracleMintBlockSlippageExceeded,
+    MintedZero,
     VestingBlockNotReached,
     VesteeNotFound,
 
