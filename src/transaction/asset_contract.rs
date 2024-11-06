@@ -42,17 +42,22 @@ impl Preallocated {
             }
 
             if total_allocations < supply_cap.0 {
-                let remainder = supply_cap.0 - total_allocations;
+                let mut remainder = supply_cap.0 - total_allocations;
                 if let Some(free_mint) = &asset_contract.distribution_schemes.free_mint {
                     if let Some(free_mint_supply_cap) = &free_mint.supply_cap {
                         if free_mint_supply_cap.0 > remainder {
                             return Some(Flaw::SupplyCapInvalid);
                         }
+                        remainder = remainder.saturating_sub(free_mint_supply_cap.0);
                     } else {
                         return Some(Flaw::SupplyCapInvalid);
                     }
                 } else {
-                    return Some(Flaw::PreallocatedSupplyRemainderWithoutFreeMint);
+                    return Some(Flaw::SupplyRemainder);
+                }
+
+                if remainder > 0 {
+                    return Some(Flaw::SupplyRemainder);
                 }
             }
         } else {
