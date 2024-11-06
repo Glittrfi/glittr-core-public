@@ -2,7 +2,7 @@ mod mint;
 
 use std::collections::HashMap;
 
-use asset_contract::{AssetContract, InputAsset, PurchaseBurnSwap};
+use asset_contract::{AssetContract, InputAsset, PurchaseBurnSwap, VestingPlan};
 use bitcoin::{
     hashes::{sha256, Hash},
     key::Secp256k1,
@@ -13,7 +13,7 @@ use bitcoin::{
 };
 use database::{
     DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, MESSAGE_PREFIX,
-    TRANSACTION_TO_BLOCK_TX_PREFIX,
+    TRANSACTION_TO_BLOCK_TX_PREFIX, VESTING_CONTRACT_DATA_PREFIX,
 };
 use flaw::Flaw;
 use message::{CallType, ContractType, OpReturnMessage, TxTypeTransfer};
@@ -42,6 +42,12 @@ pub struct MessageDataOutcome {
 pub struct PBSMintResult {
     pub out_value: u128,
     pub txout: u32,
+}
+
+#[derive(Deserialize, Serialize, Clone, Default, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct VestingContractData {
+    pub claimed_allocations: HashMap<String, u128>,
 }
 
 pub struct Updater {
@@ -257,6 +263,12 @@ impl Updater {
         }
 
         if !self.is_read_only {
+            log::info!(
+                "# Outcome {:?}, {:?} at {}",
+                outcome.flaw,
+                outcome.message,
+                block_tx
+            );
             self.database.lock().await.put(
                 MESSAGE_PREFIX,
                 block_tx.to_string().as_str(),
@@ -378,6 +390,39 @@ impl Updater {
                 ASSET_CONTRACT_DATA_PREFIX,
                 &contract_key,
                 asset_contract_data,
+            );
+        }
+    }
+
+    pub async fn get_vesting_contract_data(
+        &self,
+        contract_id: &BlockTxTuple,
+    ) -> Result<VestingContractData, Flaw> {
+        let contract_key = BlockTx::from_tuple(*contract_id).to_string();
+        let data: Result<VestingContractData, DatabaseError> = self
+            .database
+            .lock()
+            .await
+            .get(VESTING_CONTRACT_DATA_PREFIX, &contract_key);
+
+        match data {
+            Ok(data) => Ok(data),
+            Err(DatabaseError::NotFound) => Ok(VestingContractData::default()),
+            Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
+        }
+    }
+
+    async fn set_vesting_contract_data(
+        &self,
+        contract_id: &BlockTxTuple,
+        vesting_contract_data: &VestingContractData,
+    ) {
+        if !self.is_read_only {
+            let contract_key = BlockTx::from_tuple(*contract_id).to_string();
+            self.database.lock().await.put(
+                VESTING_CONTRACT_DATA_PREFIX,
+                &contract_key,
+                vesting_contract_data,
             );
         }
     }

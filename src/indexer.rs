@@ -1,5 +1,6 @@
 use super::*;
 
+use bitcoin::{consensus::deserialize, OutPoint, Transaction};
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use constants::first_glittr_height;
 use std::{error::Error, time::Duration};
@@ -65,8 +66,7 @@ impl Indexer {
 
                 let block_hash = self.rpc.get_block_hash(block_height)?;
                 let block = self.rpc.get_block(&block_hash)?;
-
-                log::trace!("Indexing block {}: {}", block_height, block_hash);
+                log::info!("Indexing block {}: {}", block_height, block_hash);
 
                 for (pos, tx) in block.txdata.iter().enumerate() {
                     let message = OpReturnMessage::parse_tx(tx);
@@ -90,5 +90,22 @@ impl Indexer {
 
             sleep(Duration::from_secs(10)).await;
         }
+    }
+
+    // helper
+    // TODO: add separate helper file
+    pub async fn get_script_pubkey_from_outpoint(
+        &self,
+        outpoint: OutPoint,
+    ) -> Result<Vec<u8>, Box<dyn Error>> {
+        let raw_tx_hex = self.rpc.get_raw_transaction_hex(&outpoint.txid, None)?;
+        let tx: Transaction = deserialize(&hex::decode(raw_tx_hex)?)?;
+
+        let output = tx
+            .output
+            .get(outpoint.vout as usize)
+            .ok_or("Invalid vout index")?;
+
+        Ok(output.script_pubkey.to_bytes())
     }
 }

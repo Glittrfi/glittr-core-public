@@ -32,6 +32,8 @@ pub enum Flaw {
     OracleMintSignatureFailed,
     OracleMintBlockSlippageExceeded,
     MintedZero,
+    VestingBlockNotReached,
+    VesteeNotFound,
 
     // asset contract
     OverflowAmountPerMint,
@@ -39,6 +41,7 @@ pub enum Flaw {
     PubkeyInvalid,
     OracleMessageFormatInvalid,
     SupplyCapInvalid,
+    SupplyRemainder,
 
     NotImplemented,
     NonGlittrMessage,

@@ -12,8 +12,8 @@ use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
 
 use glittr::{
     asset_contract::{
-        AssetContract, DistributionSchemes, FreeMint, InputAsset, OracleSetting, PurchaseBurnSwap,
-        SimpleAsset, TransferRatioType, TransferScheme,
+        AssetContract, DistributionSchemes, FreeMint, InputAsset, OracleSetting, Preallocated,
+        PurchaseBurnSwap, SimpleAsset, TransferRatioType, TransferScheme, VestingPlan,
     },
     database::{
         Database, DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX,
@@ -23,11 +23,12 @@ use glittr::{
         CallType, ContractCall, ContractCreation, ContractType, MintOption, OpReturnMessage,
         OracleMessage, OracleMessageSigned, Transfer, TxTypeTransfer,
     },
-    AssetContractData, AssetList, BlockTx, Flaw, Indexer, MessageDataOutcome, Outpoint, U128,
+    AssetContractData, AssetList, BlockTx, Flaw, Indexer, MessageDataOutcome, Outpoint, Pubkey,
+    U128,
 };
 
 // Test utilities
-pub fn get_bitcoin_address() -> Address {
+pub fn get_bitcoin_address() -> (Address, PublicKey) {
     let secp: Secp256k1<secp256k1::All> = Secp256k1::new();
 
     let secret_key = SecretKey::new(&mut secp256k1::rand::thread_rng());
@@ -40,11 +41,14 @@ pub fn get_bitcoin_address() -> Address {
 
     // Create the corresponding public key
     let public_key = PublicKey::from_private_key(&secp, &private_key);
-    Address::from_script(
-        &ScriptBuf::new_p2wpkh(&public_key.wpubkey_hash().unwrap()),
-        bitcoin::Network::Regtest,
+    (
+        Address::from_script(
+            &ScriptBuf::new_p2wpkh(&public_key.wpubkey_hash().unwrap()),
+            bitcoin::Network::Regtest,
+        )
+        .unwrap(),
+        public_key,
     )
-    .unwrap()
 }
 
 struct TestContext {
@@ -322,7 +326,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
 
     let contract_id = ctx.build_and_mine_message(&contract_message).await;
 
-    let minter_address = get_bitcoin_address();
+    let (minter_address, _) = get_bitcoin_address();
 
     let mint_message = OpReturnMessage {
         contract_call: Some(ContractCall {
@@ -423,7 +427,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
 async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
     let mut ctx = TestContext::new().await;
 
-    let contract_treasury = get_bitcoin_address();
+    let (contract_treasury, _) = get_bitcoin_address();
     let contract_message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
@@ -568,7 +572,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
 
     let contract_id = ctx.build_and_mine_message(&contract_message).await;
 
-    let minter_address = get_bitcoin_address();
+    let (minter_address, _) = get_bitcoin_address();
 
     // prepare btc
     let bitcoin_value = 50000;
@@ -707,7 +711,7 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
     let oracle_keypair = Keypair::new(&secp, &mut rand::thread_rng());
     let oracle_xonly = XOnlyPublicKey::from_keypair(&oracle_keypair);
 
-    let treasury_address = get_bitcoin_address();
+    let (treasury_address, _) = get_bitcoin_address();
     let contract_message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
@@ -880,7 +884,7 @@ async fn test_metaprotocol_to_glittr_asset() {
 
     let contract_id = ctx.build_and_mine_message(&contract_message).await;
 
-    let minter_address = get_bitcoin_address();
+    let (minter_address, _) = get_bitcoin_address();
 
     // prepare btc
     let bitcoin_value = 50000;
@@ -1163,7 +1167,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
         );
     let data_free_mint = asset_contract_data.expect("Free mint data should exist");
 
-    assert_eq!(data_free_mint.minted_supply, 1 * 50);
+    assert_eq!(data_free_mint.minted_supply, 50);
 
     let outcome = ctx.get_and_verify_message_outcome(overflow_block_tx).await;
     assert_eq!(outcome.flaw.unwrap(), Flaw::SupplyCapExceeded);
@@ -1242,6 +1246,162 @@ async fn test_integration_mint_freemint_livetime_notreached() {
     assert_eq!(outcome.flaw.unwrap(), Flaw::LiveTimeNotReached);
 
     assert_eq!(data_free_mint.minted_supply, 50);
+
+    ctx.drop().await;
+}
+
+// Example: pre-allocation with free mint
+// {
+// TxType: Contract,
+// simpleAsset:{
+// 	supplyCap: 1000,
+// 	Divisibility: 100,
+// 	liveTime: -100,
+// },
+// Allocation:{
+// {100:pk1,pk2, pk3, pk4},
+// {300:reservePubKey},
+// {200:freeMint}
+// vestingSchedule:{
+// 		Fractions: [.25, .25, .25, .25],
+// 		Blocks: [-10000, -20000, -30000, -40000]
+// },
+// FreeMint:{
+// 		mintCap: 1,
+// },
+// },
+// }
+
+#[tokio::test]
+async fn test_integration_mint_preallocated_freemint() {
+    let mut ctx = TestContext::new().await;
+
+    let (address_1, pubkey_1) = get_bitcoin_address();
+    let (_address_2, pubkey_2) = get_bitcoin_address();
+    let (_address_3, pubkey_3) = get_bitcoin_address();
+    let (_address_4, pubkey_4) = get_bitcoin_address();
+    let (_address_reserve, pubkey_reserve) = get_bitcoin_address();
+
+    println!("pub key {:?}", pubkey_1.to_bytes());
+
+    let mut allocations: HashMap<U128, Vec<Pubkey>> = HashMap::new();
+    allocations.insert(
+        U128(100),
+        vec![
+            pubkey_1.to_bytes(),
+            pubkey_2.to_bytes(),
+            pubkey_3.to_bytes(),
+            pubkey_4.to_bytes(),
+        ],
+    );
+    allocations.insert(U128(300), vec![pubkey_reserve.to_bytes()]);
+
+    let vesting_plan =
+        VestingPlan::Scheduled(vec![((1, 4), -4), ((1, 4), -2), ((1, 4), -3), ((1, 4), -1)]);
+
+    let message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            contract_type: ContractType::Asset(AssetContract {
+                asset: SimpleAsset {
+                    supply_cap: Some(U128(1000)),
+                    divisibility: 18,
+                    live_time: 0,
+                },
+                distribution_schemes: DistributionSchemes {
+                    preallocated: Some(Preallocated {
+                        // total 400 + 300 = 700
+                        allocations,
+                        vesting_plan,
+                    }),
+                    free_mint: Some(FreeMint {
+                        supply_cap: Some(U128(300)),
+                        amount_per_mint: U128(1),
+                    }),
+                    purchase: None,
+                },
+            }),
+        }),
+        transfer: None,
+        contract_call: None
+    };
+
+    let block_tx_contract = ctx.build_and_mine_message(&message).await;
+
+
+    let mint_message = OpReturnMessage {
+        contract_call: Some(ContractCall {
+            contract: block_tx_contract.to_tuple(),
+            call_type: CallType::Mint(MintOption {
+                pointer: 1,
+                oracle_message: None,
+            }),
+        }),
+        transfer: None,
+        contract_creation: None
+    };
+    // give vestee money and mint
+    let height = ctx.core.height();
+
+    ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[((height - 1) as usize, 0, 0, Witness::new())],
+        op_return: None,
+        op_return_index: None,
+        op_return_value: None,
+        output_values: &[1000],
+        outputs: 1,
+        p2tr: false,
+        recipient: Some(address_1.clone()),
+    });
+    ctx.core.mine_blocks(1);
+
+    let mut witness = Witness::new();
+    witness.push(pubkey_1.to_bytes());
+    ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[((height+1) as usize, 1, 0, witness)],
+        op_return: Some(mint_message.into_script()),
+        op_return_index: Some(0),
+        op_return_value: Some(0),
+        output_values: &[0, 546],
+        outputs: 2,
+        p2tr: false,
+        recipient: Some(address_1)
+    });
+
+    ctx.core.mine_blocks(1);
+
+    let total_mints = 10;
+    // free mints
+    for _ in 0..total_mints {
+        ctx.build_and_mine_message(&mint_message).await;
+    }
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    let asset_contract_data: Result<AssetContractData, DatabaseError> =
+        ctx.indexer.lock().await.database.lock().await.get(
+            ASSET_CONTRACT_DATA_PREFIX,
+            block_tx_contract.to_string().as_str(),
+        );
+    let data_free_mint = asset_contract_data.expect("Free mint data should exist");
+
+    let asset_list: Result<Vec<(String, AssetList)>, DatabaseError> = ctx
+        .indexer
+        .lock()
+        .await
+        .database
+        .lock()
+        .await
+        .expensive_find_by_prefix(ASSET_LIST_PREFIX);
+    let asset_lists = asset_list.expect("asset list should exist");
+
+    for (k, v) in &asset_lists {
+        println!("Mint output: {}: {:?}", k, v);
+    }
+
+    assert_eq!(data_free_mint.minted_supply, 10 + 50);
+    assert_eq!(asset_lists.len() as u32, total_mints as u32 + 1);
 
     ctx.drop().await;
 }
@@ -1678,7 +1838,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
     let first_mint_tx = ctx.build_and_mine_message(&mint_message).await;
 
     // Create second contract that uses first as input asset
-    let treasury_address = get_bitcoin_address();
+    let (treasury_address, _) = get_bitcoin_address();
     let second_message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
             contract_type: ContractType::Asset(AssetContract {
