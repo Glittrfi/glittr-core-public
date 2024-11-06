@@ -325,10 +325,10 @@ impl Updater {
             .get(&owner_pub_key.to_hex_string(Case::Lower))
             .unwrap_or(&0);
 
-        let out_value: u128 = match &preallocated.vesting_plan {
+        let out_value: u128 = match preallocated.vesting_plan.clone() {
             VestingPlan::Timelock(block_height_relative_absolute) => {
                 let vested_block_height = relative_block_height_to_block_height(
-                    *block_height_relative_absolute,
+                    block_height_relative_absolute,
                     contract_id.0,
                 );
 
@@ -338,17 +338,25 @@ impl Updater {
 
                 total_allocation.saturating_sub(claimed_allocation)
             }
-            VestingPlan::Scheduled(vesting_schedule) => {
-                let mut vested_allocation = 0;
+            VestingPlan::Scheduled(mut vesting_schedule) => {
+                let mut vested_allocation: u128 = 0;
+
+                vesting_schedule.sort_by(|a, b| {
+                    let vested_block_height_a = relative_block_height_to_block_height(a.1, contract_id.0);
+                    let vested_block_height_b = relative_block_height_to_block_height(b.1, contract_id.0);
+
+                    vested_block_height_a.cmp(&vested_block_height_b)
+                });
 
                 for (ratio, block_height_relative_absolute) in vesting_schedule {
                     let vested_block_height = relative_block_height_to_block_height(
-                        *block_height_relative_absolute,
+                        block_height_relative_absolute,
                         contract_id.0,
                     );
 
                     if block_tx.block >= vested_block_height {
-                        vested_allocation += (total_allocation * ratio.0 as u128) / ratio.1 as u128
+                        vested_allocation = vested_allocation
+                            .saturating_add((total_allocation * ratio.0 as u128) / ratio.1 as u128);
                     }
                 }
 
@@ -376,7 +384,7 @@ impl Updater {
                 .await;
         }
 
-        claimed_allocation += out_value;
+        claimed_allocation = claimed_allocation.saturating_add(out_value);
         vesting_contract_data
             .claimed_allocations
             .insert(owner_pub_key.to_hex_string(Case::Lower), claimed_allocation);
@@ -479,12 +487,13 @@ impl Updater {
     }
 }
 
+// TODO: move to helper file
 pub fn relative_block_height_to_block_height(
     block_height_relative_absolute: RelativeOrAbsoluteBlockHeight,
     current_block_height: BlockHeight,
 ) -> BlockHeight {
     if block_height_relative_absolute < 0 {
-        current_block_height + -block_height_relative_absolute as u64
+        current_block_height.saturating_add(-block_height_relative_absolute as u64)
     } else {
         block_height_relative_absolute as u64
     }

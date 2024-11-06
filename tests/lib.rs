@@ -1254,7 +1254,7 @@ async fn test_integration_mint_preallocated_freemint() {
     allocations.insert(U128(300), vec![pubkey_reserve.to_bytes()]);
 
     let vesting_plan =
-        VestingPlan::Scheduled(vec![((1, 4), -1), ((1, 4), -2), ((1, 4), -3), ((1, 4), -4)]);
+        VestingPlan::Scheduled(vec![((1, 4), -4), ((1, 4), -2), ((1, 4), -3), ((1, 4), -1)]);
 
     let message = OpReturnMessage {
         tx_type: TxType::ContractCreation {
