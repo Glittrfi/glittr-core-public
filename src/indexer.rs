@@ -89,22 +89,19 @@ impl Indexer {
     }
 
     // helper
+    // TODO: add separate helper file
     pub async fn get_script_pubkey_from_outpoint(
         &self,
         outpoint: OutPoint,
     ) -> Result<Vec<u8>, Box<dyn Error>> {
         let raw_tx_hex = self.rpc.get_raw_transaction_hex(&outpoint.txid, None)?;
-
-        // Step 3: Deserialize the raw transaction
         let tx: Transaction = deserialize(&hex::decode(raw_tx_hex)?)?;
 
-        // Step 4: Check if the vout index exists in the outputs
         let output = tx
             .output
             .get(outpoint.vout as usize)
             .ok_or("Invalid vout index")?;
 
-        // Step 5: Return the scriptPubKey from the selected output
         Ok(output.script_pubkey.to_bytes())
     }
 }
