@@ -8,10 +8,14 @@ pub struct BlockTx {
     pub tx: u32,
 }
 
-pub type Ratio = (u128, u128);
+pub type Ratio = (u64, u64);
 pub type BlockTxTuple = (u64, u32);
 pub type BlockHeight = u64;
 pub type BitcoinAddress = String;
+pub type Pubkey = Vec<u8>;
+
+/// negative indicates relative block height, delta from mined contract's block height
+pub type RelativeOrAbsoluteBlockHeight = i64;
 
 impl fmt::Display for BlockTx {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -72,10 +76,9 @@ impl Outpoint {
     }
 }
 
-
 /// U128 is wrapped u128, represented as string when serialized
 /// This is because JSON only supports up to u32 as integer representation
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct U128(pub u128);
 
 impl Serialize for U128 {

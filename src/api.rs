@@ -59,7 +59,7 @@ async fn tx_result(
         .get(MESSAGE_PREFIX, blocktx.to_string().as_str());
 
     if let Ok(message) = message {
-        if let Some(_) = message.flaw {
+        if message.flaw.is_some() {
             Ok(Json(
                 json!({"is_valid": false, "message": message, "block_tx": blocktx.to_str()}),
             ))
@@ -96,10 +96,10 @@ async fn get_assets(
 ) -> Result<Json<Value>, StatusCode> {
     let updater = Updater::new(state.database, true).await;
     let outpoint = Outpoint { txid, vout };
-    if let Some(asset_list) = updater.get_asset_list(&outpoint).await.ok() {
+    if let Ok(asset_list) = updater.get_asset_list(&outpoint).await {
         Ok(Json(json!({"assets": asset_list})))
     } else {
-        return Err(StatusCode::NOT_FOUND);
+        Err(StatusCode::NOT_FOUND)
     }
 }
 
@@ -108,10 +108,10 @@ async fn get_asset_contract(
     Path((block, tx)): Path<(u64, u32)>,
 ) -> Result<Json<Value>, StatusCode> {
     let updater = Updater::new(state.database, true).await;
-    if let Some(asset_contract_data) = updater.get_asset_contract_data(&(block, tx)).await.ok() {
+    if let Ok(asset_contract_data) = updater.get_asset_contract_data(&(block, tx)).await {
         Ok(Json(json!({"asset": asset_contract_data})))
     } else {
-        return Err(StatusCode::NOT_FOUND);
+        Err(StatusCode::NOT_FOUND)
     }
 }
 
@@ -119,7 +119,7 @@ async fn validate_tx(
     State(state): State<APIState>,
     body: String,
 ) -> Result<Json<Value>, StatusCode> {
-    let tx_bytes = if let Some(tx_bytes) = hex::decode(body).ok() {
+    let tx_bytes = if let Ok(tx_bytes) = hex::decode(body) {
         tx_bytes
     } else {
         return Ok(Json(
@@ -127,7 +127,7 @@ async fn validate_tx(
         ));
     };
 
-    let tx: Transaction = if let Some(tx) = deserialize(&tx_bytes).ok() {
+    let tx: Transaction = if let Ok(tx) = deserialize(&tx_bytes) {
         tx
     } else {
         return Ok(Json(
@@ -135,12 +135,11 @@ async fn validate_tx(
         ));
     };
 
-    return if let Some(op_return_message) = OpReturnMessage::parse_tx(&tx).ok() {
+    if let Ok(op_return_message) = OpReturnMessage::parse_tx(&tx) {
         let mut temp_updater = Updater::new(Arc::clone(&state.database), true).await;
-        if let Some(outcome) = temp_updater
+        if let Ok(outcome) = temp_updater
             .index(0, 0, &tx, Ok(op_return_message))
             .await
-            .ok()
         {
             if let Some(flaw) = outcome.flaw {
                 Ok(Json(json!({"is_valid": false, "msg": flaw})))
@@ -154,7 +153,7 @@ async fn validate_tx(
         Ok(Json(
             json!({"is_valid": false, "msg": "Not a valid Glittr message"}),
         ))
-    };
+    }
 }
 
 async fn health() -> &'static str {
