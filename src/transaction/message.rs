@@ -84,8 +84,8 @@ pub struct ContractCall {
     pub call_type: CallType,
 }
 
-#[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde_with::skip_serializing_none]
 pub struct OpReturnMessage {
     pub transfer: Option<Transfer>,
     pub contract_creation: Option<ContractCreation>,

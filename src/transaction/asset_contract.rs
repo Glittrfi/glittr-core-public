@@ -24,6 +24,7 @@ pub struct Preallocated {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
 pub enum VestingPlan {
     Timelock(RelativeOrAbsoluteBlockHeight),
     Scheduled(Vec<(Ratio, RelativeOrAbsoluteBlockHeight)>),
