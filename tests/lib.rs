@@ -339,6 +339,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
         transfer: None,
         contract_creation: None,
     };
+    println!("{}", mint_message);
 
     // prepare btc
     let bitcoin_value = 50000;

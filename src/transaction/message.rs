@@ -10,11 +10,13 @@ use bitcoin::{
 use bitcoincore_rpc::jsonrpc::serde_json::{self, Deserializer};
 use constants::OP_RETURN_MAGIC_PREFIX;
 use flaw::Flaw;
+use governance_contract::{GovernanceContract, ProposalCreation, Vote};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum ContractType {
     Asset(AssetContract),
+    Governance(GovernanceContract),
 }
 
 #[serde_with::skip_serializing_none]
@@ -30,6 +32,10 @@ pub enum CallType {
     Mint(MintOption),
     Burn,
     Swap,
+    CreateProposal(ProposalCreation),
+    Vote(Vote),
+    ExecuteProposal(BlockTxTuple),
+    VetoProposal(BlockTxTuple),
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -153,6 +159,7 @@ impl OpReturnMessage {
                 ContractType::Asset(asset_contract) => {
                     return asset_contract.validate();
                 }
+                ContractType::Governance(governance_contract) => todo!(),
             }
         }
 
@@ -242,6 +249,7 @@ mod test {
                     assert_eq!(free_mint.supply_cap, Some(U128(1000)));
                     assert_eq!(free_mint.amount_per_mint, U128(10));
                 }
+                ContractType::Governance(governance_contract) => todo!(),
             }
         }
     }

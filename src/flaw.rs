@@ -45,4 +45,10 @@ pub enum Flaw {
 
     NotImplemented,
     NonGlittrMessage,
+
+    // governance
+    InvalidRatio,
+    InvalidBlockHeight,
+    InvalidVetoConfiguration,
+    InvalidExecutorConfiguration,
 }

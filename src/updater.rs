@@ -256,6 +256,10 @@ impl Updater {
                     CallType::Swap => {
                         log::info!("Process call type swap");
                     }
+                    CallType::CreateProposal(_) => todo!(),
+                    CallType::Vote(_) => todo!(),
+                    CallType::ExecuteProposal(_) => todo!(),
+                    CallType::VetoProposal(_) => todo!(),
                 }
             }
         } else {

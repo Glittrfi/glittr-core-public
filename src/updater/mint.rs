@@ -496,6 +496,8 @@ impl Updater {
                             result_purchase
                         }
                     }
+                    ContractType::Asset(asset_contract) => todo!(),
+                    ContractType::Governance(_) => todo!(),
                 },
                 None => Some(Flaw::ContractNotMatch),
             },
