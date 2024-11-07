@@ -38,6 +38,7 @@ pub struct OracleMessageSigned {
     pub message: OracleMessage,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct OracleMessage {
     /// the input_outpoint dictates which UTXO is being evaluated by the Oracle
@@ -86,8 +87,8 @@ pub struct ContractCall {
     pub call_type: CallType,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde_with::skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct OpReturnMessage {
     pub transfer: Option<Transfer>,
     pub contract_creation: Option<ContractCreation>,
