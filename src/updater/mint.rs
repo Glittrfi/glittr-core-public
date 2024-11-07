@@ -94,7 +94,7 @@ impl Updater {
                 }
             }
             // No need to validate RawBtc
-            InputAsset::RawBTC => {}
+            InputAsset::RawBtc => {}
             // Validated below on oracle mint
             InputAsset::Metaprotocol => {}
         };
@@ -103,7 +103,7 @@ impl Updater {
         match &purchase.transfer_scheme {
             // Ensure that the asset is set to burn
             asset_contract::TransferScheme::Burn => match &purchase.input_asset {
-                InputAsset::RawBTC => {
+                InputAsset::RawBtc => {
                     for output in tx.output.iter() {
                         let mut instructions = output.script_pubkey.instructions();
 
@@ -132,7 +132,7 @@ impl Updater {
                     if let Ok(address_from_script) = address_from_script {
                         if address == address_from_script {
                             match purchase.input_asset {
-                                InputAsset::RawBTC => {
+                                InputAsset::RawBtc => {
                                     total_received_value = output.value.to_sat() as u128;
                                 }
                                 InputAsset::GlittrAsset(asset_contract_id) => {

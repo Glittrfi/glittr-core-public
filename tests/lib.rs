@@ -276,7 +276,7 @@ async fn test_integration_purchaseburnswap() {
                 },
                 distribution_schemes: DistributionSchemes {
                     purchase: Some(PurchaseBurnSwap {
-                        input_asset: InputAsset::RawBTC,
+                        input_asset: InputAsset::RawBtc,
                         transfer_scheme: TransferScheme::Burn,
                         transfer_ratio_type: TransferRatioType::Fixed { ratio: (1, 1) },
                     }),
@@ -311,7 +311,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
                 },
                 distribution_schemes: DistributionSchemes {
                     purchase: Some(PurchaseBurnSwap {
-                        input_asset: InputAsset::RawBTC,
+                        input_asset: InputAsset::RawBtc,
                         transfer_scheme: TransferScheme::Burn,
                         transfer_ratio_type: TransferRatioType::Fixed { ratio: (1, 1) },
                     }),
@@ -438,7 +438,7 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
                 },
                 distribution_schemes: DistributionSchemes {
                     purchase: Some(PurchaseBurnSwap {
-                        input_asset: InputAsset::RawBTC,
+                        input_asset: InputAsset::RawBtc,
                         transfer_scheme: TransferScheme::Purchase(contract_treasury.to_string()),
                         transfer_ratio_type: TransferRatioType::Fixed { ratio: (1, 1) },
                     }),
@@ -450,7 +450,6 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
         transfer: None,
         contract_call: None,
     };
-
     let contract_id = ctx.build_and_mine_message(&contract_message).await;
 
     let mint_message = OpReturnMessage {
@@ -551,7 +550,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
                 },
                 distribution_schemes: DistributionSchemes {
                     purchase: Some(PurchaseBurnSwap {
-                        input_asset: InputAsset::RawBTC,
+                        input_asset: InputAsset::RawBtc,
                         transfer_scheme: TransferScheme::Burn,
                         transfer_ratio_type: TransferRatioType::Oracle {
                             pubkey: oracle_xonly.0.serialize().to_vec(),
@@ -722,7 +721,7 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
                 },
                 distribution_schemes: DistributionSchemes {
                     purchase: Some(PurchaseBurnSwap {
-                        input_asset: InputAsset::RawBTC,
+                        input_asset: InputAsset::RawBtc,
                         transfer_scheme: TransferScheme::Purchase(treasury_address.to_string()),
                         transfer_ratio_type: TransferRatioType::Oracle {
                             pubkey: oracle_xonly.0.serialize().to_vec(),
