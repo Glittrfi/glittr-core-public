@@ -8,6 +8,7 @@ use axum::{
     Json, Router,
 };
 use bitcoin::{consensus::deserialize, Transaction};
+use bitcoincore_rpc::{Auth, Client, RpcApi};
 use serde_json::{json, Value};
 use store::database::{DatabaseError, MESSAGE_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX};
 use transaction::message::OpReturnMessage;
@@ -16,9 +17,15 @@ use transaction::message::OpReturnMessage;
 #[derive(Clone)]
 pub struct APIState {
     pub database: Arc<Mutex<Database>>,
+    pub rpc: Arc<Client>,
 }
 pub async fn run_api(database: Arc<Mutex<Database>>) -> Result<(), std::io::Error> {
-    let shared_state = APIState { database };
+    let rpc = Client::new(
+        CONFIG.btc_rpc_url.as_str(),
+        Auth::UserPass(CONFIG.btc_rpc_username.clone(), CONFIG.btc_rpc_password.clone()),
+    ).map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Failed to connect to Bitcoin RPC"))?;
+
+    let shared_state = APIState { database, rpc: Arc::new(rpc)  };
     let app = Router::new()
         .route("/health", get(health))
         .route("/tx/:txid", get(tx_result))
@@ -136,9 +143,12 @@ async fn validate_tx(
     };
 
     if let Ok(op_return_message) = OpReturnMessage::parse_tx(&tx) {
+
+        // Get current block height for validation
+        let current_block_tip = state.rpc.get_block_count().unwrap();
         let mut temp_updater = Updater::new(Arc::clone(&state.database), true).await;
         if let Ok(outcome) = temp_updater
-            .index(0, 0, &tx, Ok(op_return_message))
+            .index(current_block_tip, 1, &tx, Ok(op_return_message))
             .await
         {
             if let Some(flaw) = outcome.flaw {
