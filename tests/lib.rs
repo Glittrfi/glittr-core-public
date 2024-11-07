@@ -577,21 +577,19 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
     let bitcoin_value = 50000;
     let fee = 100;
     let dust = 546;
-    let oracle_out_value = 1000;
+    let ratio = 1000;
+    let oracle_out_value = (bitcoin_value - dust - fee) * ratio;
 
     ctx.core.mine_blocks_with_subsidy(1, bitcoin_value);
     let height = ctx.core.height();
 
-    let input_txid = ctx.core.tx((height - 1) as usize, 0).compute_txid();
     let oracle_message = OracleMessage {
-        input_outpoint: OutPoint {
-            txid: input_txid,
-            vout: 0,
-        },
-        min_in_value: (bitcoin_value - 1000) as u128,
-        out_value: oracle_out_value,
         asset_id: Some("btc".to_string()),
         block_height: height,
+        input_outpoint: None,
+        min_in_value: None,
+        out_value: None,
+        ratio: Some((1000, 1)), // 1 sat = 1000 usd,
     };
 
     let secp: Secp256k1<secp256k1::All> = Secp256k1::new();
@@ -661,7 +659,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
     let outpoint_str = asset_lists[0].0.clone();
     let out_value = *asset_lists[0].1.list.get(&contract_id.to_str()).unwrap();
 
-    assert!(out_value == oracle_out_value);
+    assert!(out_value == oracle_out_value as u128);
     assert!(
         outpoint_str
             == format!(
@@ -745,21 +743,18 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
     // prepare btc
     let bitcoin_value = 50000;
     let fee = 100;
-    let oracle_out_value = 1000;
+    let oracle_out_value = (bitcoin_value - fee) * 1000;
 
     ctx.core.mine_blocks_with_subsidy(1, bitcoin_value);
     let height = ctx.core.height();
 
-    let input_txid = ctx.core.tx((height - 1) as usize, 0).compute_txid();
     let oracle_message = OracleMessage {
-        input_outpoint: OutPoint {
-            txid: input_txid,
-            vout: 0,
-        },
-        min_in_value: (bitcoin_value - 1000) as u128,
-        out_value: oracle_out_value,
+        input_outpoint: None,
+        min_in_value: None,
+        out_value: None,
         asset_id: Some("btc".to_string()),
         block_height: height,
+        ratio: Some((1000, 1)), // 1 sats = 1000 glittr asset
     };
 
     let secp: Secp256k1<secp256k1::All> = Secp256k1::new();
@@ -828,7 +823,7 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
     let outpoint_str = asset_lists[0].0.clone();
     let out_value = *asset_lists[0].1.list.get(&contract_id.to_str()).unwrap();
 
-    assert!(out_value == oracle_out_value);
+    assert!(out_value == oracle_out_value as u128);
     assert!(
         outpoint_str
             == format!(
@@ -896,14 +891,15 @@ async fn test_metaprotocol_to_glittr_asset() {
 
     let input_txid = ctx.core.tx((height - 1) as usize, 0).compute_txid();
     let oracle_message = OracleMessage {
-        input_outpoint: OutPoint {
+        input_outpoint: Some(OutPoint {
             txid: input_txid,
             vout: 0,
-        },
-        min_in_value: 0,
-        out_value: oracle_out_value,
+        }),
+        min_in_value: Some(U128(0)),
+        out_value: Some(U128(oracle_out_value)),
         asset_id: Some("rune:840000:3".to_string()),
         block_height: height,
+        ratio: None,
     };
 
     let secp: Secp256k1<secp256k1::All> = Secp256k1::new();
@@ -1321,11 +1317,10 @@ async fn test_integration_mint_preallocated_freemint() {
             }),
         }),
         transfer: None,
-        contract_call: None
+        contract_call: None,
     };
 
     let block_tx_contract = ctx.build_and_mine_message(&message).await;
-
 
     let mint_message = OpReturnMessage {
         contract_call: Some(ContractCall {
@@ -1336,7 +1331,7 @@ async fn test_integration_mint_preallocated_freemint() {
             }),
         }),
         transfer: None,
-        contract_creation: None
+        contract_creation: None,
     };
     // give vestee money and mint
     let height = ctx.core.height();
@@ -1358,14 +1353,14 @@ async fn test_integration_mint_preallocated_freemint() {
     witness.push(pubkey_1.to_bytes());
     ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
-        inputs: &[((height+1) as usize, 1, 0, witness)],
+        inputs: &[((height + 1) as usize, 1, 0, witness)],
         op_return: Some(mint_message.into_script()),
         op_return_index: Some(0),
         op_return_value: Some(0),
         output_values: &[0, 546],
         outputs: 2,
         p2tr: false,
-        recipient: Some(address_1)
+        recipient: Some(address_1),
     });
 
     ctx.core.mine_blocks(1);
@@ -1895,7 +1890,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
         output_values: &[1000, 1000, 1000],
         outputs: 3,
         p2tr: false,
-        recipient: Some(treasury_address)
+        recipient: Some(treasury_address),
     });
 
     ctx.core.mine_blocks(1);

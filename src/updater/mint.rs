@@ -76,11 +76,10 @@ impl Updater {
         contract_id: &BlockTxTuple,
         mint_option: MintOption,
     ) -> Option<Flaw> {
-        // TODO: All glittr asset transfer logic here is temporary, MUST change when we have transfer logic implemented
         let mut total_unallocated_glittr_asset: u128 = 0;
         let mut total_received_value: u128 = 0;
 
-        let out_value: u128;
+        let mut out_value: u128 = 0;
 
         // VALIDATE INPUT
         match purchase.input_asset {
@@ -184,14 +183,50 @@ impl Updater {
                             )
                             .unwrap();
 
-                            out_value = oracle_message_signed.message.out_value;
+                            let mut is_btc = false;
+                            if let Some(asset_id) = oracle_message_signed.message.asset_id {
+                                if asset_id == "btc".to_string() {
+                                    is_btc = true;
+                                    if let Some(ratio) = oracle_message_signed.message.ratio {
+                                        out_value = total_received_value
+                                            .saturating_mul(ratio.0 as u128)
+                                            .saturating_div(ratio.1 as u128)
+                                    }
+                                }
+                            }
 
-                            let mut input_found = false;
-                            for txin in tx.input.iter() {
-                                if txin.previous_output
-                                    == oracle_message_signed.message.input_outpoint
+                            // For non-BTC assets or no asset_id specified
+                            if !is_btc {
+                                if let Some(_out_value) = oracle_message_signed.message.out_value {
+                                    out_value = _out_value.0;
+                                } else {
+                                    return Some(Flaw::OracleMintInfoFailed);
+                                }
+
+                                if let Some(input_outpoint) =
+                                    oracle_message_signed.message.input_outpoint
                                 {
-                                    input_found = true;
+                                    let mut input_found = false;
+                                    for txin in tx.input.iter() {
+                                        if txin.previous_output == input_outpoint {
+                                            input_found = true;
+                                        }
+                                    }
+                                    if !input_found {
+                                        return Some(Flaw::OracleMintInputNotFound);
+                                    }
+                                } else {
+                                    return Some(Flaw::OracleMintInfoFailed);
+                                }
+
+                                if let Some(min_in_value) =
+                                    oracle_message_signed.message.min_in_value
+                                {
+                                    if total_received_value < min_in_value.0 {
+                                        return Some(Flaw::OracleMintBelowMinValue);
+                                    }
+                                } else {
+                                    return Some(Flaw::OracleMintInfoFailed);
                                 }
                             }
 
@@ -199,14 +234,6 @@ impl Updater {
                                 > setting.block_height_slippage as u64
                             {
                                 return Some(Flaw::OracleMintBlockSlippageExceeded);
-                            }
-
-                            if total_received_value < oracle_message_signed.message.min_in_value {
-                                return Some(Flaw::OracleMintBelowMinValue);
-                            }
-
-                            if !input_found {
-                                return Some(Flaw::OracleMintInputNotFound);
                             }
 
                             if !pubkey.verify(&secp, &msg, &signature).is_ok() {
@@ -255,7 +282,8 @@ impl Updater {
                 asset_contract_data_input.burned_supply = asset_contract_data_input
                     .burned_supply
                     .saturating_add(burned_amount);
-                self.set_asset_contract_data(&asset_contract_id, &asset_contract_data_input).await;
+                self.set_asset_contract_data(&asset_contract_id, &asset_contract_data_input)
+                    .await;
             }
         }
 
@@ -275,7 +303,6 @@ impl Updater {
             asset_contract_data.minted_supply =
                 asset_contract_data.minted_supply.saturating_add(out_value);
 
-            
             self.set_asset_contract_data(contract_id, &asset_contract_data)
                 .await;
         }
@@ -359,8 +386,10 @@ impl Updater {
                 let mut vested_allocation: u128 = 0;
 
                 vesting_schedule.sort_by(|a, b| {
-                    let vested_block_height_a = relative_block_height_to_block_height(a.1, contract_id.0);
-                    let vested_block_height_b = relative_block_height_to_block_height(b.1, contract_id.0);
+                    let vested_block_height_a =
+                        relative_block_height_to_block_height(a.1, contract_id.0);
+                    let vested_block_height_b =
+                        relative_block_height_to_block_height(b.1, contract_id.0);
 
                     vested_block_height_a.cmp(&vested_block_height_b)
                 });
