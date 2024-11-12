@@ -1,0 +1,7 @@
+tunnels:
+  first:
+    proto: http
+    addr: 18445
+  second:
+    proto: http
+    addr: 3001
