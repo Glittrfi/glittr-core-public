@@ -1,6 +1,7 @@
 use asset_contract::Preallocated;
 use bitcoin::hex::{Case, DisplayHex};
 use message::MintOption;
+use nft_contract::NFTContract;
 use std::str::FromStr;
 
 use super::*;
@@ -9,6 +10,67 @@ impl Updater {
     async fn mint_free_mint(
         &mut self,
         asset_contract: &AssetContract,
+        tx: &Transaction,
+        block_tx: &BlockTx,
+        contract_id: &BlockTxTuple,
+        mint_option: &MintOption,
+    ) -> Option<Flaw> {
+        // check livetime
+        if asset_contract.asset.live_time > block_tx.block {
+            return Some(Flaw::LiveTimeNotReached);
+        }
+
+        let mut free_mint_data = match self.get_asset_contract_data(contract_id).await {
+            Ok(data) => data,
+            Err(flaw) => return Some(flaw),
+        };
+
+        let free_mint = asset_contract
+            .distribution_schemes
+            .free_mint
+            .as_ref()
+            .unwrap();
+        // check the supply
+        if let Some(supply_cap) = &free_mint.supply_cap {
+            let next_supply = free_mint_data
+                .minted_supply
+                .saturating_add(free_mint.amount_per_mint.0);
+
+            if next_supply > supply_cap.0 {
+                return Some(Flaw::SupplyCapExceeded);
+            }
+        }
+        free_mint_data.minted_supply = free_mint_data
+            .minted_supply
+            .saturating_add(free_mint.amount_per_mint.0);
+
+        // check pointer overflow
+        if mint_option.pointer >= tx.output.len() as u32 {
+            return Some(Flaw::PointerOverflow);
+        }
+        // check invalid pointer if the target index is op_return output
+        if self.is_op_return_index(&tx.output[mint_option.pointer as usize]) {
+            return Some(Flaw::InvalidPointer);
+        }
+
+        // allocate enw asset for the mint
+        self.allocate_new_asset(
+            mint_option.pointer,
+            contract_id,
+            free_mint.amount_per_mint.0,
+        )
+        .await;
+
+        // update the mint data
+        self.set_asset_contract_data(contract_id, &free_mint_data)
+            .await;
+
+        None
+    }
+
+    async fn mint_nft(
+        &mut self,
+        asset_contract: &NFTContract,
         tx: &Transaction,
         block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
@@ -526,6 +588,7 @@ impl Updater {
                         }
                     }
                     message::ContractType::NFT(nft_contract) => {
+                        /*
                         let result_preallocated = if let Some(preallocated) =
                             &nft_contract.distribution_schemes.preallocated
                         {
@@ -545,10 +608,11 @@ impl Updater {
                         if result_preallocated.is_none() {
                             return result_preallocated;
                         }
+                        */
             
                         let result_free_mint =
                             if nft_contract.distribution_schemes.free_mint.is_some() {
-                                self.mint_free_mint(
+                                self.mint_nft(
                                     &nft_contract,
                                     tx,
                                     block_tx,
@@ -559,11 +623,12 @@ impl Updater {
                             } else {
                                 Some(Flaw::NotImplemented)
                             };
-            
+                        
                         if result_free_mint.is_none() {
                             return result_free_mint;
                         }
-            
+                            
+                        /*
                         let result_purchase =
                             if let Some(purchase) = &nft_contract.distribution_schemes.purchase {
                                 self.mint_purchase_burn_swap(
@@ -585,10 +650,13 @@ impl Updater {
             
                         if result_preallocated != Some(Flaw::NotImplemented) {
                             result_preallocated
-                        } else if result_free_mint != Some(Flaw::NotImplemented) {
+                        } else 
+                         */
+                         if result_free_mint != Some(Flaw::NotImplemented) {
                             result_free_mint
                         } else {
-                            result_purchase
+                            Some(Flaw::NotImplemented)
+                            //result_purchase
                         }
                     }
                 },
