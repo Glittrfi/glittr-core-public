@@ -525,6 +525,72 @@ impl Updater {
                             result_purchase
                         }
                     }
+                    message::ContractType::NFT(nft_contract) => {
+                        let result_preallocated = if let Some(preallocated) =
+                            &nft_contract.distribution_schemes.preallocated
+                        {
+                            self.mint_preallocated(
+                                &nft_contract,
+                                preallocated,
+                                tx,
+                                block_tx,
+                                contract_id,
+                                mint_option,
+                            )
+                            .await
+                        } else {
+                            Some(Flaw::NotImplemented)
+                        };
+            
+                        if result_preallocated.is_none() {
+                            return result_preallocated;
+                        }
+            
+                        let result_free_mint =
+                            if nft_contract.distribution_schemes.free_mint.is_some() {
+                                self.mint_free_mint(
+                                    &nft_contract,
+                                    tx,
+                                    block_tx,
+                                    contract_id,
+                                    mint_option,
+                                )
+                                .await
+                            } else {
+                                Some(Flaw::NotImplemented)
+                            };
+            
+                        if result_free_mint.is_none() {
+                            return result_free_mint;
+                        }
+            
+                        let result_purchase =
+                            if let Some(purchase) = &nft_contract.distribution_schemes.purchase {
+                                self.mint_purchase_burn_swap(
+                                    &nft_contract,
+                                    purchase,
+                                    tx,
+                                    block_tx,
+                                    contract_id,
+                                    mint_option.clone(),
+                                )
+                                .await
+                            } else {
+                                Some(Flaw::NotImplemented)
+                            };
+            
+                        if result_purchase.is_none() {
+                            return result_purchase;
+                        }
+            
+                        if result_preallocated != Some(Flaw::NotImplemented) {
+                            result_preallocated
+                        } else if result_free_mint != Some(Flaw::NotImplemented) {
+                            result_free_mint
+                        } else {
+                            result_purchase
+                        }
+                    }
                 },
                 None => Some(Flaw::ContractNotMatch),
             },

@@ -2,6 +2,7 @@ use std::fmt;
 
 use super::*;
 use asset_contract::AssetContract;
+use nft_contract::NFTContract;
 use bitcoin::{
     opcodes,
     script::{self, Instruction, PushBytes},
@@ -15,6 +16,7 @@ use flaw::Flaw;
 #[serde(rename_all = "snake_case")]
 pub enum ContractType {
     Asset(AssetContract),
+    NFT(NFTContract),
 }
 
 #[serde_with::skip_serializing_none]
@@ -162,6 +164,9 @@ impl OpReturnMessage {
                 ContractType::Asset(asset_contract) => {
                     return asset_contract.validate();
                 }
+                ContractType::NFT(nft_contract) => {
+                    return nft_contract.validate();
+                }
             }
         }
 
@@ -248,6 +253,15 @@ mod test {
                     assert_eq!(asset_contract.asset.supply_cap, Some(U128(1000)));
                     assert_eq!(asset_contract.asset.divisibility, 18);
                     assert_eq!(asset_contract.asset.live_time, 0);
+                    assert_eq!(free_mint.supply_cap, Some(U128(1000)));
+                    assert_eq!(free_mint.amount_per_mint, U128(10));
+                }
+
+                ContractType::NFT(nft_contract) => {
+                    let free_mint = nft_contract.distribution_schemes.free_mint.unwrap();
+                    assert_eq!(nft_contract.asset.supply_cap, Some(U128(1)));
+                    assert_eq!(nft_contract.asset.divisibility, 0);
+                    assert_eq!(nft_contract.asset.live_time, 0);
                     assert_eq!(free_mint.supply_cap, Some(U128(1000)));
                     assert_eq!(free_mint.amount_per_mint, U128(10));
                 }
