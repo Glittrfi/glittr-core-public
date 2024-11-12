@@ -1,6 +1,8 @@
 mod mint;
 
 use std::collections::HashMap;
+use std::error::Error;
+use std::sync::{Arc, Mutex};
 
 use asset_contract::{AssetContract, InputAsset, PurchaseBurnSwap, VestingPlan};
 use bitcoin::{
@@ -39,6 +41,7 @@ pub struct MessageDataOutcome {
     pub message: Option<OpReturnMessage>,
     pub flaw: Option<Flaw>,
 }
+
 pub struct PBSMintResult {
     pub out_value: u128,
     pub txout: u32,
@@ -50,12 +53,56 @@ pub struct VestingContractData {
     pub claimed_allocations: HashMap<String, u128>,
 }
 
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct MultiSigWallet {
+    pub required_signatures: usize,
+    pub public_keys: Vec<String>,
+    pub private_keys: HashMap<String, PrivateKey>,
+}
+
+impl MultiSigWallet {
+    pub fn new(required_signatures: usize, public_keys: Vec<String>, private_keys: HashMap<String, PrivateKey>) -> Self {
+        MultiSigWallet {
+            required_signatures,
+            public_keys,
+            private_keys,
+        }
+    }
+
+    pub fn create_transaction(&self, to: Address, amount: u64) -> Transaction {
+        let mut tx = Transaction::default();
+        // Add inputs and outputs to the transaction
+        // ...
+        tx
+    }
+
+    pub fn sign_transaction(&self, tx: &mut Transaction, signer: &str) -> Result<(), Box<dyn Error>> {
+        if let Some(private_key) = self.private_keys.get(signer) {
+            // Sign the transaction with the private key
+            // ...
+            Ok(())
+        } else {
+            Err("Signer not found".into())
+        }
+    }
+
+    pub fn collect_signatures(&self, tx: &Transaction) -> Result<Vec<String>, Box<dyn Error>> {
+        let mut signatures = Vec::new();
+        for public_key in &self.public_keys {
+            // Logic to collect signatures
+            // ...
+        }
+        Ok(signatures)
+    }
+}
+
 pub struct Updater {
     pub database: Arc<Mutex<Database>>,
     is_read_only: bool,
 
     unallocated_asset_list: AssetList,
     allocated_asset_list: HashMap<u32, AssetList>,
+    multi_sig_wallet: Option<MultiSigWallet>, // Optional multi-signature wallet
 }
 
 impl Updater {
@@ -63,9 +110,9 @@ impl Updater {
         Updater {
             database,
             is_read_only,
-
             unallocated_asset_list: AssetList::default(),
             allocated_asset_list: HashMap::new(),
+            multi_sig_wallet: None,
         }
     }
 
@@ -78,8 +125,7 @@ impl Updater {
 
             if let Ok(asset_list) = self.get_asset_list(outpoint).await {
                 for asset in asset_list.list.iter() {
-                    let previous_amount =
-                        self.unallocated_asset_list.list.get(asset.0).unwrap_or(&0);
+                    let previous_amount = self.unallocated_asset_list.list.get(asset.0).unwrap_or(&0);
                     self.unallocated_asset_list.list.insert(
                         asset.0.to_string(),
                         previous_amount.saturating_add(*asset.1),
@@ -88,7 +134,7 @@ impl Updater {
             }
 
             // TODO: Implement a backup mechanism to recover when downtime occurs
-            self.delete_asset(outpoint).await;
+            self.delete_asset(outpoint ).await;
         }
 
         Ok(())
@@ -142,7 +188,7 @@ impl Updater {
     }
 
     pub async fn commit_asset(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
-        // move unallocated to first non op_return index (fallback)
+        // Move unallocated to first non op_return index (fallback)
         let list = self.unallocated_asset_list.list.clone();
         for asset in list.iter() {
             let block_tx = BlockTx::from_str(asset.0);
@@ -165,7 +211,7 @@ impl Updater {
             self.set_asset_list(outpoint, asset.1).await;
         }
 
-        // reset asset list
+        // Reset asset list
         self.unallocated_asset_list = AssetList::default();
         self.allocated_asset_list = HashMap::new();
 
@@ -191,7 +237,7 @@ impl Updater {
         return None;
     }
 
-    // run modules here
+    // Run modules here
     pub async fn index(
         &mut self,
         block_height: u64,
@@ -233,7 +279,7 @@ impl Updater {
                                 }
                             } else {
                                 if outcome.flaw.is_none() {
-                                    outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx);
+                                    outcome.flaw = Some(Flaw ::ReferencingFlawedBlockTx);
                                 }
                             }
                         }
