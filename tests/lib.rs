@@ -166,7 +166,7 @@ impl TestContext {
     ) {
         let asset_output = asset_lists
             .get(&outpoint.to_string())
-            .expect(&format!("Asset output {} should exist", outpoint.vout));
+            .unwrap_or_else(|| panic!("Asset output {} should exist", outpoint.vout));
 
         let value_output = asset_output
             .list

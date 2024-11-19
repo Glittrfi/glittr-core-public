@@ -24,6 +24,7 @@ pub struct MintOption {
     pub oracle_message: Option<OracleMessageSigned>,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum CallType {

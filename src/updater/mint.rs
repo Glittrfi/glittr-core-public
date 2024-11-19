@@ -185,7 +185,7 @@ impl Updater {
 
                             let mut is_btc = false;
                             if let Some(asset_id) = oracle_message_signed.message.asset_id {
-                                if asset_id == "btc".to_string() {
+                                if asset_id == *"btc" {
                                     is_btc = true;
                                     if let Some(ratio) = oracle_message_signed.message.ratio {
                                         out_value = total_received_value
@@ -236,7 +236,7 @@ impl Updater {
                                 return Some(Flaw::OracleMintBlockSlippageExceeded);
                             }
 
-                            if !pubkey.verify(&secp, &msg, &signature).is_ok() {
+                            if pubkey.verify(&secp, &msg, &signature).is_err() {
                                 return Some(Flaw::OracleMintSignatureFailed);
                             }
                         } else {

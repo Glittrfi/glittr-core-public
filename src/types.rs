@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{error::Error, fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
@@ -38,16 +38,19 @@ impl BlockTx {
 
     pub fn to_str(&self) -> String {
         format!("{}:{}", self.block, self.tx)
-   }
+    }
+}
 
-    // TODO: handle error
-    pub fn from_str(s: &str) -> Self {
-        let (block, tx) = s.split_once(':').expect("Invalid block tx format");
+impl FromStr for BlockTx {
+    type Err = Box<dyn Error>;
 
-        BlockTx {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (block, tx) = s.split_once(':').ok_or("Split error")?;
+
+        Ok(BlockTx {
             block: block.parse().expect("Invalid block tx block format"),
             tx: tx.parse().expect("Invalid block tx block format"),
-        }
+        })
     }
 }
 
@@ -62,18 +65,15 @@ impl fmt::Display for Outpoint {
     }
 }
 
-impl Outpoint {
-    pub fn to_string(&self) -> String {
-        format!("{}:{}", self.txid, self.vout)
-    }
+impl FromStr for Outpoint {
+    type Err = Box<dyn Error>;
 
-    // TODO: handle error
-    pub fn from_str(s: &str) -> Self {
-        let (txid, vout) = s.split_once(':').expect("Invalid Outpoint format");
-        Outpoint {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (txid, vout) = s.split_once(':').ok_or("Split error")?;
+        Ok(Outpoint {
             txid: txid.to_string(),
             vout: vout.parse().expect("Invalid Outpoint vout format"),
-        }
+        })
     }
 }
 

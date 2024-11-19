@@ -1,6 +1,6 @@
 mod mint;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
 use asset_contract::{AssetContract, InputAsset, PurchaseBurnSwap, VestingPlan};
 use bitcoin::{
@@ -105,7 +105,7 @@ impl Updater {
         let asset = self
             .allocated_asset_list
             .entry(vout)
-            .or_insert_with(AssetList::default);
+            .or_default();
 
         let previous_amount = asset.list.entry(block_tx.to_str()).or_insert(0);
         *previous_amount = previous_amount.saturating_add(amount);
@@ -145,7 +145,7 @@ impl Updater {
         // move unallocated to first non op_return index (fallback)
         let list = self.unallocated_asset_list.list.clone();
         for asset in list.iter() {
-            let block_tx = BlockTx::from_str(asset.0);
+            let block_tx = BlockTx::from_str(asset.0)?;
 
             if let Some(vout) = self.first_non_op_return_index(tx) {
                 self.move_allocation(vout, &block_tx.to_tuple(), *asset.1)
@@ -178,7 +178,7 @@ impl Updater {
             return true;
         }
 
-        return false;
+        false
     }
 
     fn first_non_op_return_index(&self, tx: &Transaction) -> Option<u32> {
@@ -188,7 +188,7 @@ impl Updater {
             };
         }
 
-        return None;
+        None
     }
 
     // run modules here
@@ -227,14 +227,12 @@ impl Updater {
                         if let InputAsset::GlittrAsset(block_tx_tuple) = purchase.input_asset {
                             let message = self.get_message(&block_tx_tuple).await;
 
-                            if let Some(message) = message.ok() {
+                            if let Ok(message) = message {
                                 if message.contract_creation.is_none() && outcome.flaw.is_none() {
                                     outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx)
                                 }
-                            } else {
-                                if outcome.flaw.is_none() {
-                                    outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx);
-                                }
+                            } else if outcome.flaw.is_none() {
+                                outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx);
                             }
                         }
                     }
@@ -301,7 +299,7 @@ impl Updater {
                 .await;
         }
 
-        if overflow_i.len() > 0 {
+        if !overflow_i.is_empty() {
             return Some(Flaw::OutputOverflow(overflow_i));
         }
 
