@@ -145,14 +145,16 @@ impl OpReturnMessage {
         let message =
             OpReturnMessage::deserialize(&mut Deserializer::from_slice(payload.as_slice()));
 
-
         match message {
             Ok(message) => {
-                if message.contract_call.is_none() && message.contract_creation.is_none() && message.transfer.is_none() {
+                if message.contract_call.is_none()
+                    && message.contract_creation.is_none()
+                    && message.transfer.is_none()
+                {
                     return Err(Flaw::FailedDeserialization);
                 }
                 Ok(message)
-            },
+            }
             Err(_) => Err(Flaw::FailedDeserialization),
         }
     }

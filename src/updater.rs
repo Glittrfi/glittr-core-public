@@ -102,10 +102,7 @@ impl Updater {
     ) {
         let block_tx = BlockTx::from_tuple(*contract_id);
 
-        let asset = self
-            .allocated_asset_list
-            .entry(vout)
-            .or_default();
+        let asset = self.allocated_asset_list.entry(vout).or_default();
 
         let previous_amount = asset.list.entry(block_tx.to_str()).or_insert(0);
         *previous_amount = previous_amount.saturating_add(amount);

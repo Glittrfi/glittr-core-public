@@ -22,10 +22,22 @@ pub struct APIState {
 pub async fn run_api(database: Arc<Mutex<Database>>) -> Result<(), std::io::Error> {
     let rpc = Client::new(
         CONFIG.btc_rpc_url.as_str(),
-        Auth::UserPass(CONFIG.btc_rpc_username.clone(), CONFIG.btc_rpc_password.clone()),
-    ).map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Failed to connect to Bitcoin RPC"))?;
+        Auth::UserPass(
+            CONFIG.btc_rpc_username.clone(),
+            CONFIG.btc_rpc_password.clone(),
+        ),
+    )
+    .map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Failed to connect to Bitcoin RPC",
+        )
+    })?;
 
-    let shared_state = APIState { database, rpc: Arc::new(rpc)  };
+    let shared_state = APIState {
+        database,
+        rpc: Arc::new(rpc),
+    };
     let app = Router::new()
         .route("/health", get(health))
         .route("/tx/:txid", get(tx_result))
@@ -143,7 +155,6 @@ async fn validate_tx(
     };
 
     if let Ok(op_return_message) = OpReturnMessage::parse_tx(&tx) {
-
         // Get current block height for validation
         let current_block_tip = state.rpc.get_block_count().unwrap();
         let mut temp_updater = Updater::new(Arc::clone(&state.database), true).await;
