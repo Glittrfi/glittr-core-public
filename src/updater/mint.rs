@@ -44,12 +44,8 @@ impl Updater {
             .saturating_add(free_mint.amount_per_mint.0);
 
         // check pointer overflow
-        if mint_option.pointer >= tx.output.len() as u32 {
-            return Some(Flaw::PointerOverflow);
-        }
-        // check invalid pointer if the target index is op_return output
-        if self.is_op_return_index(&tx.output[mint_option.pointer as usize]) {
-            return Some(Flaw::InvalidPointer);
+        if let Some(flaw) = self.validate_mint_pointer(mint_option.pointer, tx) {
+            return Some(flaw);
         }
 
         // allocate enw asset for the mint
@@ -252,12 +248,8 @@ impl Updater {
         }
 
         // check pointer overflow
-        if mint_option.pointer >= tx.output.len() as u32 {
-            return Some(Flaw::PointerOverflow);
-        }
-        // check invalid pointer if the target index is op_return output
-        if self.is_op_return_index(&tx.output[mint_option.pointer as usize]) {
-            return Some(Flaw::InvalidPointer);
+        if let Some(flaw) = self.validate_mint_pointer(mint_option.pointer, tx) {
+            return Some(flaw);
         }
 
         if out_value == 0 {
@@ -287,27 +279,12 @@ impl Updater {
             }
         }
 
-        if let Some(supply_cap) = &asset_contract.asset.supply_cap {
-            let mut asset_contract_data = match self.get_asset_contract_data(contract_id).await {
-                Ok(data) => data,
-                Err(flaw) => return Some(flaw),
-            };
-
-            // check the supply
-            let next_supply = asset_contract_data.minted_supply.saturating_add(out_value);
-
-            if next_supply > supply_cap.0 {
-                return Some(Flaw::SupplyCapExceeded);
-            }
-
-            asset_contract_data.minted_supply =
-                asset_contract_data.minted_supply.saturating_add(out_value);
-
-            self.set_asset_contract_data(contract_id, &asset_contract_data)
-                .await;
+        if let Some(flaw) = self
+            .check_and_update_supply_cap(contract_id, asset_contract, out_value)
+            .await
+        {
+            return Some(flaw);
         }
-
-        // set the outpoint
 
         self.allocate_new_asset(mint_option.pointer, contract_id, out_value)
             .await;
@@ -410,24 +387,15 @@ impl Updater {
             }
         };
 
-        if let Some(supply_cap) = &asset_contract.asset.supply_cap {
-            let mut asset_contract_data = match self.get_asset_contract_data(contract_id).await {
-                Ok(data) => data,
-                Err(flaw) => return Some(flaw),
-            };
+        if let Some(flaw) = self
+            .check_and_update_supply_cap(contract_id, asset_contract, out_value)
+            .await
+        {
+            return Some(flaw);
+        }
 
-            // check the supply
-            let next_supply = asset_contract_data.minted_supply.saturating_add(out_value);
-
-            if next_supply > supply_cap.0 {
-                return Some(Flaw::SupplyCapExceeded);
-            }
-
-            asset_contract_data.minted_supply =
-                asset_contract_data.minted_supply.saturating_add(out_value);
-
-            self.set_asset_contract_data(contract_id, &asset_contract_data)
-                .await;
+        if let Some(flaw) = self.validate_mint_pointer(mint_option.pointer, tx) {
+            return Some(flaw);
         }
 
         claimed_allocation = claimed_allocation.saturating_add(out_value);
@@ -436,11 +404,6 @@ impl Updater {
             .insert(owner_pub_key.to_hex_string(Case::Lower), claimed_allocation);
         self.set_vesting_contract_data(contract_id, &vesting_contract_data)
             .await;
-
-        // check pointer overflow
-        if mint_option.pointer >= tx.output.len() as u32 {
-            return Some(Flaw::PointerOverflow);
-        }
 
         self.allocate_new_asset(mint_option.pointer, contract_id, out_value)
             .await;
@@ -459,7 +422,7 @@ impl Updater {
         match message {
             Ok(op_return_message) => match op_return_message.contract_creation {
                 Some(contract_creation) => match contract_creation.contract_type {
-                    message::ContractType::Asset(asset_contract) => {
+                    ContractType::Asset(asset_contract) => {
                         let result_preallocated = if let Some(preallocated) =
                             &asset_contract.distribution_schemes.preallocated
                         {
@@ -530,6 +493,40 @@ impl Updater {
             },
             Err(flaw) => Some(flaw),
         }
+    }
+
+    async fn check_and_update_supply_cap(
+        &mut self,
+        contract_id: &BlockTxTuple,
+        asset_contract: &AssetContract,
+        amount: u128,
+    ) -> Option<Flaw> {
+        if let Some(supply_cap) = &asset_contract.asset.supply_cap {
+            let mut asset_contract_data = match self.get_asset_contract_data(contract_id).await {
+                Ok(data) => data,
+                Err(flaw) => return Some(flaw),
+            };
+
+            let next_supply = asset_contract_data.minted_supply.saturating_add(amount);
+            if next_supply > supply_cap.0 {
+                return Some(Flaw::SupplyCapExceeded);
+            }
+
+            asset_contract_data.minted_supply = next_supply;
+            self.set_asset_contract_data(contract_id, &asset_contract_data)
+                .await;
+        }
+        None
+    }
+
+    fn validate_mint_pointer(&self, pointer: u32, tx: &Transaction) -> Option<Flaw> {
+        if pointer >= tx.output.len() as u32 {
+            return Some(Flaw::PointerOverflow);
+        }
+        if self.is_op_return_index(&tx.output[pointer as usize]) {
+            return Some(Flaw::InvalidPointer);
+        }
+        None
     }
 }
 

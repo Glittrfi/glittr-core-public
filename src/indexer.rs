@@ -52,7 +52,7 @@ impl Indexer {
 
             let first_block_height = first_glittr_height();
             if current_block_tip < first_block_height {
-                thread::sleep(Duration::from_secs(10));
+                tokio::time::sleep(Duration::from_secs(10)).await;
                 continue;
             }
 

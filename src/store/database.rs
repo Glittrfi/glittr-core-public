@@ -21,7 +21,7 @@ pub enum DatabaseError {
 }
 
 // TODO:
-// - implment error handling
+// - implement error handling
 // - hash the key
 // - add transaction feature
 impl Database {

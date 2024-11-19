@@ -161,9 +161,9 @@ impl OpReturnMessage {
 
     pub fn validate(&self) -> Option<Flaw> {
         if let Some(contract_creation) = &self.contract_creation {
-            match &contract_creation.contract_type {
+            return match &contract_creation.contract_type {
                 ContractType::Asset(asset_contract) => {
-                    return asset_contract.validate();
+                   asset_contract.validate()
                 }
             }
         }
