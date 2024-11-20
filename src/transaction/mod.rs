@@ -1,3 +1,3 @@
 use super::*;
-pub mod asset_contract;
+pub mod mint_only_asset;
 pub mod message;

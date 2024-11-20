@@ -1,9 +1,27 @@
-use std::{collections::HashMap, str::FromStr};
-
-use bitcoin::{Address, XOnlyPublicKey};
+use bitcoin::{secp256k1::PublicKey, XOnlyPublicKey};
 use flaw::Flaw;
+use std::collections::HashMap;
 
 use super::*;
+
+#[serde_with::skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct MintOnlyAssetContract {
+    pub ticker: Option<String>,
+    pub supply_cap: Option<U128>,
+    pub divisibility: u8,
+    pub live_time: BlockHeight,
+    pub mint_mechanism: MintMechanisms,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct MintMechanisms {
+    pub preallocated: Option<Preallocated>,
+    pub free_mint: Option<FreeMint>,
+    pub purchase: Option<PurchaseBurnSwap>,
+}
 
 /// Pre-allocated (e.g. allowing anyone who owns certain ordinals to claim, or literally hardcoding for TGE)
 /// * Allocations & amounts -> For now, just a list of public keys
@@ -20,7 +38,7 @@ use super::*;
 pub struct Preallocated {
     // TODO: optimize for multiple pubkey getting the same allocation
     pub allocations: HashMap<U128, Vec<Pubkey>>,
-    pub vesting_plan: VestingPlan,
+    pub vesting_plan: Option<VestingPlan>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -30,9 +48,25 @@ pub enum VestingPlan {
     Scheduled(Vec<(Ratio, RelativeOrAbsoluteBlockHeight)>),
 }
 
+#[serde_with::skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct FreeMint {
+    pub supply_cap: Option<U128>,
+    pub amount_per_mint: U128,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct PurchaseBurnSwap {
+    pub input_asset: InputAsset,
+    pub pay_to_key: Option<Pubkey>, // None is burn
+    pub ratio: TransferRatioType,
+}
+
 impl Preallocated {
-    pub fn validate(&self, asset_contract: &AssetContract) -> Option<Flaw> {
-        if let Some(supply_cap) = &asset_contract.asset.supply_cap {
+    pub fn validate(&self, moa: &MintOnlyAssetContract) -> Option<Flaw> {
+        if let Some(supply_cap) = &moa.supply_cap {
             let mut total_allocations: u128 = 0;
             for alloc in &self.allocations {
                 total_allocations = total_allocations
@@ -45,7 +79,7 @@ impl Preallocated {
 
             if total_allocations < supply_cap.0 {
                 let mut remainder = supply_cap.0 - total_allocations;
-                if let Some(free_mint) = &asset_contract.distribution_schemes.free_mint {
+                if let Some(free_mint) = &moa.mint_mechanism.free_mint {
                     if let Some(free_mint_supply_cap) = &free_mint.supply_cap {
                         if free_mint_supply_cap.0 > remainder {
                             return Some(Flaw::SupplyCapInvalid);
@@ -70,22 +104,14 @@ impl Preallocated {
     }
 }
 
-#[serde_with::skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug)]
-#[serde(rename_all = "snake_case")]
-pub struct FreeMint {
-    pub supply_cap: Option<U128>,
-    pub amount_per_mint: U128,
-}
-
 impl FreeMint {
-    pub fn validate(&self, asset_contract: &AssetContract) -> Option<Flaw> {
+    pub fn validate(&self, moa: &MintOnlyAssetContract) -> Option<Flaw> {
         if let Some(supply_cap) = &self.supply_cap {
             if self.amount_per_mint.0 > supply_cap.0 {
                 return Some(Flaw::OverflowAmountPerMint);
             }
 
-            if let Some(super_supply_cap) = &asset_contract.asset.supply_cap {
+            if let Some(super_supply_cap) = &moa.supply_cap {
                 if super_supply_cap.0 < supply_cap.0 {
                     return Some(Flaw::SupplyCapInvalid);
                 }
@@ -97,37 +123,6 @@ impl FreeMint {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
-#[serde(rename_all = "snake_case")]
-pub struct SimpleAsset {
-    pub supply_cap: Option<U128>,
-    pub divisibility: u8,
-    pub live_time: BlockHeight,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-#[serde(rename_all = "snake_case")]
-pub struct AssetContract {
-    pub asset: SimpleAsset,
-    pub distribution_schemes: DistributionSchemes,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-#[serde(rename_all = "snake_case")]
-pub struct DistributionSchemes {
-    pub preallocated: Option<Preallocated>,
-    pub free_mint: Option<FreeMint>,
-    pub purchase: Option<PurchaseBurnSwap>,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-#[serde(rename_all = "snake_case")]
-pub struct PurchaseBurnSwap {
-    pub input_asset: InputAsset,
-    pub transfer_scheme: TransferScheme,
-    pub transfer_ratio_type: TransferRatioType,
-}
-
 impl PurchaseBurnSwap {
     pub fn validate(&self) -> Option<Flaw> {
         if let InputAsset::GlittrAsset(block_tx_tuple) = self.input_asset {
@@ -136,13 +131,13 @@ impl PurchaseBurnSwap {
             }
         }
 
-        if let TransferScheme::Purchase(bitcoin_address) = &self.transfer_scheme {
-            if Address::from_str(bitcoin_address.as_str()).is_err() {
-                return Some(Flaw::InvalidBitcoinAddress);
+        if let Some(pubkey) = &self.pay_to_key {
+            if PublicKey::from_slice(&pubkey.as_slice()).is_err() {
+                return Some(Flaw::PubkeyInvalid);
             }
         }
 
-        match &self.transfer_ratio_type {
+        match &self.ratio {
             TransferRatioType::Fixed { ratio } => {
                 if ratio.1 == 0 {
                     return Some(Flaw::DivideByZero);
@@ -164,15 +159,8 @@ impl PurchaseBurnSwap {
 pub enum InputAsset {
     RawBtc,
     GlittrAsset(BlockTxTuple),
-    Metaprotocol,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-#[serde(rename_all = "snake_case")]
-pub enum TransferScheme {
-    Purchase(BitcoinAddress),
-    /// NOTE: btc burned must go to op_return, bitcoind must set maxburnamount
-    Burn,
+    Rune,
+    Ordinal,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -181,6 +169,7 @@ pub enum TransferRatioType {
     Fixed {
         ratio: Ratio, // out_value = input_value * ratio
     },
+    // TODO: change this to oracle block
     Oracle {
         pubkey: Pubkey, // compressed public key
         setting: OracleSetting,
@@ -197,23 +186,21 @@ pub struct OracleSetting {
 }
 
 /// Mix of distribution schemes only applicable for preallocated and free_mint or preallocated and purchase
-impl AssetContract {
+impl MintOnlyAssetContract {
     pub fn validate(&self) -> Option<Flaw> {
-        if self.distribution_schemes.purchase.is_some()
-            && self.distribution_schemes.free_mint.is_some()
-        {
+        if self.mint_mechanism.purchase.is_some() && self.mint_mechanism.free_mint.is_some() {
             return Some(Flaw::NotImplemented);
         }
 
-        if let Some(preallocated) = &self.distribution_schemes.preallocated {
+        if let Some(preallocated) = &self.mint_mechanism.preallocated {
             return preallocated.validate(self);
         }
 
-        if let Some(freemint) = &self.distribution_schemes.free_mint {
+        if let Some(freemint) = &self.mint_mechanism.free_mint {
             return freemint.validate(self);
         }
 
-        if let Some(purchase) = &self.distribution_schemes.purchase {
+        if let Some(purchase) = &self.mint_mechanism.purchase {
             return purchase.validate();
         }
 

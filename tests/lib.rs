@@ -11,10 +11,6 @@ use tempfile::TempDir;
 use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
 
 use glittr::{
-    asset_contract::{
-        AssetContract, DistributionSchemes, FreeMint, InputAsset, OracleSetting, Preallocated,
-        PurchaseBurnSwap, SimpleAsset, TransferRatioType, TransferScheme, VestingPlan,
-    },
     database::{
         Database, DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX,
         INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX,
@@ -22,6 +18,10 @@ use glittr::{
     message::{
         CallType, ContractCall, ContractCreation, ContractType, MintOption, OpReturnMessage,
         OracleMessage, OracleMessageSigned, Transfer, TxTypeTransfer,
+    },
+    mint_only_asset::{
+        FreeMint, InputAsset, MintMechanisms, MintOnlyAssetContract, OracleSetting, Preallocated,
+        PurchaseBurnSwap, TransferRatioType, VestingPlan,
     },
     AssetContractData, AssetList, BlockTx, Flaw, Indexer, MessageDataOutcome, Outpoint, Pubkey,
     U128,
@@ -246,13 +246,12 @@ async fn test_integration_broadcast_op_return_message_success() {
 
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(AssetContract {
-                asset: SimpleAsset {
-                    supply_cap: Some(U128(1000)),
-                    divisibility: 18,
-                    live_time: 0,
-                },
-                distribution_schemes: DistributionSchemes {
+            contract_type: ContractType::Asset(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(1000)),
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(1000)),
                         amount_per_mint: U128(10),
@@ -280,17 +279,16 @@ async fn test_integration_purchaseburnswap() {
 
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(AssetContract {
-                asset: SimpleAsset {
-                    supply_cap: Some(U128(1000)),
-                    divisibility: 18,
-                    live_time: 0,
-                },
-                distribution_schemes: DistributionSchemes {
+            contract_type: ContractType::Asset(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(1000)),
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
-                        transfer_scheme: TransferScheme::Burn,
-                        transfer_ratio_type: TransferRatioType::Fixed { ratio: (1, 1) },
+                        pay_to_key: None,
+                        ratio: TransferRatioType::Fixed { ratio: (1, 1) },
                     }),
                     preallocated: None,
                     free_mint: None,
@@ -315,17 +313,16 @@ async fn test_raw_btc_to_glittr_asset_burn() {
 
     let contract_message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(AssetContract {
-                asset: SimpleAsset {
-                    supply_cap: None,
-                    divisibility: 18,
-                    live_time: 0,
-                },
-                distribution_schemes: DistributionSchemes {
+            contract_type: ContractType::Asset(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: None,
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
-                        transfer_scheme: TransferScheme::Burn,
-                        transfer_ratio_type: TransferRatioType::Fixed { ratio: (1, 1) },
+                        pay_to_key: None,
+                        ratio: TransferRatioType::Fixed { ratio: (1, 1) },
                     }),
                     preallocated: None,
                     free_mint: None,
@@ -431,20 +428,19 @@ async fn test_raw_btc_to_glittr_asset_burn() {
 async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
     let mut ctx = TestContext::new().await;
 
-    let (contract_treasury, _) = get_bitcoin_address();
+    let (contract_treasury, contract_treasury_pub_key) = get_bitcoin_address();
     let contract_message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(AssetContract {
-                asset: SimpleAsset {
-                    supply_cap: Some(U128(21_000_000 * 10u128.pow(8))),
-                    divisibility: 8,
-                    live_time: 0,
-                },
-                distribution_schemes: DistributionSchemes {
+            contract_type: ContractType::Asset(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(21_000_000 * 10u128.pow(8))),
+                divisibility: 8,
+                live_time: 0,
+                mint_mechanism: MintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
-                        transfer_scheme: TransferScheme::Purchase(contract_treasury.to_string()),
-                        transfer_ratio_type: TransferRatioType::Fixed { ratio: (1, 1) },
+                        pay_to_key: Some(contract_treasury_pub_key.to_bytes()),
+                        ratio: TransferRatioType::Fixed { ratio: (1, 1) },
                     }),
                     preallocated: None,
                     free_mint: None,
@@ -538,17 +534,16 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
     let oracle_xonly = XOnlyPublicKey::from_keypair(&oracle_keypair);
     let contract_message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(AssetContract {
-                asset: SimpleAsset {
-                    supply_cap: None,
-                    divisibility: 18,
-                    live_time: 0,
-                },
-                distribution_schemes: DistributionSchemes {
+            contract_type: ContractType::Asset(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: None,
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
-                        transfer_scheme: TransferScheme::Burn,
-                        transfer_ratio_type: TransferRatioType::Oracle {
+                        pay_to_key: None,
+                        ratio: TransferRatioType::Oracle {
                             pubkey: oracle_xonly.0.serialize().to_vec(),
                             setting: OracleSetting {
                                 asset_id: Some("btc".to_string()),
@@ -696,20 +691,19 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
     let oracle_keypair = Keypair::new(&secp, &mut rand::thread_rng());
     let oracle_xonly = XOnlyPublicKey::from_keypair(&oracle_keypair);
 
-    let (treasury_address, _) = get_bitcoin_address();
+    let (treasury_address, treasury_address_pub_key) = get_bitcoin_address();
     let contract_message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(AssetContract {
-                asset: SimpleAsset {
-                    supply_cap: Some(U128(21_000_000 * 10u128.pow(8))),
-                    divisibility: 8,
-                    live_time: 0,
-                },
-                distribution_schemes: DistributionSchemes {
+            contract_type: ContractType::Asset(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(21_000_000 * 10u128.pow(8))),
+                divisibility: 8,
+                live_time: 0,
+                mint_mechanism: MintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
-                        transfer_scheme: TransferScheme::Purchase(treasury_address.to_string()),
-                        transfer_ratio_type: TransferRatioType::Oracle {
+                        pay_to_key: Some(treasury_address_pub_key.to_bytes()),
+                        ratio: TransferRatioType::Oracle {
                             pubkey: oracle_xonly.0.serialize().to_vec(),
                             setting: OracleSetting {
                                 asset_id: Some("btc".to_string()),
@@ -829,17 +823,16 @@ async fn test_metaprotocol_to_glittr_asset() {
     let oracle_xonly = XOnlyPublicKey::from_keypair(&oracle_keypair);
     let contract_message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(AssetContract {
-                asset: SimpleAsset {
-                    supply_cap: None,
-                    divisibility: 18,
-                    live_time: 0,
-                },
-                distribution_schemes: DistributionSchemes {
+            contract_type: ContractType::Asset(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: None,
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
-                        input_asset: InputAsset::Metaprotocol,
-                        transfer_scheme: TransferScheme::Burn,
-                        transfer_ratio_type: TransferRatioType::Oracle {
+                        input_asset: InputAsset::Rune,
+                        pay_to_key: None,
+                        ratio: TransferRatioType::Oracle {
                             pubkey: oracle_xonly.0.serialize().to_vec(),
                             setting: OracleSetting {
                                 asset_id: Some("rune:840000:3".to_string()),
@@ -963,13 +956,12 @@ async fn test_integration_freemint() {
 
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(AssetContract {
-                asset: SimpleAsset {
-                    supply_cap: Some(U128(1000)),
-                    divisibility: 18,
-                    live_time: 0,
-                },
-                distribution_schemes: DistributionSchemes {
+            contract_type: ContractType::Asset(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(1000)),
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(1000)),
                         amount_per_mint: U128(10),
@@ -1000,13 +992,12 @@ async fn test_integration_mint_freemint() {
     let mut ctx = TestContext::new().await;
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(AssetContract {
-                asset: SimpleAsset {
-                    supply_cap: Some(U128(1000)),
-                    divisibility: 18,
-                    live_time: 0,
-                },
-                distribution_schemes: DistributionSchemes {
+            contract_type: ContractType::Asset(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(1000)),
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(1000)),
                         amount_per_mint: U128(10),
@@ -1066,13 +1057,12 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
 
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(AssetContract {
-                asset: SimpleAsset {
-                    supply_cap: Some(U128(50)),
-                    divisibility: 18,
-                    live_time: 0,
-                },
-                distribution_schemes: DistributionSchemes {
+            contract_type: ContractType::Asset(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(50)),
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(50)),
                         amount_per_mint: U128(50),
@@ -1140,13 +1130,12 @@ async fn test_integration_mint_freemint_livetime_notreached() {
 
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(AssetContract {
-                asset: SimpleAsset {
-                    supply_cap: Some(U128(1000)),
-                    divisibility: 18,
-                    live_time: 5,
-                },
-                distribution_schemes: DistributionSchemes {
+            contract_type: ContractType::Asset(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(1000)),
+                divisibility: 18,
+                live_time: 5,
+                mint_mechanism: MintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(1000)),
                         amount_per_mint: U128(50),
@@ -1260,17 +1249,16 @@ async fn test_integration_mint_preallocated_freemint() {
 
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(AssetContract {
-                asset: SimpleAsset {
-                    supply_cap: Some(U128(1000)),
-                    divisibility: 18,
-                    live_time: 0,
-                },
-                distribution_schemes: DistributionSchemes {
+            contract_type: ContractType::Asset(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(1000)),
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MintMechanisms {
                     preallocated: Some(Preallocated {
                         // total 400 + 300 = 700
                         allocations,
-                        vesting_plan,
+                        vesting_plan: Some(vesting_plan),
                     }),
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(300)),
@@ -1362,13 +1350,12 @@ async fn test_integration_mint_freemint_invalidpointer() {
 
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(AssetContract {
-                asset: SimpleAsset {
-                    supply_cap: Some(U128(1000)),
-                    divisibility: 18,
-                    live_time: 0,
-                },
-                distribution_schemes: DistributionSchemes {
+            contract_type: ContractType::Asset(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(1000)),
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(1000)),
                         amount_per_mint: U128(50),
@@ -1414,13 +1401,12 @@ async fn test_integration_transfer_normal() {
 
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(AssetContract {
-                asset: SimpleAsset {
-                    supply_cap: Some(U128(100_000)),
-                    divisibility: 18,
-                    live_time: 0,
-                },
-                distribution_schemes: DistributionSchemes {
+            contract_type: ContractType::Asset(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(100_000)),
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(100_000)),
                         amount_per_mint: U128(20_000),
@@ -1549,13 +1535,12 @@ async fn test_integration_transfer_overflow_output() {
 
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(AssetContract {
-                asset: SimpleAsset {
-                    supply_cap: Some(U128(100_000)),
-                    divisibility: 18,
-                    live_time: 0,
-                },
-                distribution_schemes: DistributionSchemes {
+            contract_type: ContractType::Asset(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(100_000)),
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(100_000)),
                         amount_per_mint: U128(20_000),
@@ -1665,13 +1650,12 @@ async fn test_integration_transfer_utxo() {
 
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(AssetContract {
-                asset: SimpleAsset {
-                    supply_cap: Some(U128(100_000)),
-                    divisibility: 18,
-                    live_time: 0,
-                },
-                distribution_schemes: DistributionSchemes {
+            contract_type: ContractType::Asset(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(100_000)),
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(100_000)),
                         amount_per_mint: U128(20_000),
@@ -1750,13 +1734,12 @@ async fn test_integration_glittr_asset_mint_purchase() {
     // Create first contract with free mint
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(AssetContract {
-                asset: SimpleAsset {
-                    supply_cap: Some(U128(1000)),
-                    divisibility: 18,
-                    live_time: 0,
-                },
-                distribution_schemes: DistributionSchemes {
+            contract_type: ContractType::Asset(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(1000)),
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(1000)),
                         amount_per_mint: U128(100),
@@ -1788,20 +1771,19 @@ async fn test_integration_glittr_asset_mint_purchase() {
     let first_mint_tx = ctx.build_and_mine_message(&mint_message).await;
 
     // Create second contract that uses first as input asset
-    let (treasury_address, _) = get_bitcoin_address();
+    let (treasury_address, treasury_pub_key) = get_bitcoin_address();
     let second_message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(AssetContract {
-                asset: SimpleAsset {
-                    supply_cap: Some(U128(500)),
-                    divisibility: 18,
-                    live_time: 0,
-                },
-                distribution_schemes: DistributionSchemes {
+            contract_type: ContractType::Asset(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(500)),
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::GlittrAsset(first_contract.to_tuple()),
-                        transfer_scheme: TransferScheme::Purchase(treasury_address.to_string()),
-                        transfer_ratio_type: TransferRatioType::Fixed { ratio: (2, 1) },
+                        pay_to_key: Some(treasury_pub_key.to_bytes()),
+                        ratio: TransferRatioType::Fixed { ratio: (2, 1) },
                     }),
                     preallocated: None,
                     free_mint: None,
