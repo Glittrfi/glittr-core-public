@@ -166,7 +166,7 @@ impl TestContext {
     ) {
         let asset_output = asset_lists
             .get(&outpoint.to_string())
-            .expect(&format!("Asset output {} should exist", outpoint.vout));
+            .unwrap_or_else(|| panic!("Asset output {} should exist", outpoint.vout));
 
         let value_output = asset_output
             .list
@@ -193,6 +193,18 @@ impl TestContext {
         tokio::task::spawn_blocking(|| drop(self.core))
             .await
             .expect("Drop failed");
+    }
+
+    async fn get_asset_list(&self) -> Vec<(String, AssetList)> {
+        let asset_list: Result<Vec<(String, AssetList)>, DatabaseError> = self
+            .indexer
+            .lock()
+            .await
+            .database
+            .lock()
+            .await
+            .expensive_find_by_prefix(ASSET_LIST_PREFIX);
+        asset_list.expect("asset list should exist")
     }
 }
 
@@ -374,15 +386,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
 
     let tx = ctx.get_transaction_from_block_tx(mint_block_tx).unwrap();
 
-    let asset_list: Result<Vec<(String, AssetList)>, DatabaseError> = ctx
-        .indexer
-        .lock()
-        .await
-        .database
-        .lock()
-        .await
-        .expensive_find_by_prefix(ASSET_LIST_PREFIX);
-    let asset_lists = asset_list.expect("asset list should exist");
+    let asset_lists = ctx.get_asset_list().await;
 
     for (k, v) in &asset_lists {
         println!("Mint output: {}: {:?}", k, v);
@@ -498,15 +502,7 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
 
     let tx = ctx.get_transaction_from_block_tx(mint_block_tx).unwrap();
 
-    let asset_list: Result<Vec<(String, AssetList)>, DatabaseError> = ctx
-        .indexer
-        .lock()
-        .await
-        .database
-        .lock()
-        .await
-        .expensive_find_by_prefix(ASSET_LIST_PREFIX);
-    let asset_lists = asset_list.expect("asset list should exist");
+    let asset_lists = ctx.get_asset_list().await;
 
     for (k, v) in &asset_lists {
         println!("Mint output: {}: {:?}", k, v);
@@ -642,15 +638,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
 
     let tx = ctx.get_transaction_from_block_tx(mint_block_tx).unwrap();
 
-    let asset_list: Result<Vec<(String, AssetList)>, DatabaseError> = ctx
-        .indexer
-        .lock()
-        .await
-        .database
-        .lock()
-        .await
-        .expensive_find_by_prefix(ASSET_LIST_PREFIX);
-    let asset_lists = asset_list.expect("asset list should exist");
+    let asset_lists = ctx.get_asset_list().await;
 
     for (k, v) in &asset_lists {
         println!("Mint output: {}: {:?}", k, v);
@@ -806,15 +794,7 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
 
     let tx = ctx.get_transaction_from_block_tx(mint_block_tx).unwrap();
 
-    let asset_list: Result<Vec<(String, AssetList)>, DatabaseError> = ctx
-        .indexer
-        .lock()
-        .await
-        .database
-        .lock()
-        .await
-        .expensive_find_by_prefix(ASSET_LIST_PREFIX);
-    let asset_lists = asset_list.expect("asset list should exist");
+    let asset_lists = ctx.get_asset_list().await;
 
     for (k, v) in &asset_lists {
         println!("Mint output: {}: {:?}", k, v);
@@ -951,15 +931,7 @@ async fn test_metaprotocol_to_glittr_asset() {
 
     let tx = ctx.get_transaction_from_block_tx(mint_block_tx).unwrap();
 
-    let asset_list: Result<Vec<(String, AssetList)>, DatabaseError> = ctx
-        .indexer
-        .lock()
-        .await
-        .database
-        .lock()
-        .await
-        .expensive_find_by_prefix(ASSET_LIST_PREFIX);
-    let asset_lists = asset_list.expect("asset list should exist");
+    let asset_lists = ctx.get_asset_list().await;
 
     for (k, v) in &asset_lists {
         println!("Mint output: {}: {:?}", k, v);
@@ -1076,15 +1048,7 @@ async fn test_integration_mint_freemint() {
         );
     let data_free_mint = asset_contract_data.expect("Free mint data should exist");
 
-    let asset_list: Result<Vec<(String, AssetList)>, DatabaseError> = ctx
-        .indexer
-        .lock()
-        .await
-        .database
-        .lock()
-        .await
-        .expensive_find_by_prefix(ASSET_LIST_PREFIX);
-    let asset_lists = asset_list.expect("asset list should exist");
+    let asset_lists = ctx.get_asset_list().await;
 
     for (k, v) in &asset_lists {
         println!("Mint output: {}: {:?}", k, v);
@@ -1380,15 +1344,7 @@ async fn test_integration_mint_preallocated_freemint() {
         );
     let data_free_mint = asset_contract_data.expect("Free mint data should exist");
 
-    let asset_list: Result<Vec<(String, AssetList)>, DatabaseError> = ctx
-        .indexer
-        .lock()
-        .await
-        .database
-        .lock()
-        .await
-        .expensive_find_by_prefix(ASSET_LIST_PREFIX);
-    let asset_lists = asset_list.expect("asset list should exist");
+    let asset_lists = ctx.get_asset_list().await;
 
     for (k, v) in &asset_lists {
         println!("Mint output: {}: {:?}", k, v);
@@ -1907,29 +1863,11 @@ async fn test_integration_glittr_asset_mint_purchase() {
     let second_outcome = ctx.get_and_verify_message_outcome(second_contract).await;
     assert!(second_outcome.flaw.is_none());
 
-    let asset_list: Result<Vec<(String, AssetList)>, DatabaseError> = ctx
-        .indexer
-        .lock()
-        .await
-        .database
-        .lock()
-        .await
-        .expensive_find_by_prefix(ASSET_LIST_PREFIX);
-    let asset_lists = asset_list.expect("asset list should exist");
+    let asset_lists = ctx.get_asset_list().await;
 
     for (k, v) in &asset_lists {
         println!("Mint output: {}: {:?}", k, v);
     }
 
     ctx.drop().await;
-}
-
-#[tokio::test]
-async fn test_integration_burn() {
-    // TODO: Implement using TestContext
-}
-
-#[tokio::test]
-async fn test_integration_swap() {
-    // TODO: Implement using TestContext
 }

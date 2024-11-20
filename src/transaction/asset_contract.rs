@@ -190,7 +190,7 @@ pub enum TransferRatioType {
 #[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct OracleSetting {
-    /// set asset_id to none to fully trust the oracle, ordinal_number if ordinal, rune's block_tx if rune, etc
+    /// set asset_id to null for fully trust the oracle, ordinal_number if ordinal, rune's block_tx if rune, etc
     pub asset_id: Option<String>,
     /// delta block_height in which the oracle message still valid
     pub block_height_slippage: u8,

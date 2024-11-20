@@ -2,7 +2,7 @@
 
 use config::CONFIG;
 use serde::{Deserialize, Serialize};
-use std::{env, error::Error, sync::Arc, thread};
+use std::{env, error::Error, sync::Arc};
 use store::database::Database;
 use tokio::sync::Mutex;
 
@@ -35,7 +35,7 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
     let database_indexer = Arc::clone(&database);
 
     let indexer_handle = tokio::spawn(async {
-        let mut current_indexer = indexer::Indexer::new(
+        let mut current_indexer = Indexer::new(
             database_indexer,
             CONFIG.btc_rpc_url.clone(),
             CONFIG.btc_rpc_username.clone(),

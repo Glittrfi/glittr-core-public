@@ -24,6 +24,7 @@ pub struct MintOption {
     pub oracle_message: Option<OracleMessageSigned>,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum CallType {
@@ -144,23 +145,25 @@ impl OpReturnMessage {
         let message =
             OpReturnMessage::deserialize(&mut Deserializer::from_slice(payload.as_slice()));
 
-
         match message {
             Ok(message) => {
-                if message.contract_call.is_none() && message.contract_creation.is_none() && message.transfer.is_none() {
+                if message.contract_call.is_none()
+                    && message.contract_creation.is_none()
+                    && message.transfer.is_none()
+                {
                     return Err(Flaw::FailedDeserialization);
                 }
                 Ok(message)
-            },
+            }
             Err(_) => Err(Flaw::FailedDeserialization),
         }
     }
 
     pub fn validate(&self) -> Option<Flaw> {
         if let Some(contract_creation) = &self.contract_creation {
-            match &contract_creation.contract_type {
+            return match &contract_creation.contract_type {
                 ContractType::Asset(asset_contract) => {
-                    return asset_contract.validate();
+                   asset_contract.validate()
                 }
             }
         }
