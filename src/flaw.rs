@@ -47,6 +47,7 @@ pub enum Flaw {
     // spec
     SpecNotMutable,
     SpecFieldRequired(String),
+    SpecInvalidContract,
 
     NotImplemented,
     NonGlittrMessage,

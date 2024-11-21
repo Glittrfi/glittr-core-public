@@ -1,8 +1,8 @@
 mod mint;
+mod spec;
 
 use std::{collections::HashMap, str::FromStr};
 
-use mint_only_asset::{MintOnlyAssetContract, InputAsset, PurchaseBurnSwap, VestingPlan};
 use bitcoin::{
     hashes::{sha256, Hash},
     key::Secp256k1,
@@ -17,6 +17,7 @@ use database::{
 };
 use flaw::Flaw;
 use message::{CallType, ContractType, OpReturnMessage, TxTypeTransfer};
+use mint_only_asset::{InputAsset, MintOnlyAssetContract, PurchaseBurnSwap, VestingPlan};
 
 use super::*;
 
@@ -221,17 +222,28 @@ impl Updater {
 
             // NOTe: dynamic validation
             if let Some(contract_creation) = message.contract_creation {
-                if let ContractType::Asset(asset_contract) = contract_creation.contract_type {
-                    if let Some(purchase) = asset_contract.mint_mechanism.purchase {
-                        if let InputAsset::GlittrAsset(block_tx_tuple) = purchase.input_asset {
-                            let message = self.get_message(&block_tx_tuple).await;
+                match contract_creation.contract_type {
+                    ContractType::Asset(asset_contract) => {
+                        if let Some(purchase) = asset_contract.mint_mechanism.purchase {
+                            if let InputAsset::GlittrAsset(block_tx_tuple) = purchase.input_asset {
+                                let message = self.get_message(&block_tx_tuple).await;
 
-                            if let Ok(message) = message {
-                                if message.contract_creation.is_none() && outcome.flaw.is_none() {
-                                    outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx)
+                                if let Ok(message) = message {
+                                    if message.contract_creation.is_none() && outcome.flaw.is_none()
+                                    {
+                                        outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx)
+                                    }
+                                } else if outcome.flaw.is_none() {
+                                    outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx);
                                 }
-                            } else if outcome.flaw.is_none() {
-                                outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx);
+                            }
+                        }
+                    }
+
+                    ContractType::Spec(spec_contract) => {
+                        if let Some(_) = spec_contract.block_tx {
+                            if outcome.flaw.is_none() {
+                                outcome.flaw = self.update_spec(&spec_contract).await;
                             }
                         }
                     }
@@ -355,6 +367,21 @@ impl Updater {
             }
             Err(DatabaseError::NotFound) => Err(Flaw::ContractNotFound),
             Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
+        }
+    }
+
+    async fn set_message(&self, contract_id: &BlockTxTuple, message: &OpReturnMessage) {
+        let outcome = MessageDataOutcome {
+            message: Some(message.clone()),
+            flaw: None,
+        };
+
+        if !self.is_read_only {
+            let contract_key = BlockTx::from_tuple(*contract_id).to_string();
+            self.database
+                .lock()
+                .await
+                .put(MESSAGE_PREFIX, &contract_key, outcome);
         }
     }
 

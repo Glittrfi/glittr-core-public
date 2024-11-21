@@ -165,8 +165,7 @@ impl OpReturnMessage {
         if let Some(contract_creation) = &self.contract_creation {
             return match &contract_creation.contract_type {
                 ContractType::Asset(asset_contract) => asset_contract.validate(),
-                // TODO implement spec validation
-                ContractType::Spec(_) => None,
+                ContractType::Spec(spec_contract) => spec_contract.validate(),
             };
         }
 
