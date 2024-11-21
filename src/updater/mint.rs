@@ -1,11 +1,10 @@
+use super::*;
 use bitcoin::{
     hex::{Case, DisplayHex},
     PublicKey, ScriptBuf,
 };
 use message::MintOption;
 use shared::{Preallocated, RatioType};
-
-use super::*;
 
 impl Updater {
     async fn mint_free_mint(
@@ -42,7 +41,7 @@ impl Updater {
             .saturating_add(free_mint.amount_per_mint.0);
 
         // check pointer overflow
-        if let Some(flaw) = self.validate_mint_pointer(mint_option.pointer, tx) {
+        if let Some(flaw) = self.validate_pointer(mint_option.pointer, tx) {
             return Some(flaw);
         }
 
@@ -255,7 +254,7 @@ impl Updater {
         }
 
         // check pointer overflow
-        if let Some(flaw) = self.validate_mint_pointer(mint_option.pointer, tx) {
+        if let Some(flaw) = self.validate_pointer(mint_option.pointer, tx) {
             return Some(flaw);
         }
 
@@ -406,7 +405,7 @@ impl Updater {
             return Some(flaw);
         }
 
-        if let Some(flaw) = self.validate_mint_pointer(mint_option.pointer, tx) {
+        if let Some(flaw) = self.validate_pointer(mint_option.pointer, tx) {
             return Some(flaw);
         }
 
@@ -532,7 +531,7 @@ impl Updater {
         None
     }
 
-    fn validate_mint_pointer(&self, pointer: u32, tx: &Transaction) -> Option<Flaw> {
+    pub fn validate_pointer(&self, pointer: u32, tx: &Transaction) -> Option<Flaw> {
         if pointer >= tx.output.len() as u32 {
             return Some(Flaw::PointerOverflow);
         }
@@ -540,17 +539,5 @@ impl Updater {
             return Some(Flaw::InvalidPointer);
         }
         None
-    }
-}
-
-// TODO: move to helper file
-pub fn relative_block_height_to_block_height(
-    block_height_relative_absolute: RelativeOrAbsoluteBlockHeight,
-    current_block_height: BlockHeight,
-) -> BlockHeight {
-    if block_height_relative_absolute < 0 {
-        current_block_height.saturating_add(-block_height_relative_absolute as u64)
-    } else {
-        block_height_relative_absolute as u64
     }
 }

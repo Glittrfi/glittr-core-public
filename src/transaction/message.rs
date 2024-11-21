@@ -16,7 +16,7 @@ use mint_only_asset::MintOnlyAssetContract;
 #[serde(rename_all = "snake_case")]
 pub enum ContractType {
     Moa(MintOnlyAssetContract),
-    Mba(MintBurnAssetContract)
+    Mba(MintBurnAssetContract),
 }
 
 #[serde_with::skip_serializing_none]
@@ -33,6 +33,20 @@ pub enum CallType {
     Mint(MintOption),
     Burn,
     Swap,
+    // Collateralized assets
+    OpenAccount(OpenAccountOption),
+    CloseAccount(CloseAccountOption), // TODO: partial return & fee
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct OpenAccountOption {
+    pub pointer: u32,
+    pub share_amount: U128, // representation of total value of the inputs
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct CloseAccountOption {
+    pointer: u32
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -165,7 +179,7 @@ impl OpReturnMessage {
         if let Some(contract_creation) = &self.contract_creation {
             return match &contract_creation.contract_type {
                 ContractType::Moa(mint_only_asset_contract) => mint_only_asset_contract.validate(),
-                ContractType::Mba(mint_burn_asset_contract) => todo!(),
+                ContractType::Mba(mint_burn_asset_contract) => mint_burn_asset_contract.validate(),
             };
         }
 
@@ -257,7 +271,7 @@ mod test {
                     assert_eq!(free_mint.supply_cap, Some(U128(1000)));
                     assert_eq!(free_mint.amount_per_mint, U128(10));
                 }
-                ContractType::Mba(mint_burn_asset_contract) => todo!(),
+                _ => {}
             }
         }
     }

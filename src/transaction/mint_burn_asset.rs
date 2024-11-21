@@ -57,6 +57,7 @@ pub struct AccountType {
 #[serde(rename_all = "snake_case")]
 pub struct ReturnCollateral {
     pub fee: Option<Fraction>,
+    pub partial_returns: bool // to return collateral you have to close out the account
 }
 
 impl Collateralized {
@@ -74,7 +75,7 @@ impl Collateralized {
             MintStructure::Ratio(ratio_type) => return ratio_type.validate(),
             MintStructure::Proportional() => {}
             MintStructure::Account(account) => {
-                if account.max_ltv.0 < account.max_ltv.1 {
+                if account.max_ltv.0 > account.max_ltv.1 {
                     return Some(Flaw::FractionInvalid);
                 }
                 return account.ratio.validate();
@@ -88,7 +89,7 @@ impl Collateralized {
 impl ReturnCollateral {
     pub fn validate(&self) -> Option<Flaw> {
         if let Some(fee) = self.fee {
-            if fee.0 < fee.1 {
+            if fee.0 > fee.1 {
                 return Some(Flaw::FractionInvalid);
             }
         }

@@ -44,6 +44,7 @@ pub enum Flaw {
     SupplyCapInvalid,
     SupplyRemainder,
     FractionInvalid,
+    InvalidContractType,
 
     NotImplemented,
     NonGlittrMessage,

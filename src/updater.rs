@@ -1,4 +1,8 @@
+mod collateralized;
 mod mint;
+mod updater_shared;
+
+pub use updater_shared::*;
 
 use std::{collections::HashMap, str::FromStr};
 
@@ -214,25 +218,65 @@ impl Updater {
                 outcome.flaw = Some(flaw)
             }
 
+            // NOTE: dynamic validation
             if let Some(transfer) = message.transfer {
                 if outcome.flaw.is_none() {
                     outcome.flaw = self.transfers(tx, transfer.transfers).await;
                 }
             }
 
-            // NOTe: dynamic validation
             if let Some(contract_creation) = message.contract_creation {
-                if let ContractType::Moa(asset_contract) = contract_creation.contract_type {
-                    if let Some(purchase) = asset_contract.mint_mechanism.purchase {
-                        if let InputAsset::GlittrAsset(block_tx_tuple) = purchase.input_asset {
-                            let message = self.get_message(&block_tx_tuple).await;
+                match contract_creation.contract_type {
+                    ContractType::Moa(mint_only_asset_contract) => {
+                        if let Some(purchase) = mint_only_asset_contract.mint_mechanism.purchase {
+                            if let InputAsset::GlittrAsset(block_tx_tuple) = purchase.input_asset {
+                                let message = self.get_message(&block_tx_tuple).await;
 
-                            if let Ok(message) = message {
-                                if message.contract_creation.is_none() && outcome.flaw.is_none() {
-                                    outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx)
+                                if let Ok(message) = message {
+                                    if message.contract_creation.is_none() && outcome.flaw.is_none()
+                                    {
+                                        outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx)
+                                    }
+                                } else if outcome.flaw.is_none() {
+                                    outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx);
                                 }
-                            } else if outcome.flaw.is_none() {
-                                outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx);
+                            }
+                        }
+                    }
+                    ContractType::Mba(mint_burn_asset_contract) => {
+                        if let Some(purchase) = mint_burn_asset_contract.mint_mechanism.purchase {
+                            if let InputAsset::GlittrAsset(block_tx_tuple) = purchase.input_asset {
+                                let message = self.get_message(&block_tx_tuple).await;
+
+                                if let Ok(message) = message {
+                                    if message.contract_creation.is_none() && outcome.flaw.is_none()
+                                    {
+                                        outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx)
+                                    }
+                                } else if outcome.flaw.is_none() {
+                                    outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx);
+                                }
+                            }
+                        }
+
+                        if let Some(collateralized) =
+                            mint_burn_asset_contract.mint_mechanism.collateralized
+                        {
+                            for input_asset in collateralized.input_assets {
+
+                                if let InputAsset::GlittrAsset(block_tx_tuple) = input_asset {
+                                    let message = self.get_message(&block_tx_tuple).await;
+    
+                                    if let Ok(message) = message {
+                                        if message.contract_creation.is_none() && outcome.flaw.is_none()
+                                        {
+                                            outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx)
+                                        }
+                                    } else if outcome.flaw.is_none() {
+                                        outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx);
+                                    }
+                                }
+
                             }
                         }
                     }
@@ -253,6 +297,16 @@ impl Updater {
                     }
                     CallType::Swap => {
                         log::info!("Process call type swap");
+                    }
+                    CallType::OpenAccount(open_account_option) => {
+                        if outcome.flaw.is_none() {
+                            outcome.flaw = self
+                                .process_open_account(tx, block_tx, &contract_call.contract, &open_account_option)
+                                .await;
+                        }
+                    }
+                    CallType::CloseAccount(close_account_option) => {
+                        log::info!("Process call type close account");
                     }
                 }
             }

@@ -1,8 +1,5 @@
 use bitcoin::{
-    hashes::{sha256, Hash},
-    key::{rand, Keypair, Secp256k1},
-    secp256k1::{self, Message, SecretKey},
-    Address, OutPoint, PrivateKey, PublicKey, ScriptBuf, Transaction, Witness, XOnlyPublicKey,
+    hashes::{sha256, Hash}, key::{rand, Keypair, Secp256k1}, secp256k1::{self, Message, SecretKey}, Address, Block, OutPoint, PrivateKey, PublicKey, ScriptBuf, Transaction, Witness, XOnlyPublicKey
 };
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use mockcore::{Handle, TransactionTemplate};
@@ -12,20 +9,22 @@ use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
 
 use glittr::{
     database::{
-        Database, DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX,
-        INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX,
+        Database, DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, COLLATERAL_ACCOUNT_PREFIX, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX
     },
     message::{
-        CallType, ContractCall, ContractCreation, ContractType, MintOption, OpReturnMessage,
-        OracleMessage, OracleMessageSigned, Transfer, TxTypeTransfer,
+        CallType, ContractCall, ContractCreation, ContractType, MintOption, OpReturnMessage, OpenAccountOption, OracleMessage, OracleMessageSigned, Transfer, TxTypeTransfer
+    },
+    mint_burn_asset::{
+        AccountType, BurnMechanisms, Collateralized, MBAMintMechanisms, MintBurnAssetContract,
+        MintStructure,
     },
     mint_only_asset::MintOnlyAssetContract,
     shared::{
         FreeMint, InputAsset, MintMechanisms, OracleSetting, Preallocated, PurchaseBurnSwap,
         RatioType, VestingPlan,
     },
-    AssetContractData, AssetList, BlockTx, Flaw, Indexer, MessageDataOutcome, Outpoint, Pubkey,
-    U128,
+    AssetContractData, AssetList, BlockTx, Flaw, Fraction, Indexer, MessageDataOutcome, Outpoint, CollateralAccount,
+    Pubkey, U128,
 };
 
 // Test utilities
@@ -156,6 +155,30 @@ impl TestContext {
                     .collect()
             });
         asset_map.expect("asset map should exist")
+    }
+
+
+    async fn get_collateralize_accounts(&self) -> HashMap<String, CollateralAccount> {
+        let collateralize_account: Result<HashMap<String, CollateralAccount>, DatabaseError> = self
+            .indexer
+            .lock()
+            .await
+            .database
+            .lock()
+            .await
+            .expensive_find_by_prefix(COLLATERAL_ACCOUNT_PREFIX)
+            .map(|vec| {
+                vec.into_iter()
+                    .map(|(k, v)| {
+                        (
+                            k.trim_start_matches(&format!("{}:", COLLATERAL_ACCOUNT_PREFIX))
+                                .to_string(),
+                            v,
+                        )
+                    })
+                    .collect()
+            });
+        collateralize_account.expect("collateral account should exist")
     }
 
     fn verify_asset_output(
@@ -981,11 +1004,6 @@ async fn test_integration_freemint() {
     ctx.verify_last_block(block_tx.block).await;
     ctx.get_and_verify_message_outcome(block_tx).await;
     ctx.drop().await;
-}
-
-#[tokio::test]
-async fn test_integration_preallocated() {
-    // TODO: Implement using TestContext
 }
 
 #[tokio::test]
@@ -1851,6 +1869,140 @@ async fn test_integration_glittr_asset_mint_purchase() {
     for (k, v) in &asset_lists {
         println!("Mint output: {}: {:?}", k, v);
     }
+
+    ctx.drop().await;
+}
+
+#[tokio::test]
+async fn test_integration_collateralized_mba() {
+    let mut ctx = TestContext::new().await;
+
+    let (owner_address, _) = get_bitcoin_address();
+    // Create MOA (collateral token) with free mint
+    let collateral_message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(1_000_000)),
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MintMechanisms {
+                    free_mint: Some(FreeMint {
+                        supply_cap: Some(U128(1_000_000)),
+                        amount_per_mint: U128(100_000),
+                    }),
+                    preallocated: None,
+                    purchase: None,
+                },
+            }),
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let collateral_contract = ctx.build_and_mine_message(&collateral_message).await;
+
+    // Mint collateral tokens
+    let mint_collateral_message = OpReturnMessage {
+        contract_call: Some(ContractCall {
+            contract: collateral_contract.to_tuple(),
+            call_type: CallType::Mint(MintOption {
+                pointer: 1,
+                oracle_message: None,
+            }),
+        }),
+        transfer: None,
+        contract_creation: None,
+    };
+
+    let collateral_mint_tx = ctx.build_and_mine_message(&mint_collateral_message).await;
+
+
+    let mba_message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            contract_type: ContractType::Mba(MintBurnAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(500_000)),
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MBAMintMechanisms {
+                    preallocated: None,
+                    free_mint: None,
+                    purchase: None,
+                    collateralized: Some(Collateralized {
+                        input_assets: vec![InputAsset::GlittrAsset(collateral_contract.to_tuple())],
+                        is_asset_mutable: false,
+                        mint_structure: MintStructure::Account(AccountType {
+                            max_ltv: (7, 10),
+                            ratio: RatioType::Fixed { ratio: (1, 1) },
+                        }),
+                    }),
+                },
+                burn_mechanism: BurnMechanisms {
+                    return_collateral: None,
+                },
+            }),
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let mba_contract = ctx.build_and_mine_message(&mba_message).await;
+
+    let open_account_message = OpReturnMessage {
+        contract_call: Some(ContractCall {
+            contract: mba_contract.to_tuple(),
+            call_type: CallType::OpenAccount(OpenAccountOption {
+                pointer: 1,
+                share_amount: U128(100),
+            }),
+        }),
+        transfer: None,
+        contract_creation: None,
+    };
+
+    ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[
+            (collateral_mint_tx.block as usize, 1, 1, Witness::new()), // UTXO containing collateral
+            (collateral_mint_tx.block as usize, 0, 0, Witness::new()),
+        ],
+        op_return: Some(open_account_message.into_script()),
+        op_return_index: Some(0),
+        op_return_value: Some(0),
+        output_values: &[1000, 1000], // Values for outputs
+        outputs: 2,
+        p2tr: false,
+        recipient: Some(owner_address),
+    });
+    ctx.core.mine_blocks(1);
+
+    let account_block_tx = BlockTx {
+        block: ctx.core.height(),
+        tx: 1,
+    };
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    // Verify outcomes
+    let collateral_outcome = ctx
+        .get_and_verify_message_outcome(collateral_contract)
+        .await;
+    assert!(collateral_outcome.flaw.is_none());
+
+    let mba_outcome = ctx.get_and_verify_message_outcome(mba_contract).await;
+    assert!(mba_outcome.flaw.is_none());
+
+    let account_outcome = ctx.get_and_verify_message_outcome(account_block_tx).await;
+    assert!(account_outcome.flaw.is_none());
+
+    // // Verify asset allocations
+    let collateral_accounts = ctx.get_collateralize_accounts().await;
+
+    assert_eq!(collateral_accounts.len(), 1);
+    let account = collateral_accounts.values().next().unwrap();
+    assert_eq!(account.share_amount, 100);
+    assert_eq!(account.collateral_amounts, [((3, 1), 100000)]);
 
     ctx.drop().await;
 }
