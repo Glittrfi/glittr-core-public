@@ -1,21 +1,23 @@
-use asset_contract::Preallocated;
-use bitcoin::hex::{Case, DisplayHex};
+use bitcoin::{
+    hex::{Case, DisplayHex},
+    PublicKey, ScriptBuf,
+};
 use message::MintOption;
-use std::str::FromStr;
+use mint_only_asset::Preallocated;
 
 use super::*;
 
 impl Updater {
     async fn mint_free_mint(
         &mut self,
-        asset_contract: &AssetContract,
+        asset_contract: &MintOnlyAssetContract,
         tx: &Transaction,
         block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
         mint_option: &MintOption,
     ) -> Option<Flaw> {
         // check livetime
-        if asset_contract.asset.live_time > block_tx.block {
+        if asset_contract.live_time > block_tx.block {
             return Some(Flaw::LiveTimeNotReached);
         }
 
@@ -24,11 +26,7 @@ impl Updater {
             Err(flaw) => return Some(flaw),
         };
 
-        let free_mint = asset_contract
-            .distribution_schemes
-            .free_mint
-            .as_ref()
-            .unwrap();
+        let free_mint = asset_contract.mint_mechanism.free_mint.as_ref().unwrap();
         // check the supply
         if let Some(supply_cap) = &free_mint.supply_cap {
             let next_supply = free_mint_data
@@ -65,7 +63,7 @@ impl Updater {
 
     pub async fn mint_purchase_burn_swap(
         &mut self,
-        asset_contract: &AssetContract,
+        asset_contract: &MintOnlyAssetContract,
         purchase: &PurchaseBurnSwap,
         tx: &Transaction,
         block_tx: &BlockTx,
@@ -91,13 +89,14 @@ impl Updater {
             // No need to validate RawBtc
             InputAsset::RawBtc => {}
             // Validated below on oracle mint
-            InputAsset::Metaprotocol => {}
+            InputAsset::Rune => {}
+            InputAsset::Ordinal => {}
         };
 
         // VALIDATE OUTPUT
-        match &purchase.transfer_scheme {
+        if purchase.pay_to_key.is_none() {
             // Ensure that the asset is set to burn
-            asset_contract::TransferScheme::Burn => match &purchase.input_asset {
+            match &purchase.input_asset {
                 InputAsset::RawBtc => {
                     for output in tx.output.iter() {
                         let mut instructions = output.script_pubkey.instructions();
@@ -111,42 +110,50 @@ impl Updater {
                 InputAsset::GlittrAsset(_) => {
                     total_received_value = total_unallocated_glittr_asset;
                 }
-                InputAsset::Metaprotocol => {}
-            },
-            asset_contract::TransferScheme::Purchase(ref bitcoin_address) => {
-                for (pos, output) in tx.output.iter().enumerate() {
-                    let address = Address::from_str(bitcoin_address.as_str())
-                        .unwrap()
-                        .assume_checked();
-                    // TODO: bitcoin network from CONFIG
-                    let address_from_script = Address::from_script(
-                        output.script_pubkey.as_script(),
-                        bitcoin::Network::Regtest,
-                    );
+                InputAsset::Rune => {}
+                InputAsset::Ordinal => {}
+            }
+        } else if let Some(pubkey) = &purchase.pay_to_key {
+            let pubkey = PublicKey::from_slice(pubkey.as_slice()).unwrap();
+            let potential_addresses = vec![
+                Address::from_script(
+                    &ScriptBuf::new_p2wpkh(&pubkey.wpubkey_hash().unwrap()),
+                    bitcoin::Network::Regtest,
+                )
+                .unwrap(),
+                Address::from_script(
+                    &ScriptBuf::new_p2pkh(&pubkey.pubkey_hash()),
+                    bitcoin::Network::Regtest,
+                )
+                .unwrap(),
+            ];
+            for (pos, output) in tx.output.iter().enumerate() {
+                // TODO: bitcoin network from CONFIG
+                let address_from_script = Address::from_script(
+                    output.script_pubkey.as_script(),
+                    bitcoin::Network::Regtest,
+                );
 
-                    if let Ok(address_from_script) = address_from_script {
-                        if address == address_from_script {
-                            match purchase.input_asset {
-                                InputAsset::RawBtc => {
-                                    total_received_value = output.value.to_sat() as u128;
-                                }
-                                InputAsset::GlittrAsset(asset_contract_id) => {
-                                    if let Some(asset_list) =
-                                        self.allocated_asset_list.get(&(pos as u32))
+                if let Ok(address_from_script) = address_from_script {
+                    if potential_addresses.contains(&address_from_script) {
+                        match purchase.input_asset {
+                            InputAsset::RawBtc => {
+                                total_received_value = output.value.to_sat() as u128;
+                            }
+                            InputAsset::GlittrAsset(asset_contract_id) => {
+                                if let Some(asset_list) =
+                                    self.allocated_asset_list.get(&(pos as u32))
+                                {
+                                    if let Some(amount) = asset_list
+                                        .list
+                                        .get(&BlockTx::from_tuple(asset_contract_id).to_str())
                                     {
-                                        if let Some(amount) = asset_list
-                                            .list
-                                            .get(&BlockTx::from_tuple(asset_contract_id).to_str())
-                                        {
-                                            total_received_value = *amount;
-                                        }
+                                        total_received_value = *amount;
                                     }
                                 }
-                                InputAsset::Metaprotocol => {
-                                    // TODO(transfer): handle transfer for each and every metaprotocol (ordinal, runes)
-                                    // need to copy the transfer mechanics for each, make sure the sat is burned
-                                }
                             }
+                            InputAsset::Rune => {}
+                            InputAsset::Ordinal => {}
                         }
                     }
                 }
@@ -154,11 +161,11 @@ impl Updater {
         }
 
         // VALIDATE OUT_VALUE
-        match &purchase.transfer_ratio_type {
-            asset_contract::TransferRatioType::Fixed { ratio } => {
+        match &purchase.ratio {
+            mint_only_asset::TransferRatioType::Fixed { ratio } => {
                 out_value = (total_received_value * ratio.0 as u128) / ratio.1 as u128;
             }
-            asset_contract::TransferRatioType::Oracle { pubkey, setting } => {
+            mint_only_asset::TransferRatioType::Oracle { pubkey, setting } => {
                 if let Some(oracle_message_signed) = mint_option.oracle_message {
                     if setting.asset_id == oracle_message_signed.message.asset_id {
                         let pubkey: XOnlyPublicKey =
@@ -257,7 +264,7 @@ impl Updater {
         }
 
         // If transfer is burn and using glittr asset input, remove it from unallocated and add burned
-        if let asset_contract::TransferScheme::Burn = &purchase.transfer_scheme {
+        if purchase.pay_to_key.is_none() {
             if let InputAsset::GlittrAsset(asset_contract_id) = purchase.input_asset {
                 let burned_amount = self
                     .unallocated_asset_list
@@ -294,7 +301,7 @@ impl Updater {
 
     pub async fn mint_preallocated(
         &mut self,
-        asset_contract: &AssetContract,
+        asset_contract: &MintOnlyAssetContract,
         preallocated: &Preallocated,
         tx: &Transaction,
         block_tx: &BlockTx,
@@ -346,45 +353,50 @@ impl Updater {
             .get(&owner_pub_key.to_hex_string(Case::Lower))
             .unwrap_or(&0);
 
-        let out_value: u128 = match preallocated.vesting_plan.clone() {
-            VestingPlan::Timelock(block_height_relative_absolute) => {
-                let vested_block_height = relative_block_height_to_block_height(
-                    block_height_relative_absolute,
-                    contract_id.0,
-                );
-
-                if block_tx.block < vested_block_height {
-                    return Some(Flaw::VestingBlockNotReached);
-                }
-
-                total_allocation.saturating_sub(claimed_allocation)
-            }
-            VestingPlan::Scheduled(mut vesting_schedule) => {
-                let mut vested_allocation: u128 = 0;
-
-                vesting_schedule.sort_by(|a, b| {
-                    let vested_block_height_a =
-                        relative_block_height_to_block_height(a.1, contract_id.0);
-                    let vested_block_height_b =
-                        relative_block_height_to_block_height(b.1, contract_id.0);
-
-                    vested_block_height_a.cmp(&vested_block_height_b)
-                });
-
-                for (ratio, block_height_relative_absolute) in vesting_schedule {
+        let out_value: u128 = if let Some(vesting_plan) = preallocated.vesting_plan.clone() {
+            match vesting_plan {
+                VestingPlan::Timelock(block_height_relative_absolute) => {
                     let vested_block_height = relative_block_height_to_block_height(
-                        block_height_relative_absolute,
+                        block_height_relative_absolute.clone(),
                         contract_id.0,
                     );
 
-                    if block_tx.block >= vested_block_height {
-                        vested_allocation = vested_allocation
-                            .saturating_add((total_allocation * ratio.0 as u128) / ratio.1 as u128);
+                    if block_tx.block < vested_block_height {
+                        return Some(Flaw::VestingBlockNotReached);
                     }
-                }
 
-                vested_allocation.saturating_sub(claimed_allocation)
+                    total_allocation.saturating_sub(claimed_allocation)
+                }
+                VestingPlan::Scheduled(mut vesting_schedule) => {
+                    let mut vested_allocation: u128 = 0;
+
+                    vesting_schedule.sort_by(|a, b| {
+                        let vested_block_height_a =
+                            relative_block_height_to_block_height(a.1, contract_id.0);
+                        let vested_block_height_b =
+                            relative_block_height_to_block_height(b.1, contract_id.0);
+
+                        vested_block_height_a.cmp(&vested_block_height_b)
+                    });
+
+                    for (ratio, block_height_relative_absolute) in vesting_schedule {
+                        let vested_block_height = relative_block_height_to_block_height(
+                            block_height_relative_absolute,
+                            contract_id.0,
+                        );
+
+                        if block_tx.block >= vested_block_height {
+                            vested_allocation = vested_allocation.saturating_add(
+                                (total_allocation * ratio.0 as u128) / ratio.1 as u128,
+                            );
+                        }
+                    }
+
+                    vested_allocation.saturating_sub(claimed_allocation)
+                }
             }
+        } else {
+            total_allocation.saturating_sub(claimed_allocation)
         };
 
         if let Some(flaw) = self
@@ -424,7 +436,7 @@ impl Updater {
                 Some(contract_creation) => match contract_creation.contract_type {
                     ContractType::Asset(asset_contract) => {
                         let result_preallocated = if let Some(preallocated) =
-                            &asset_contract.distribution_schemes.preallocated
+                            &asset_contract.mint_mechanism.preallocated
                         {
                             self.mint_preallocated(
                                 &asset_contract,
@@ -443,26 +455,26 @@ impl Updater {
                             return result_preallocated;
                         }
 
-                        let result_free_mint =
-                            if asset_contract.distribution_schemes.free_mint.is_some() {
-                                self.mint_free_mint(
-                                    &asset_contract,
-                                    tx,
-                                    block_tx,
-                                    contract_id,
-                                    mint_option,
-                                )
-                                .await
-                            } else {
-                                Some(Flaw::NotImplemented)
-                            };
+                        let result_free_mint = if asset_contract.mint_mechanism.free_mint.is_some()
+                        {
+                            self.mint_free_mint(
+                                &asset_contract,
+                                tx,
+                                block_tx,
+                                contract_id,
+                                mint_option,
+                            )
+                            .await
+                        } else {
+                            Some(Flaw::NotImplemented)
+                        };
 
                         if result_free_mint.is_none() {
                             return result_free_mint;
                         }
 
                         let result_purchase =
-                            if let Some(purchase) = &asset_contract.distribution_schemes.purchase {
+                            if let Some(purchase) = &asset_contract.mint_mechanism.purchase {
                                 self.mint_purchase_burn_swap(
                                     &asset_contract,
                                     purchase,
@@ -498,10 +510,10 @@ impl Updater {
     async fn check_and_update_supply_cap(
         &mut self,
         contract_id: &BlockTxTuple,
-        asset_contract: &AssetContract,
+        asset_contract: &MintOnlyAssetContract,
         amount: u128,
     ) -> Option<Flaw> {
-        if let Some(supply_cap) = &asset_contract.asset.supply_cap {
+        if let Some(supply_cap) = &asset_contract.supply_cap {
             let mut asset_contract_data = match self.get_asset_contract_data(contract_id).await {
                 Ok(data) => data,
                 Err(flaw) => return Some(flaw),

@@ -1,7 +1,6 @@
 use std::fmt;
 
 use super::*;
-use asset_contract::AssetContract;
 use bitcoin::{
     opcodes,
     script::{self, Instruction, PushBytes},
@@ -10,11 +9,12 @@ use bitcoin::{
 use bitcoincore_rpc::jsonrpc::serde_json::{self, Deserializer};
 use constants::OP_RETURN_MAGIC_PREFIX;
 use flaw::Flaw;
+use mint_only_asset::MintOnlyAssetContract;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum ContractType {
-    Asset(AssetContract),
+    Asset(MintOnlyAssetContract),
 }
 
 #[serde_with::skip_serializing_none]
@@ -162,10 +162,8 @@ impl OpReturnMessage {
     pub fn validate(&self) -> Option<Flaw> {
         if let Some(contract_creation) = &self.contract_creation {
             return match &contract_creation.contract_type {
-                ContractType::Asset(asset_contract) => {
-                   asset_contract.validate()
-                }
-            }
+                ContractType::Asset(asset_contract) => asset_contract.validate(),
+            };
         }
 
         if let Some(contract_call) = &self.contract_call {
@@ -198,28 +196,26 @@ impl fmt::Display for OpReturnMessage {
 mod test {
     use bitcoin::consensus::deserialize;
     use bitcoin::{locktime, transaction::Version, Amount, Transaction, TxOut};
+    use bitcoincore_rpc::RawTx;
 
-    use crate::asset_contract::DistributionSchemes;
-    use crate::asset_contract::FreeMint;
-    use crate::asset_contract::SimpleAsset;
-    use crate::transaction::asset_contract::AssetContract;
+    use crate::mint_only_asset::FreeMint;
+    use crate::mint_only_asset::MintMechanisms;
     use crate::transaction::message::ContractType;
+    use crate::transaction::mint_only_asset::MintOnlyAssetContract;
     use crate::U128;
 
     use super::{ContractCreation, OpReturnMessage};
 
-    #[test]
-    pub fn parse_op_return_message_success() {
+    fn create_dummy_tx() -> Transaction {
         let dummy_message = OpReturnMessage {
             transfer: None,
             contract_creation: Some(ContractCreation {
-                contract_type: ContractType::Asset(AssetContract {
-                    asset: SimpleAsset {
-                        supply_cap: Some(U128(1000)),
-                        divisibility: 18,
-                        live_time: 0,
-                    },
-                    distribution_schemes: DistributionSchemes {
+                contract_type: ContractType::Asset(MintOnlyAssetContract {
+                    ticker: None,
+                    supply_cap: Some(U128(1000)),
+                    divisibility: 18,
+                    live_time: 0,
+                    mint_mechanism: MintMechanisms {
                         free_mint: Some(FreeMint {
                             supply_cap: Some(U128(1000)),
                             amount_per_mint: U128(10),
@@ -232,7 +228,7 @@ mod test {
             contract_call: None,
         };
 
-        let tx = Transaction {
+        Transaction {
             input: Vec::new(),
             lock_time: locktime::absolute::LockTime::ZERO,
             output: vec![TxOut {
@@ -240,17 +236,22 @@ mod test {
                 value: Amount::from_int_btc(0),
             }],
             version: Version(2),
-        };
+        }
+    }
+
+    #[test]
+    pub fn parse_op_return_message_success() {
+        let tx = create_dummy_tx();
 
         let parsed = OpReturnMessage::parse_tx(&tx);
 
         if let Some(contract_creation) = parsed.unwrap().contract_creation {
             match contract_creation.contract_type {
                 ContractType::Asset(asset_contract) => {
-                    let free_mint = asset_contract.distribution_schemes.free_mint.unwrap();
-                    assert_eq!(asset_contract.asset.supply_cap, Some(U128(1000)));
-                    assert_eq!(asset_contract.asset.divisibility, 18);
-                    assert_eq!(asset_contract.asset.live_time, 0);
+                    let free_mint = asset_contract.mint_mechanism.free_mint.unwrap();
+                    assert_eq!(asset_contract.supply_cap, Some(U128(1000)));
+                    assert_eq!(asset_contract.divisibility, 18);
+                    assert_eq!(asset_contract.live_time, 0);
                     assert_eq!(free_mint.supply_cap, Some(U128(1000)));
                     assert_eq!(free_mint.amount_per_mint, U128(10));
                 }
@@ -260,7 +261,9 @@ mod test {
 
     #[test]
     pub fn validate_op_return_message_from_tx_hex_success() {
-        let tx_bytes = hex::decode("02000000031824d7a443ef2c52d76e0ff243cd4a02e9c758897f656ac76e3f2a485e162578000000006b483045022100a2ecd650f46049c41f30305e6930cdb5365964d345b9e05943f1ee1ff136a0e002206704f49c9c7158bf1f197f95f615242ff5529fc2b68ec99f5317711e51aa31aa0121032bcbd9cfbdbd9eff2bda9935f6cc2a6fa0c908da3aaa50aed80d68b0afb3451affffffffb2d572197db334f724d68e14465803e05398249b8f80f63b381feec0b9b0c468010000006b483045022100ed23e2191ae275aef00b11cb907e8702c1ed49bc066a94cdbeba2d24e2f2932802204adf56e12df0eb1de35e3013ccedee1f68f9c3708a8b15176377e19dc597bb930121032bcbd9cfbdbd9eff2bda9935f6cc2a6fa0c908da3aaa50aed80d68b0afb3451affffffff1824d7a443ef2c52d76e0ff243cd4a02e9c758897f656ac76e3f2a485e162578020000006b483045022100a1b52d39338cd0929187dd40cea207e8857881dbbdd36c13fd8c35f06293b8240220507e51ce8e97f84f5f4904eb480293985fc2db2d92199f080a58eac776be96a30121032bcbd9cfbdbd9eff2bda9935f6cc2a6fa0c908da3aaa50aed80d68b0afb3451affffffff0322020000000000001976a9147bbfdf910e1d5f7b2fa2172315eb712f8ab30ae488ac0000000000000000fd31016a06474c495454524d26017b22636f6e74726163745f6372656174696f6e223a7b22636f6e74726163745f74797065223a7b226173736574223a7b226173736574223a7b22737570706c795f636170223a223231303030303030222c2264697669736962696c697479223a382c226c6976655f74696d65223a307d2c22646973747269627574696f6e5f736368656d6573223a7b227075726368617365223a7b22696e7075745f6173736574223a227261775f627463222c227472616e736665725f736368656d65223a7b227075726368617365223a226d726f4847457456424c784b6f6f33344853486248646d4b7a316f6f4a6441336577227d2c227472616e736665725f726174696f5f74797065223a7b226669786564223a7b22726174696f223a5b312c315d7d7d7d7d7d7d7d7d09c0f405000000001976a9147bbfdf910e1d5f7b2fa2172315eb712f8ab30ae488ac00000000").unwrap();
+        let tx = create_dummy_tx();
+
+        let tx_bytes = hex::decode(tx.raw_hex()).unwrap();
 
         let tx: Transaction = deserialize(&tx_bytes).unwrap();
 
