@@ -154,7 +154,7 @@ impl PurchaseBurnSwap {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum InputAsset {
     RawBtc,
