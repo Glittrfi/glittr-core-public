@@ -23,6 +23,7 @@ use glittr::{
         FreeMint, InputAsset, MintMechanisms, MintOnlyAssetContract, OracleSetting, Preallocated,
         PurchaseBurnSwap, TransferRatioType, VestingPlan,
     },
+    spec::{MintOnlyAssetSpec, MintOnlyAssetSpecPegInType, SpecContract, SpecContractType},
     AssetContractData, AssetList, BlockTx, Flaw, Indexer, MessageDataOutcome, Outpoint, Pubkey,
     U128,
 };
@@ -1850,6 +1851,33 @@ async fn test_integration_glittr_asset_mint_purchase() {
     for (k, v) in &asset_lists {
         println!("Mint output: {}: {:?}", k, v);
     }
+
+    ctx.drop().await;
+}
+
+#[tokio::test]
+async fn test_integration_deploy_spec() {
+    let mut ctx = TestContext::new().await;
+    let message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            contract_type: ContractType::Spec(SpecContract {
+                spec: SpecContractType::MintOnlyAsset(MintOnlyAssetSpec {
+                    input_asset: Some(InputAsset::Rune),
+                    peg_in_type: Some(MintOnlyAssetSpecPegInType::Burn),
+                }),
+                block_tx: None,
+            }),
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let block_tx_contract = ctx.build_and_mine_message(&message).await;
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    ctx.verify_last_block(block_tx_contract.block).await;
+    ctx.get_and_verify_message_outcome(block_tx_contract).await;
 
     ctx.drop().await;
 }

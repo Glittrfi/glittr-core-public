@@ -44,6 +44,10 @@ pub enum Flaw {
     SupplyCapInvalid,
     SupplyRemainder,
 
+    // spec
+    SpecNotMutable,
+    SpecFieldRequired(String),
+
     NotImplemented,
     NonGlittrMessage,
 }

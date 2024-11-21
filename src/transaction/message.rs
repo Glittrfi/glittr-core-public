@@ -16,7 +16,7 @@ use spec::SpecContract;
 #[serde(rename_all = "snake_case")]
 pub enum ContractType {
     Asset(MintOnlyAssetContract),
-    Spec(SpecContract)
+    Spec(SpecContract),
 }
 
 #[serde_with::skip_serializing_none]
@@ -166,7 +166,7 @@ impl OpReturnMessage {
             return match &contract_creation.contract_type {
                 ContractType::Asset(asset_contract) => asset_contract.validate(),
                 // TODO implement spec validation
-                ContractType::Spec(_) => None
+                ContractType::Spec(_) => None,
             };
         }
 

@@ -12,8 +12,25 @@ pub enum MintBurnAssetSpecMint {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MintBurnAssetSpec {
-    pub input_assets: Vec<InputAsset>,
-    pub mint: MintBurnAssetSpecMint,
+    // if this is true, the assets are mutable
+    // and can be updated
+    pub _mutable_assets: bool,
+    pub input_assets: Option<Vec<InputAsset>>,
+    pub mint: Option<MintBurnAssetSpecMint>,
+}
+
+impl MintBurnAssetSpec {
+    pub fn validate(&self) -> Option<Flaw> {
+        if self.input_assets.is_none() {
+            return Some(Flaw::SpecFieldRequired("input_assets".to_string()));
+        }
+
+        if self.mint.is_none() {
+            return Some(Flaw::SpecFieldRequired("mint".to_string()));
+        }
+
+        None
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -26,8 +43,22 @@ pub enum MintOnlyAssetSpecPegInType {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MintOnlyAssetSpec {
-    pub input_asset: InputAsset,
-    pub peg_in_type: MintOnlyAssetSpecPegInType,
+    pub input_asset: Option<InputAsset>,
+    pub peg_in_type: Option<MintOnlyAssetSpecPegInType>,
+}
+
+impl MintOnlyAssetSpec {
+    pub fn validate(&self) -> Option<Flaw> {
+        if self.input_asset.is_none() {
+            return Some(Flaw::SpecFieldRequired("input_asset".to_string()));
+        }
+
+        if self.peg_in_type.is_none() {
+            return Some(Flaw::SpecFieldRequired("peg_in_type".to_string()));
+        }
+
+        None
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -41,6 +72,35 @@ pub enum SpecContractType {
 #[serde(rename_all = "snake_case")]
 pub struct SpecContract {
     pub spec: SpecContractType,
-    // for now put this flag here, but it should be moved to the spec itself
-    pub mutable_asset: bool,
+    // if the block_tx is provided,
+    // the spec would be updated based on valid field
+    pub block_tx: Option<BlockTxTuple>,
+}
+
+impl SpecContract {
+    pub fn validate(&self) -> Option<Flaw> {
+        if self.block_tx.is_some() {
+            match &self.spec {
+                SpecContractType::MintOnlyAsset(_) => {
+                    return Some(Flaw::SpecNotMutable);
+                }
+                SpecContractType::MintBurnAsset(moa_spec) => {
+                    if moa_spec._mutable_assets {
+                        if moa_spec.input_assets.is_none() {
+                            return Some(Flaw::SpecFieldRequired("input_assets".to_string()));
+                        }
+                    } else {
+                        return Some(Flaw::SpecNotMutable);
+                    }
+                }
+            }
+
+            return None;
+        }
+
+        return match &self.spec {
+            SpecContractType::MintOnlyAsset(moa_spec) => moa_spec.validate(),
+            SpecContractType::MintBurnAsset(moa_spec) => moa_spec.validate(),
+        }
+    }
 }
