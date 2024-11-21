@@ -500,6 +500,8 @@ impl Updater {
                             result_purchase
                         }
                     }
+                    // TODO implement spec index
+                    ContractType::Spec(_) => None
                 },
                 None => Some(Flaw::ContractNotMatch),
             },
