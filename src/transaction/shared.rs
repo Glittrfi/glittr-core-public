@@ -3,7 +3,6 @@ use std::collections::HashMap;
 
 use bitcoin::{PublicKey, XOnlyPublicKey};
 use message::ContractType;
-use mint_only_asset::MintOnlyAssetContract;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -108,13 +107,23 @@ impl Preallocated {
 }
 
 impl FreeMint {
-    pub fn validate(&self, moa: &MintOnlyAssetContract) -> Option<Flaw> {
+    pub fn validate(&self, contract: &ContractType) -> Option<Flaw> {
+        let super_supply_cap: Option<U128>;
+        match contract {
+            ContractType::Moa(mint_only_asset_contract) => {
+                super_supply_cap = mint_only_asset_contract.supply_cap.clone();
+            }
+            ContractType::Mba(mint_burn_asset_contract) => {
+                super_supply_cap = mint_burn_asset_contract.supply_cap.clone();
+            }
+        }
+
         if let Some(supply_cap) = &self.supply_cap {
             if self.amount_per_mint.0 > supply_cap.0 {
                 return Some(Flaw::OverflowAmountPerMint);
             }
 
-            if let Some(super_supply_cap) = &moa.supply_cap {
+            if let Some(super_supply_cap) = super_supply_cap {
                 if super_supply_cap.0 < supply_cap.0 {
                     return Some(Flaw::SupplyCapInvalid);
                 }
@@ -140,20 +149,7 @@ impl PurchaseBurnSwap {
             }
         }
 
-        match &self.ratio {
-            RatioType::Fixed { ratio } => {
-                if ratio.1 == 0 {
-                    return Some(Flaw::DivideByZero);
-                }
-            }
-            RatioType::Oracle { pubkey, setting: _ } => {
-                if XOnlyPublicKey::from_slice(pubkey).is_err() {
-                    return Some(Flaw::PubkeyInvalid);
-                }
-            }
-        }
-
-        None
+        return self.ratio.validate();
     }
 }
 
@@ -176,6 +172,25 @@ pub enum RatioType {
         pubkey: Pubkey, // compressed public key
         setting: OracleSetting,
     },
+}
+
+impl RatioType {
+    pub fn validate(&self) -> Option<Flaw> {
+        match &self {
+            RatioType::Fixed { ratio } => {
+                if ratio.1 == 0 {
+                    return Some(Flaw::DivideByZero);
+                }
+            }
+            RatioType::Oracle { pubkey, setting: _ } => {
+                if XOnlyPublicKey::from_slice(pubkey).is_err() {
+                    return Some(Flaw::PubkeyInvalid);
+                }
+            }
+        }
+
+        None
+    }
 }
 
 #[serde_with::skip_serializing_none]

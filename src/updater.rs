@@ -2,8 +2,6 @@ mod mint;
 
 use std::{collections::HashMap, str::FromStr};
 
-use mint_only_asset::{MintOnlyAssetContract};
-use shared::{InputAsset, PurchaseBurnSwap, VestingPlan};
 use bitcoin::{
     hashes::{sha256, Hash},
     key::Secp256k1,
@@ -18,6 +16,8 @@ use database::{
 };
 use flaw::Flaw;
 use message::{CallType, ContractType, OpReturnMessage, TxTypeTransfer};
+use mint_only_asset::MintOnlyAssetContract;
+use shared::{InputAsset, PurchaseBurnSwap, VestingPlan};
 
 use super::*;
 

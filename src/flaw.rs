@@ -43,6 +43,7 @@ pub enum Flaw {
     OracleMessageFormatInvalid,
     SupplyCapInvalid,
     SupplyRemainder,
+    FractionInvalid,
 
     NotImplemented,
     NonGlittrMessage,

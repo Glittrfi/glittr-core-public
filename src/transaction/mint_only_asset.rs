@@ -26,7 +26,7 @@ impl MintOnlyAssetContract {
         }
 
         if let Some(freemint) = &self.mint_mechanism.free_mint {
-            return freemint.validate(self);
+            return freemint.validate(&message::ContractType::Moa(self.clone()));
         }
 
         if let Some(purchase) = &self.mint_mechanism.purchase {
