@@ -19,9 +19,10 @@ use glittr::{
         CallType, ContractCall, ContractCreation, ContractType, MintOption, OpReturnMessage,
         OracleMessage, OracleMessageSigned, Transfer, TxTypeTransfer,
     },
-    mint_only_asset::{
-        FreeMint, InputAsset, MintMechanisms, MintOnlyAssetContract, OracleSetting, Preallocated,
-        PurchaseBurnSwap, TransferRatioType, VestingPlan,
+    mint_only_asset::MintOnlyAssetContract,
+    shared::{
+        FreeMint, InputAsset, MintMechanisms, OracleSetting, Preallocated, PurchaseBurnSwap,
+        RatioType, VestingPlan,
     },
     AssetContractData, AssetList, BlockTx, Flaw, Indexer, MessageDataOutcome, Outpoint, Pubkey,
     U128,
@@ -246,7 +247,7 @@ async fn test_integration_broadcast_op_return_message_success() {
 
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(MintOnlyAssetContract {
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
                 supply_cap: Some(U128(1000)),
                 divisibility: 18,
@@ -279,7 +280,7 @@ async fn test_integration_purchaseburnswap() {
 
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(MintOnlyAssetContract {
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
                 supply_cap: Some(U128(1000)),
                 divisibility: 18,
@@ -288,7 +289,7 @@ async fn test_integration_purchaseburnswap() {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
                         pay_to_key: None,
-                        ratio: TransferRatioType::Fixed { ratio: (1, 1) },
+                        ratio: RatioType::Fixed { ratio: (1, 1) },
                     }),
                     preallocated: None,
                     free_mint: None,
@@ -313,7 +314,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
 
     let contract_message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(MintOnlyAssetContract {
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
                 supply_cap: None,
                 divisibility: 18,
@@ -322,7 +323,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
                         pay_to_key: None,
-                        ratio: TransferRatioType::Fixed { ratio: (1, 1) },
+                        ratio: RatioType::Fixed { ratio: (1, 1) },
                     }),
                     preallocated: None,
                     free_mint: None,
@@ -431,7 +432,7 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
     let (contract_treasury, contract_treasury_pub_key) = get_bitcoin_address();
     let contract_message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(MintOnlyAssetContract {
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
                 supply_cap: Some(U128(21_000_000 * 10u128.pow(8))),
                 divisibility: 8,
@@ -440,7 +441,7 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
                         pay_to_key: Some(contract_treasury_pub_key.to_bytes()),
-                        ratio: TransferRatioType::Fixed { ratio: (1, 1) },
+                        ratio: RatioType::Fixed { ratio: (1, 1) },
                     }),
                     preallocated: None,
                     free_mint: None,
@@ -534,7 +535,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
     let oracle_xonly = XOnlyPublicKey::from_keypair(&oracle_keypair);
     let contract_message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(MintOnlyAssetContract {
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
                 supply_cap: None,
                 divisibility: 18,
@@ -543,7 +544,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
                         pay_to_key: None,
-                        ratio: TransferRatioType::Oracle {
+                        ratio: RatioType::Oracle {
                             pubkey: oracle_xonly.0.serialize().to_vec(),
                             setting: OracleSetting {
                                 asset_id: Some("btc".to_string()),
@@ -694,7 +695,7 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
     let (treasury_address, treasury_address_pub_key) = get_bitcoin_address();
     let contract_message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(MintOnlyAssetContract {
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
                 supply_cap: Some(U128(21_000_000 * 10u128.pow(8))),
                 divisibility: 8,
@@ -703,7 +704,7 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
                         pay_to_key: Some(treasury_address_pub_key.to_bytes()),
-                        ratio: TransferRatioType::Oracle {
+                        ratio: RatioType::Oracle {
                             pubkey: oracle_xonly.0.serialize().to_vec(),
                             setting: OracleSetting {
                                 asset_id: Some("btc".to_string()),
@@ -823,7 +824,7 @@ async fn test_metaprotocol_to_glittr_asset() {
     let oracle_xonly = XOnlyPublicKey::from_keypair(&oracle_keypair);
     let contract_message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(MintOnlyAssetContract {
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
                 supply_cap: None,
                 divisibility: 18,
@@ -832,7 +833,7 @@ async fn test_metaprotocol_to_glittr_asset() {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::Rune,
                         pay_to_key: None,
-                        ratio: TransferRatioType::Oracle {
+                        ratio: RatioType::Oracle {
                             pubkey: oracle_xonly.0.serialize().to_vec(),
                             setting: OracleSetting {
                                 asset_id: Some("rune:840000:3".to_string()),
@@ -956,7 +957,7 @@ async fn test_integration_freemint() {
 
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(MintOnlyAssetContract {
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
                 supply_cap: Some(U128(1000)),
                 divisibility: 18,
@@ -992,7 +993,7 @@ async fn test_integration_mint_freemint() {
     let mut ctx = TestContext::new().await;
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(MintOnlyAssetContract {
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
                 supply_cap: Some(U128(1000)),
                 divisibility: 18,
@@ -1057,7 +1058,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
 
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(MintOnlyAssetContract {
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
                 supply_cap: Some(U128(50)),
                 divisibility: 18,
@@ -1130,7 +1131,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
 
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(MintOnlyAssetContract {
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
                 supply_cap: Some(U128(1000)),
                 divisibility: 18,
@@ -1249,7 +1250,7 @@ async fn test_integration_mint_preallocated_freemint() {
 
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(MintOnlyAssetContract {
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
                 supply_cap: Some(U128(1000)),
                 divisibility: 18,
@@ -1350,7 +1351,7 @@ async fn test_integration_mint_freemint_invalidpointer() {
 
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(MintOnlyAssetContract {
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
                 supply_cap: Some(U128(1000)),
                 divisibility: 18,
@@ -1401,7 +1402,7 @@ async fn test_integration_transfer_normal() {
 
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(MintOnlyAssetContract {
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
                 supply_cap: Some(U128(100_000)),
                 divisibility: 18,
@@ -1535,7 +1536,7 @@ async fn test_integration_transfer_overflow_output() {
 
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(MintOnlyAssetContract {
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
                 supply_cap: Some(U128(100_000)),
                 divisibility: 18,
@@ -1650,7 +1651,7 @@ async fn test_integration_transfer_utxo() {
 
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(MintOnlyAssetContract {
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
                 supply_cap: Some(U128(100_000)),
                 divisibility: 18,
@@ -1734,7 +1735,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
     // Create first contract with free mint
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(MintOnlyAssetContract {
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
                 supply_cap: Some(U128(1000)),
                 divisibility: 18,
@@ -1774,7 +1775,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
     let (treasury_address, treasury_pub_key) = get_bitcoin_address();
     let second_message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
-            contract_type: ContractType::Asset(MintOnlyAssetContract {
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
                 supply_cap: Some(U128(500)),
                 divisibility: 18,
@@ -1783,7 +1784,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::GlittrAsset(first_contract.to_tuple()),
                         pay_to_key: Some(treasury_pub_key.to_bytes()),
-                        ratio: TransferRatioType::Fixed { ratio: (2, 1) },
+                        ratio: RatioType::Fixed { ratio: (2, 1) },
                     }),
                     preallocated: None,
                     free_mint: None,

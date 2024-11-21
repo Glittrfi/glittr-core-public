@@ -2,7 +2,8 @@ mod mint;
 
 use std::{collections::HashMap, str::FromStr};
 
-use mint_only_asset::{MintOnlyAssetContract, InputAsset, PurchaseBurnSwap, VestingPlan};
+use mint_only_asset::{MintOnlyAssetContract};
+use shared::{InputAsset, PurchaseBurnSwap, VestingPlan};
 use bitcoin::{
     hashes::{sha256, Hash},
     key::Secp256k1,
@@ -221,7 +222,7 @@ impl Updater {
 
             // NOTe: dynamic validation
             if let Some(contract_creation) = message.contract_creation {
-                if let ContractType::Asset(asset_contract) = contract_creation.contract_type {
+                if let ContractType::Moa(asset_contract) = contract_creation.contract_type {
                     if let Some(purchase) = asset_contract.mint_mechanism.purchase {
                         if let InputAsset::GlittrAsset(block_tx_tuple) = purchase.input_asset {
                             let message = self.get_message(&block_tx_tuple).await;

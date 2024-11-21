@@ -3,7 +3,7 @@ use bitcoin::{
     PublicKey, ScriptBuf,
 };
 use message::MintOption;
-use mint_only_asset::Preallocated;
+use shared::{Preallocated, RatioType};
 
 use super::*;
 
@@ -162,10 +162,10 @@ impl Updater {
 
         // VALIDATE OUT_VALUE
         match &purchase.ratio {
-            mint_only_asset::TransferRatioType::Fixed { ratio } => {
+            RatioType::Fixed { ratio } => {
                 out_value = (total_received_value * ratio.0 as u128) / ratio.1 as u128;
             }
-            mint_only_asset::TransferRatioType::Oracle { pubkey, setting } => {
+            RatioType::Oracle { pubkey, setting } => {
                 if let Some(oracle_message_signed) = mint_option.oracle_message {
                     if setting.asset_id == oracle_message_signed.message.asset_id {
                         let pubkey: XOnlyPublicKey =
@@ -434,7 +434,7 @@ impl Updater {
         match message {
             Ok(op_return_message) => match op_return_message.contract_creation {
                 Some(contract_creation) => match contract_creation.contract_type {
-                    ContractType::Asset(asset_contract) => {
+                    ContractType::Moa(asset_contract) => {
                         let result_preallocated = if let Some(preallocated) =
                             &asset_contract.mint_mechanism.preallocated
                         {
@@ -500,6 +500,7 @@ impl Updater {
                             result_purchase
                         }
                     }
+                    ContractType::Mba(mint_burn_asset_contract) => todo!(),
                 },
                 None => Some(Flaw::ContractNotMatch),
             },

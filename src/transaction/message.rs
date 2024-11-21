@@ -9,12 +9,14 @@ use bitcoin::{
 use bitcoincore_rpc::jsonrpc::serde_json::{self, Deserializer};
 use constants::OP_RETURN_MAGIC_PREFIX;
 use flaw::Flaw;
+use mint_burn_asset::MintBurnAssetContract;
 use mint_only_asset::MintOnlyAssetContract;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum ContractType {
-    Asset(MintOnlyAssetContract),
+    Moa(MintOnlyAssetContract),
+    Mba(MintBurnAssetContract)
 }
 
 #[serde_with::skip_serializing_none]
@@ -51,7 +53,7 @@ pub struct OracleMessage {
     /// rune's BlockTx if rune
     pub asset_id: Option<String>,
     // for raw_btc input it is more straightforward using ratio, output = received_value * ratio
-    pub ratio: Option<Ratio>,
+    pub ratio: Option<Fraction>,
     // the bitcoin block height when the message is signed
     pub block_height: u64,
 }
@@ -162,7 +164,8 @@ impl OpReturnMessage {
     pub fn validate(&self) -> Option<Flaw> {
         if let Some(contract_creation) = &self.contract_creation {
             return match &contract_creation.contract_type {
-                ContractType::Asset(asset_contract) => asset_contract.validate(),
+                ContractType::Moa(mint_only_asset_contract) => mint_only_asset_contract.validate(),
+                ContractType::Mba(mint_burn_asset_contract) => todo!(),
             };
         }
 
@@ -198,19 +201,18 @@ mod test {
     use bitcoin::{locktime, transaction::Version, Amount, Transaction, TxOut};
     use bitcoincore_rpc::RawTx;
 
-    use crate::mint_only_asset::FreeMint;
-    use crate::mint_only_asset::MintMechanisms;
     use crate::transaction::message::ContractType;
     use crate::transaction::mint_only_asset::MintOnlyAssetContract;
     use crate::U128;
 
+    use super::shared::{FreeMint, MintMechanisms};
     use super::{ContractCreation, OpReturnMessage};
 
     fn create_dummy_tx() -> Transaction {
         let dummy_message = OpReturnMessage {
             transfer: None,
             contract_creation: Some(ContractCreation {
-                contract_type: ContractType::Asset(MintOnlyAssetContract {
+                contract_type: ContractType::Moa(MintOnlyAssetContract {
                     ticker: None,
                     supply_cap: Some(U128(1000)),
                     divisibility: 18,
@@ -247,14 +249,15 @@ mod test {
 
         if let Some(contract_creation) = parsed.unwrap().contract_creation {
             match contract_creation.contract_type {
-                ContractType::Asset(asset_contract) => {
-                    let free_mint = asset_contract.mint_mechanism.free_mint.unwrap();
-                    assert_eq!(asset_contract.supply_cap, Some(U128(1000)));
-                    assert_eq!(asset_contract.divisibility, 18);
-                    assert_eq!(asset_contract.live_time, 0);
+                ContractType::Moa(mint_only_asset_contract) => {
+                    let free_mint = mint_only_asset_contract.mint_mechanism.free_mint.unwrap();
+                    assert_eq!(mint_only_asset_contract.supply_cap, Some(U128(1000)));
+                    assert_eq!(mint_only_asset_contract.divisibility, 18);
+                    assert_eq!(mint_only_asset_contract.live_time, 0);
                     assert_eq!(free_mint.supply_cap, Some(U128(1000)));
                     assert_eq!(free_mint.amount_per_mint, U128(10));
                 }
+                ContractType::Mba(mint_burn_asset_contract) => todo!(),
             }
         }
     }
