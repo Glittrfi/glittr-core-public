@@ -48,6 +48,10 @@ pub enum Flaw {
     // call type::close account
     LtvMustBeZero,
     OutstandingMustBeZero,
+    
+    // call type: swap
+    InsufficientInputAmount,
+    InsufficientOutputAmount,
 
     // asset contract
     OverflowAmountPerMint,
@@ -58,6 +62,11 @@ pub enum Flaw {
     SupplyRemainder,
     FractionInvalid,
     InvalidContractType,
+
+    // asset contract: mba
+    InputAssetNotTwoForProportional,
+    InvalidInputAssetCount,
+    InvalidConstantProduct,
 
     NotImplemented,
     NonGlittrMessage,

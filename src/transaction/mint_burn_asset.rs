@@ -11,6 +11,7 @@ pub struct MintBurnAssetContract {
     pub live_time: BlockHeight,
     pub mint_mechanism: MBAMintMechanisms,
     pub burn_mechanism: BurnMechanisms,
+    pub swap_mechanism: SwapMechanisms,
 }
 
 #[serde_with::skip_serializing_none]
@@ -30,6 +31,13 @@ pub struct BurnMechanisms {
     pub return_collateral: Option<ReturnCollateral>,
 }
 
+#[serde_with::skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct SwapMechanisms {
+    pub fee: Option<U128>,
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct Collateralized {
@@ -42,7 +50,7 @@ pub struct Collateralized {
 #[serde(rename_all = "snake_case")]
 pub enum MintStructure {
     Ratio(RatioType),
-    Proportional(), // TODO: proportional MBA (for AMM)
+    Proportional(ProportionalType), // TODO: proportional MBA (for AMM)
     Account(AccountType),
 }
 
@@ -51,6 +59,21 @@ pub enum MintStructure {
 pub struct AccountType {
     pub max_ltv: Fraction,
     pub ratio: RatioType,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct ProportionalType {
+    pub ratio_model: RatioModel,
+    // The initial mint can be restricted to a state key (utxo)
+    pub inital_mint_pointer_to_key: Option<u32>, 
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum RatioModel {
+    ConstantProduct
+    // TODO: more ratio model
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -74,7 +97,11 @@ impl Collateralized {
 
         match &self.mint_structure {
             MintStructure::Ratio(ratio_type) => return ratio_type.validate(),
-            MintStructure::Proportional() => {}
+            MintStructure::Proportional(_proportional_type) => {
+                if self.input_assets.len() != 2 {
+                    return Some(Flaw::InputAssetNotTwoForProportional)
+                }
+            },
             MintStructure::Account(account) => {
                 if account.max_ltv.0 > account.max_ltv.1 {
                     return Some(Flaw::FractionInvalid);

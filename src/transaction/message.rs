@@ -29,6 +29,12 @@ pub struct MintOption {
 
 #[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct SwapOption {
+    pub pointer: u32,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct BurnOption {
     pub oracle_message: Option<OracleMessageSigned>,
     pub pointer_to_key: Option<u32>,
@@ -40,7 +46,7 @@ pub struct BurnOption {
 pub enum CallType {
     Mint(MintOption),
     Burn(BurnOption),
-    Swap,
+    Swap(SwapOption),
     // Collateralized assets
     OpenAccount(OpenAccountOption),
     CloseAccount(CloseAccountOption), // TODO: partial return & fee

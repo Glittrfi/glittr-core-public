@@ -16,8 +16,7 @@ use bitcoin::{
     Address, Transaction, TxOut, XOnlyPublicKey,
 };
 use database::{
-    DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, MESSAGE_PREFIX,
-    TRANSACTION_TO_BLOCK_TX_PREFIX, VESTING_CONTRACT_DATA_PREFIX,
+    DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, MESSAGE_PREFIX, STATE_KEY_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX, VESTING_CONTRACT_DATA_PREFIX
 };
 use flaw::Flaw;
 use message::{CallType, ContractType, OpReturnMessage, TxTypeTransfer};
@@ -54,6 +53,28 @@ pub struct PBSMintResult {
 #[serde(rename_all = "snake_case")]
 pub struct VestingContractData {
     pub claimed_allocations: HashMap<String, u128>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CollateralAccount {
+    pub contract_id: BlockTxTuple,
+    pub collateral_amounts: Vec<(BlockTxTuple, u128)>,
+    // TODO: remove total_collateral_amount
+    pub total_collateral_amount: u128,
+    pub ltv: Fraction, // ltv = total_amount_used / total_collateral_amount (in lending amount)
+    pub amount_outstanding: u128,
+    pub share_amount: u128, // TODO: implement
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct StateKey {
+    pub contract: BlockTxTuple
+}
+
+#[derive(Serialize, Deserialize)]
+struct PoolData {
+    amounts: [u128; 2],
+    total_supply: u128,
 }
 
 pub struct Updater {
@@ -277,7 +298,28 @@ impl Updater {
                                         outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx);
                                     }
                                 }
+                            }
 
+                            match collateralized.mint_structure {
+                                mint_burn_asset::MintStructure::Proportional(proportional_type) => {
+                                    if let Some(pointer_to_key) = proportional_type.inital_mint_pointer_to_key {
+                                        if let Some(flaw) = self.validate_pointer(pointer_to_key, tx) {
+                                            outcome.flaw = Some(flaw)
+                                        } else {
+                                            let new_outpoint = Outpoint { txid: tx.compute_txid().to_string(), vout: pointer_to_key };
+                                            if !self.is_read_only {
+                                                self.database.lock().await.put(
+                                                    STATE_KEY_PREFIX,
+                                                    new_outpoint.to_string().as_str(),
+                                                    StateKey {
+                                                        contract: block_tx.to_tuple(),
+                                                    }
+                                                );
+                                            }
+                                        }
+                                    }
+                                },
+                                _ => {}
                             }
                         }
                     }
@@ -298,8 +340,10 @@ impl Updater {
                            outcome.flaw = self.burn(tx, block_tx, &contract_call.contract, &burn_option).await;
                         }
                     }
-                    CallType::Swap => {
-                        log::info!("Process call type swap");
+                    CallType::Swap(swap_option) => {
+                        if outcome.flaw.is_none() {
+                           outcome.flaw = self.process_swap(tx, block_tx, &contract_call.contract, &swap_option).await;
+                        }
                     }
                     CallType::OpenAccount(open_account_option) => {
                         if outcome.flaw.is_none() {

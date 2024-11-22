@@ -1,5 +1,5 @@
 use bitcoin::OutPoint;
-use database::COLLATERAL_ACCOUNT_PREFIX;
+use database::{COLLATERAL_ACCOUNT_PREFIX, POOL_DATA_PREFIX};
 use message::BurnOption;
 use mint_burn_asset::{MintBurnAssetContract, ReturnCollateral};
 
@@ -44,6 +44,11 @@ impl Updater {
         }
 
         let mut collateral_account = collateral_account.unwrap();
+        let burned_amount = self
+            .unallocated_asset_list
+            .list
+            .get(&BlockTx::from_tuple(*contract_id).to_str())
+            .unwrap_or(&0);
 
         if let Some(oracle_message_signed) = &burn_option.oracle_message {
             if let Some(expected_input_outpoint) = oracle_message_signed.message.input_outpoint {
@@ -95,13 +100,6 @@ impl Updater {
                 }
 
                 // verify burned asset
-
-                let burned_amount = self
-                    .unallocated_asset_list
-                    .list
-                    .get(&BlockTx::from_tuple(*contract_id).to_str())
-                    .unwrap_or(&0);
-
                 if let Some(out_value) = &oracle_message_signed.message.out_value {
                     if burned_amount < &out_value.0 {
                         return Some(Flaw::BurnValueIncorrect);
@@ -121,38 +119,231 @@ impl Updater {
                 } else {
                     return Some(Flaw::OutValueNotFound);
                 }
-
-                if let Some(pointer_to_key) = burn_option.pointer_to_key {
-                    if let Some(flaw) = self.validate_pointer(pointer_to_key, tx) {
-                        return Some(flaw);
-                    }
-
-                    self.database.lock().await.delete(
-                        COLLATERAL_ACCOUNT_PREFIX,
-                        collateral_account_outpoint.unwrap().to_string().as_str(),
-                    );
-
-                    let new_outpoint = OutPoint {
-                        txid: tx.compute_txid(),
-                        vout: pointer_to_key,
-                    };
-
-                    // update collateral account
-                    self.database.lock().await.put(
-                        COLLATERAL_ACCOUNT_PREFIX,
-                        new_outpoint.to_string().as_str(),
-                        collateral_account,
-                    );
-                } else {
-                    return Some(Flaw::PointerKeyNotFound);
-                }
             }
         } else {
-            return Some(Flaw::OracleMintInfoFailed);
+            if let Some(collateralized) = &mba.mint_mechanism.collateralized {
+                match &collateralized.mint_structure {
+                    mint_burn_asset::MintStructure::Ratio(ratio_type) => {
+                        match ratio_type {
+                            shared::RatioType::Fixed { ratio: _ } => {
+                                collateral_account.amount_outstanding -= burned_amount;
+                                // TODO: partial
+                                if collateral_account.amount_outstanding == 0 {
+                                    collateral_account.ltv = (0, 100);
+                                }
+                            }
+                            shared::RatioType::Oracle { setting: _ } => {
+                                // TODO: Oracle Type
+                            }
+                        }
+                    }
+                    mint_burn_asset::MintStructure::Proportional(_proportional_type) => {
+                        // get pool data
+                        let mut first_asset: BlockTxTuple = (0, 0);
+                        let mut second_asset: BlockTxTuple = (0, 0);
+                        if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[0] {
+                            first_asset = asset_id
+                        }
+
+                        if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[1] {
+                            second_asset = asset_id
+                        }
+
+                        let pool_key = format!(
+                            "{}:{}",
+                            BlockTx::from_tuple(first_asset).to_str(),
+                            BlockTx::from_tuple(second_asset).to_str()
+                        );
+
+                        let mut pool_data: PoolData = self
+                            .database
+                            .lock()
+                            .await
+                            .get(POOL_DATA_PREFIX, &pool_key)
+                            .unwrap();
+
+                        let share = burned_amount
+                            .saturating_mul(1_000_000) // Scale for precision
+                            .saturating_div(pool_data.total_supply);
+
+                        let return_amount0 = pool_data.amounts[0]
+                            .saturating_mul(share)
+                            .saturating_div(1_000_000);
+                        let return_amount1 = pool_data.amounts[1]
+                            .saturating_mul(share)
+                            .saturating_div(1_000_000);
+
+                        if return_amount0 == 0 || return_amount1 == 0 {
+                            return Some(Flaw::InsufficientOutputAmount);
+                        }
+
+                        // Update pool state
+                        pool_data.amounts[0] = pool_data.amounts[0].saturating_sub(return_amount0);
+                        pool_data.amounts[1] = pool_data.amounts[1].saturating_sub(return_amount1);
+                        pool_data.total_supply =
+                            pool_data.total_supply.saturating_sub(*burned_amount);
+
+                        if !self.is_read_only {
+                            self.database
+                                .lock()
+                                .await
+                                .put(POOL_DATA_PREFIX, &pool_key, pool_data);
+                        }
+
+                        collateral_account.amount_outstanding -= burned_amount;
+
+                        // TODO: partial
+                        if collateral_account.amount_outstanding == 0 {
+                            collateral_account.ltv = (0, 100);
+                        }
+
+                        // impermanent lost
+                        for asset in collateral_account.collateral_amounts.iter_mut() {
+                            if asset.0 == first_asset {
+                                asset.1 = return_amount0;
+                            } else if asset.0 == second_asset {
+                                asset.1 = return_amount1
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        if let Some(pointer_to_key) = burn_option.pointer_to_key {
+            if let Some(flaw) = self.validate_pointer(pointer_to_key, tx) {
+                return Some(flaw);
+            }
+
+            let new_outpoint = OutPoint {
+                txid: tx.compute_txid(),
+                vout: pointer_to_key,
+            };
+
+            // update collateral account
+            if !self.is_read_only {
+                self.database.lock().await.delete(
+                    COLLATERAL_ACCOUNT_PREFIX,
+                    collateral_account_outpoint.unwrap().to_string().as_str(),
+                );
+
+                self.database.lock().await.put(
+                    COLLATERAL_ACCOUNT_PREFIX,
+                    new_outpoint.to_string().as_str(),
+                    collateral_account,
+                );
+            }
+        } else {
+            return Some(Flaw::PointerKeyNotFound);
         }
 
         None
     }
+
+    // pub async fn burn_proportional(
+    //     &mut self,
+    //     tx: &Transaction,
+    //     block_tx: &BlockTx,
+    //     contract_id: &BlockTxTuple,
+    //     burn_option: &BurnOption,
+    // ) -> Option<Flaw> {
+    //     let message = self.get_message(contract_id).await;
+    //     let contract_creation = match message {
+    //         Ok(op_return_message) => op_return_message.contract_creation?,
+    //         Err(flaw) => return Some(flaw),
+    //     };
+
+    //     match contract_creation.contract_type {
+    //         ContractType::Mba(mba) => {
+    //             if let Some(collateralized) = mba.mint_mechanism.collateralized {
+    //                 if let MintStructure::Proportional(proportional_type) = collateralized.mint_structure {
+    //                     if let RatioModel::ConstantProduct = proportional_type.ratio_model {
+    //                         // Get LP tokens from unallocated
+    //                         let lp_amount = self
+    //                             .unallocated_asset_list
+    //                             .list
+    //                             .remove(&block_tx.to_str())
+    //                             .unwrap_or(0);
+
+    //                         if lp_amount == 0 {
+    //                             return Some(Flaw::InsufficientInputAmount);
+    //                         }
+
+    //                         // Get pool data
+    //                         let pool_key = format!(
+    //                             "{}:{}_{}",
+    //                             POOL_DATA_PREFIX,
+    //                             BlockTx::from_tuple(collateralized.input_assets[0].asset_id()).to_str(),
+    //                             BlockTx::from_tuple(collateralized.input_assets[1].asset_id()).to_str()
+    //                         );
+
+    //                         let mut pool_data: PoolData = self
+    //                             .database
+    //                             .lock()
+    //                             .await
+    //                             .get(POOL_DATA_PREFIX, &pool_key)
+    //                             .map_err(|_| Flaw::PoolNotFound)?;
+
+    //                         // Calculate proportion of pool to return
+    //                         let share = lp_amount
+    //                             .saturating_mul(1_000_000) // Scale for precision
+    //                             .saturating_div(pool_data.total_supply);
+
+    //                         // Calculate return amounts
+    //                         let return_amount0 = pool_data.amounts[0]
+    //                             .saturating_mul(share)
+    //                             .saturating_div(1_000_000);
+    //                         let return_amount1 = pool_data.amounts[1]
+    //                             .saturating_mul(share)
+    //                             .saturating_div(1_000_000);
+
+    //                         if return_amount0 == 0 || return_amount1 == 0 {
+    //                             return Some(Flaw::InsufficientOutputAmount);
+    //                         }
+
+    //                         // Update pool state
+    //                         pool_data.amounts[0] = pool_data.amounts[0].saturating_sub(return_amount0);
+    //                         pool_data.amounts[1] = pool_data.amounts[1].saturating_sub(return_amount1);
+    //                         pool_data.total_supply = pool_data.total_supply.saturating_sub(lp_amount);
+
+    //                         if !self.is_read_only {
+    //                             self.database
+    //                                 .lock()
+    //                                 .await
+    //                                 .put(POOL_DATA_PREFIX, &pool_key, pool_data);
+    //                         }
+
+    //                         // Validate pointer for output if specified
+    //                         if let Some(pointer) = burn_option.pointer_to_key {
+    //                             if let Some(flaw) = self.validate_pointer(pointer, tx) {
+    //                                 return Some(flaw);
+    //                             }
+    //                         }
+
+    //                         // Return underlying assets
+    //                         let output_pointer = burn_option.pointer_to_key.unwrap_or(1);
+    //                         self.allocate_new_asset(
+    //                             output_pointer,
+    //                             &collateralized.input_assets[0].asset_id(),
+    //                             return_amount0
+    //                         ).await;
+    //                         self.allocate_new_asset(
+    //                             output_pointer,
+    //                             &collateralized.input_assets[1].asset_id(),
+    //                             return_amount1
+    //                         ).await;
+
+    //                         return None;
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //         _ => return Some(Flaw::InvalidContractType),
+    //     }
+
+    //     None
+    // }
 
     pub async fn burn(
         &mut self,
