@@ -26,7 +26,7 @@ impl Updater {
 
     pub async fn allocate_new_spec(&mut self, vout: u32, spec_contract_id: &BlockTxTuple) {
         let allocation = self.allocated_outputs.entry(vout).or_default();
-        allocation.spec = *spec_contract_id
+        allocation.specs.push(*spec_contract_id)
     }
 
     pub async fn set_spec_contract_owner(

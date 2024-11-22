@@ -60,7 +60,7 @@ pub struct SpecContractOwner {
 #[derive(Default)]
 pub struct Allocation {
     asset_list: AssetList,
-    spec: BlockTxTuple,
+    specs: Vec<BlockTxTuple>,
 }
 
 pub struct Updater {
