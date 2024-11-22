@@ -1,6 +1,7 @@
-mod collateralized;
+mod mint_collateralized;
 mod mint;
 mod updater_shared;
+mod burn;
 
 pub use updater_shared::*;
 
@@ -292,8 +293,10 @@ impl Updater {
                                 .await;
                         }
                     }
-                    CallType::Burn => {
-                        log::info!("Process call type burn");
+                    CallType::Burn(burn_option) => {
+                        if outcome.flaw.is_none() {
+                           outcome.flaw = self.burn(tx, block_tx, &contract_call.contract, &burn_option).await;
+                        }
                     }
                     CallType::Swap => {
                         log::info!("Process call type swap");

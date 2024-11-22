@@ -1,5 +1,8 @@
 use bitcoin::{
-    hashes::{sha256, Hash}, key::{rand, Keypair, Secp256k1}, secp256k1::{self, Message, SecretKey}, Address, Block, OutPoint, PrivateKey, PublicKey, ScriptBuf, Transaction, Witness, XOnlyPublicKey
+    hashes::{sha256, Hash},
+    key::{rand, Keypair, Secp256k1},
+    secp256k1::{self, Message, SecretKey},
+    Address, OutPoint, PrivateKey, PublicKey, ScriptBuf, Transaction, Witness, XOnlyPublicKey,
 };
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use mockcore::{Handle, TransactionTemplate};
@@ -9,22 +12,25 @@ use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
 
 use glittr::{
     database::{
-        Database, DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, COLLATERAL_ACCOUNT_PREFIX, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX
+        Database, DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX,
+        COLLATERAL_ACCOUNT_PREFIX, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX,
     },
     message::{
-        CallType, ContractCall, ContractCreation, ContractType, MintOption, OpReturnMessage, OpenAccountOption, OracleMessage, OracleMessageSigned, Transfer, TxTypeTransfer
+        BurnOption, CallType, ContractCall, ContractCreation, ContractType, MintOption,
+        OpReturnMessage, OpenAccountOption, OracleMessage, OracleMessageSigned, Transfer,
+        TxTypeTransfer,
     },
     mint_burn_asset::{
         AccountType, BurnMechanisms, Collateralized, MBAMintMechanisms, MintBurnAssetContract,
-        MintStructure,
+        MintStructure, ReturnCollateral,
     },
     mint_only_asset::MintOnlyAssetContract,
     shared::{
         FreeMint, InputAsset, MintMechanisms, OracleSetting, Preallocated, PurchaseBurnSwap,
         RatioType, VestingPlan,
     },
-    AssetContractData, AssetList, BlockTx, Flaw, Fraction, Indexer, MessageDataOutcome, Outpoint, CollateralAccount,
-    Pubkey, U128,
+    AssetContractData, AssetList, BlockTx, CollateralAccount, Flaw, Indexer, MessageDataOutcome,
+    Outpoint, Pubkey, U128,
 };
 
 // Test utilities
@@ -156,7 +162,6 @@ impl TestContext {
             });
         asset_map.expect("asset map should exist")
     }
-
 
     async fn get_collateralize_accounts(&self) -> HashMap<String, CollateralAccount> {
         let collateralize_account: Result<HashMap<String, CollateralAccount>, DatabaseError> = self
@@ -367,6 +372,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
             call_type: CallType::Mint(MintOption {
                 pointer: 1,
                 oracle_message: None,
+                pointer_to_key: None,
             }),
         }),
         transfer: None,
@@ -482,6 +488,7 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
             call_type: CallType::Mint(MintOption {
                 pointer: 1,
                 oracle_message: None,
+                pointer_to_key: None,
             }),
         }),
         transfer: None,
@@ -568,8 +575,8 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
                         input_asset: InputAsset::RawBtc,
                         pay_to_key: None,
                         ratio: RatioType::Oracle {
-                            pubkey: oracle_xonly.0.serialize().to_vec(),
                             setting: OracleSetting {
+                                pubkey: oracle_xonly.0.serialize().to_vec(),
                                 asset_id: Some("btc".to_string()),
                                 block_height_slippage: 5,
                             },
@@ -605,6 +612,8 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
         min_in_value: None,
         out_value: None,
         ratio: Some((1000, 1)), // 1 sat = 1000 usd,
+        ltv: None,
+        outstanding: None,
     };
 
     let secp: Secp256k1<secp256k1::All> = Secp256k1::new();
@@ -625,6 +634,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
                     signature: signature.serialize().to_vec(),
                     message: oracle_message.clone(),
                 }),
+                pointer_to_key: None,
             }),
         }),
         transfer: None,
@@ -728,8 +738,8 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
                         input_asset: InputAsset::RawBtc,
                         pay_to_key: Some(treasury_address_pub_key.to_bytes()),
                         ratio: RatioType::Oracle {
-                            pubkey: oracle_xonly.0.serialize().to_vec(),
                             setting: OracleSetting {
+                                pubkey: oracle_xonly.0.serialize().to_vec(),
                                 asset_id: Some("btc".to_string()),
                                 block_height_slippage: 5,
                             },
@@ -761,6 +771,8 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
         asset_id: Some("btc".to_string()),
         block_height: height,
         ratio: Some((1000, 1)), // 1 sats = 1000 glittr asset
+        ltv: None,
+        outstanding: None,
     };
 
     let secp: Secp256k1<secp256k1::All> = Secp256k1::new();
@@ -781,6 +793,7 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
                     signature: signature.serialize().to_vec(),
                     message: oracle_message.clone(),
                 }),
+                pointer_to_key: None,
             }),
         }),
         contract_creation: None,
@@ -857,8 +870,8 @@ async fn test_metaprotocol_to_glittr_asset() {
                         input_asset: InputAsset::Rune,
                         pay_to_key: None,
                         ratio: RatioType::Oracle {
-                            pubkey: oracle_xonly.0.serialize().to_vec(),
                             setting: OracleSetting {
+                                pubkey: oracle_xonly.0.serialize().to_vec(),
                                 asset_id: Some("rune:840000:3".to_string()),
                                 block_height_slippage: 5,
                             },
@@ -897,6 +910,8 @@ async fn test_metaprotocol_to_glittr_asset() {
         asset_id: Some("rune:840000:3".to_string()),
         block_height: height,
         ratio: None,
+        ltv: None,
+        outstanding: None,
     };
 
     let secp: Secp256k1<secp256k1::All> = Secp256k1::new();
@@ -917,6 +932,7 @@ async fn test_metaprotocol_to_glittr_asset() {
                     signature: signature.serialize().to_vec(),
                     message: oracle_message.clone(),
                 }),
+                pointer_to_key: None,
             }),
         }),
         transfer: None,
@@ -1041,6 +1057,7 @@ async fn test_integration_mint_freemint() {
                 call_type: CallType::Mint(MintOption {
                     pointer: 1,
                     oracle_message: None,
+                    pointer_to_key: None,
                 }),
             }),
             transfer: None,
@@ -1104,6 +1121,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
             call_type: CallType::Mint(MintOption {
                 pointer: 1,
                 oracle_message: None,
+                pointer_to_key: None,
             }),
         }),
         contract_creation: None,
@@ -1119,6 +1137,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
             call_type: CallType::Mint(MintOption {
                 pointer: 0,
                 oracle_message: None,
+                pointer_to_key: None,
             }),
         }),
         contract_creation: None,
@@ -1177,6 +1196,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
             call_type: CallType::Mint(MintOption {
                 pointer: 1,
                 oracle_message: None,
+                pointer_to_key: None,
             }),
         }),
         transfer: None,
@@ -1191,6 +1211,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
             call_type: CallType::Mint(MintOption {
                 pointer: 1,
                 oracle_message: None,
+                pointer_to_key: None,
             }),
         }),
         transfer: None,
@@ -1299,6 +1320,7 @@ async fn test_integration_mint_preallocated_freemint() {
             call_type: CallType::Mint(MintOption {
                 pointer: 1,
                 oracle_message: None,
+                pointer_to_key: None,
             }),
         }),
         transfer: None,
@@ -1397,6 +1419,7 @@ async fn test_integration_mint_freemint_invalidpointer() {
             call_type: CallType::Mint(MintOption {
                 pointer: 0,
                 oracle_message: None,
+                pointer_to_key: None,
             }),
         }),
         transfer: None,
@@ -1446,6 +1469,7 @@ async fn test_integration_transfer_normal() {
             call_type: CallType::Mint(MintOption {
                 pointer: 1,
                 oracle_message: None,
+                pointer_to_key: None,
             }),
         }),
         contract_creation: None,
@@ -1580,6 +1604,7 @@ async fn test_integration_transfer_overflow_output() {
             call_type: CallType::Mint(MintOption {
                 pointer: 1,
                 oracle_message: None,
+                pointer_to_key: None,
             }),
         }),
         transfer: None,
@@ -1695,6 +1720,7 @@ async fn test_integration_transfer_utxo() {
             call_type: CallType::Mint(MintOption {
                 pointer: 1,
                 oracle_message: None,
+                pointer_to_key: None,
             }),
         }),
         contract_creation: None,
@@ -1781,6 +1807,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
             call_type: CallType::Mint(MintOption {
                 pointer: 1,
                 oracle_message: None,
+                pointer_to_key: None,
             }),
         }),
         contract_creation: None,
@@ -1822,6 +1849,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
             call_type: CallType::Mint(MintOption {
                 pointer: 1,
                 oracle_message: None,
+                pointer_to_key: None,
             }),
         }),
         transfer: Some(Transfer {
@@ -1878,6 +1906,12 @@ async fn test_integration_collateralized_mba() {
     let mut ctx = TestContext::new().await;
 
     let (owner_address, _) = get_bitcoin_address();
+
+    // Create oracle keypair
+    let secp = Secp256k1::new();
+    let oracle_keypair = Keypair::new(&secp, &mut rand::thread_rng());
+    let oracle_xonly = XOnlyPublicKey::from_keypair(&oracle_keypair);
+
     // Create MOA (collateral token) with free mint
     let collateral_message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
@@ -1909,6 +1943,7 @@ async fn test_integration_collateralized_mba() {
             call_type: CallType::Mint(MintOption {
                 pointer: 1,
                 oracle_message: None,
+                pointer_to_key: None,
             }),
         }),
         transfer: None,
@@ -1916,7 +1951,6 @@ async fn test_integration_collateralized_mba() {
     };
 
     let collateral_mint_tx = ctx.build_and_mine_message(&mint_collateral_message).await;
-
 
     let mba_message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
@@ -1934,12 +1968,26 @@ async fn test_integration_collateralized_mba() {
                         is_asset_mutable: false,
                         mint_structure: MintStructure::Account(AccountType {
                             max_ltv: (7, 10),
-                            ratio: RatioType::Fixed { ratio: (1, 1) },
+                            ratio: RatioType::Oracle {
+                                setting: OracleSetting {
+                                    pubkey: oracle_xonly.0.serialize().to_vec(),
+                                    block_height_slippage: 5,
+                                    asset_id: None,
+                                },
+                            },
                         }),
                     }),
                 },
                 burn_mechanism: BurnMechanisms {
-                    return_collateral: None,
+                    return_collateral: Some(ReturnCollateral {
+                        oracle_setting: OracleSetting {
+                            pubkey: oracle_xonly.0.serialize().to_vec(),
+                            asset_id: Some("collateral".to_string()),
+                            block_height_slippage: 5,
+                        },
+                        fee: None,
+                        partial_returns: false
+                    }),
                 },
             }),
         }),
@@ -1953,7 +2001,7 @@ async fn test_integration_collateralized_mba() {
         contract_call: Some(ContractCall {
             contract: mba_contract.to_tuple(),
             call_type: CallType::OpenAccount(OpenAccountOption {
-                pointer: 1,
+                pointer_to_key: 1,
                 share_amount: U128(100),
             }),
         }),
@@ -1973,7 +2021,7 @@ async fn test_integration_collateralized_mba() {
         output_values: &[1000, 1000], // Values for outputs
         outputs: 2,
         p2tr: false,
-        recipient: Some(owner_address),
+        recipient: Some(owner_address.clone()),
     });
     ctx.core.mine_blocks(1);
 
@@ -1982,9 +2030,76 @@ async fn test_integration_collateralized_mba() {
         tx: 1,
     };
 
+    // Create oracle message for mint
+    let oracle_message = OracleMessage {
+        asset_id: None,
+        block_height: ctx.core.height(),
+        input_outpoint: Some(OutPoint {
+            txid: ctx
+                .core
+                .tx(account_block_tx.block as usize, 1)
+                .compute_txid(),
+            vout: 1,
+        }),
+        min_in_value: None,
+        out_value: Some(U128(50_000)), // Amount to mint
+        ratio: None,
+        ltv: Some((5, 10)), // 50% LTV
+        outstanding: Some(U128(50_000)),
+    };
+
+    let secp: Secp256k1<secp256k1::All> = Secp256k1::new();
+    let msg = Message::from_digest_slice(
+        sha256::Hash::hash(serde_json::to_string(&oracle_message).unwrap().as_bytes())
+            .as_byte_array(),
+    )
+    .unwrap();
+
+    let signature = secp.sign_schnorr(&msg, &oracle_keypair);
+
+    // Mint using oracle message
+    let mint_message = OpReturnMessage {
+        contract_call: Some(ContractCall {
+            contract: mba_contract.to_tuple(),
+            call_type: CallType::Mint(MintOption {
+                pointer: 2,
+                oracle_message: Some(OracleMessageSigned {
+                    signature: signature.serialize().to_vec(),
+                    message: oracle_message.clone(),
+                }),
+                pointer_to_key: Some(1),
+            }),
+        }),
+        transfer: None,
+        contract_creation: None,
+    };
+
+    // Broadcast mint transaction
+    ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[
+            (account_block_tx.block as usize, 1, 1, Witness::new()), // UTXO containing collateral account
+            (account_block_tx.block as usize, 0, 0, Witness::new()),
+        ],
+        op_return: Some(mint_message.into_script()),
+        op_return_index: Some(0),
+        op_return_value: Some(0),
+        output_values: &[0, 546, 546], // Values for outputs
+        outputs: 4,
+        p2tr: false,
+        recipient: Some(owner_address.clone()),
+    });
+
+    ctx.core.mine_blocks(1);
+
+    let mint_block_tx = BlockTx {
+        block: ctx.core.height(),
+        tx: 1,
+    };
+
     start_indexer(Arc::clone(&ctx.indexer)).await;
 
-    // Verify outcomes
+    // Verify all outcomes
     let collateral_outcome = ctx
         .get_and_verify_message_outcome(collateral_contract)
         .await;
@@ -1996,13 +2111,128 @@ async fn test_integration_collateralized_mba() {
     let account_outcome = ctx.get_and_verify_message_outcome(account_block_tx).await;
     assert!(account_outcome.flaw.is_none());
 
-    // // Verify asset allocations
-    let collateral_accounts = ctx.get_collateralize_accounts().await;
+    let mint_outcome = ctx.get_and_verify_message_outcome(mint_block_tx).await;
+    assert!(mint_outcome.flaw.is_none(), "{:?}", mint_outcome.flaw);
 
+    // Verify minted assets
+    let asset_lists = ctx.get_asset_map().await;
+    for (k, v) in &asset_lists {
+        println!("Asset output: {}: {:?}", k, v);
+    }
+
+    // Find and verify the minted asset amount
+    let minted_amount = asset_lists
+        .values()
+        .find_map(|list| list.list.get(&mba_contract.to_str()))
+        .expect("Minted asset should exist");
+
+    assert_eq!(*minted_amount, 50_000); // Amount specified in oracle message
+
+    // Verify collateral accounts
+    let collateral_accounts = ctx.get_collateralize_accounts().await;
     assert_eq!(collateral_accounts.len(), 1);
+
     let account = collateral_accounts.values().next().unwrap();
     assert_eq!(account.share_amount, 100);
     assert_eq!(account.collateral_amounts, [((3, 1), 100000)]);
+    assert_eq!(account.ltv, (5, 10)); // LTV from oracle message
+    assert_eq!(account.amount_outstanding, 50_000); // Outstanding amount from oracle message
+
+    // Create oracle message for burn
+    let burn_oracle_message = OracleMessage {
+        asset_id: None,
+        block_height: ctx.core.height(),
+        input_outpoint: Some(OutPoint {
+            txid: ctx.core.tx(mint_block_tx.block as usize, 1).compute_txid(),
+            vout: 1,
+        }),
+        min_in_value: None,
+        out_value: Some(U128(25_000)), // Amount to burn
+        ratio: None,
+        ltv: Some((3, 10)),              // Updated LTV after partial repayment
+        outstanding: Some(U128(25_000)), // Remaining outstanding amount
+    };
+
+    let burn_msg = Message::from_digest_slice(
+        sha256::Hash::hash(
+            serde_json::to_string(&burn_oracle_message)
+                .unwrap()
+                .as_bytes(),
+        )
+        .as_byte_array(),
+    )
+    .unwrap();
+
+    let burn_signature = secp.sign_schnorr(&burn_msg, &oracle_keypair);
+
+    // Create burn message
+    let burn_message = OpReturnMessage {
+        contract_call: Some(ContractCall {
+            contract: mba_contract.to_tuple(),
+            call_type: CallType::Burn(BurnOption {
+                oracle_message: Some(OracleMessageSigned {
+                    signature: burn_signature.serialize().to_vec(),
+                    message: burn_oracle_message.clone(),
+                }),
+                pointer_to_key: Some(1),
+            }),
+        }),
+        transfer: None,
+        contract_creation: None,
+    };
+
+    // Broadcast burn transaction
+    ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[
+            (mint_block_tx.block as usize, 1, 1, Witness::new()), // UTXO containing collateral account
+            (mint_block_tx.block as usize, 1, 2, Witness::new()), // UTXO containing mint
+            (mint_block_tx.block as usize, 0, 0, Witness::new()),
+        ],
+        op_return: Some(burn_message.into_script()),
+        op_return_index: Some(0),
+        op_return_value: Some(0),
+        output_values: &[0, 546], // Values for outputs
+        outputs: 2,
+        p2tr: false,
+        recipient: Some(owner_address),
+    });
+    ctx.core.mine_blocks(1);
+
+    let burn_block_tx = BlockTx {
+        block: ctx.core.height(),
+        tx: 1,
+    };
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    // Verify burn outcome
+    let burn_outcome = ctx.get_and_verify_message_outcome(burn_block_tx).await;
+    assert!(burn_outcome.flaw.is_none(), "{:?}", burn_outcome.flaw);
+
+    // Verify remaining assets after burn
+    let asset_lists_after_burn = ctx.get_asset_map().await;
+    for (k, v) in &asset_lists_after_burn {
+        println!("Asset output after burn: {}: {:?}", k, v);
+    }
+
+    // Find and verify the remaining asset amount
+    let remaining_amount = asset_lists_after_burn
+        .values()
+        .find_map(|list| list.list.get(&mba_contract.to_str()))
+        .expect("Remaining asset should exist");
+
+    assert_eq!(*remaining_amount, 25_000); // Original amount (50,000) - burned amount (25,000)
+
+    // Verify updated collateral account after burn
+    let collateral_accounts_after_burn = ctx.get_collateralize_accounts().await;
+    assert_eq!(collateral_accounts_after_burn.len(), 1);
+
+    let account_after_burn = collateral_accounts_after_burn.values().next().unwrap();
+    assert_eq!(account_after_burn.share_amount, 100);
+    assert_eq!(account_after_burn.collateral_amounts, [((3, 1), 100000)]); // Collateral amount unchanged
+    assert_eq!(account_after_burn.ltv, (3, 10)); // Updated LTV from oracle message
+    assert_eq!(account_after_burn.amount_outstanding, 25_000); // Updated outstanding amount from oracle message
 
     ctx.drop().await;
 }

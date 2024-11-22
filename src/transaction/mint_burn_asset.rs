@@ -1,5 +1,5 @@
 use super::*;
-use shared::{FreeMint, InputAsset, Preallocated, PurchaseBurnSwap, RatioType};
+use shared::{FreeMint, InputAsset, OracleSetting, Preallocated, PurchaseBurnSwap, RatioType};
 
 #[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -56,8 +56,9 @@ pub struct AccountType {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct ReturnCollateral {
-    pub fee: Option<Fraction>,
-    pub partial_returns: bool // to return collateral you have to close out the account
+    pub fee: Option<Fraction>, // TODO: fee
+    pub partial_returns: bool, // TODO: to return collateral you have to close out the account
+    pub oracle_setting: OracleSetting,
 }
 
 impl Collateralized {

@@ -24,6 +24,14 @@ pub enum ContractType {
 pub struct MintOption {
     pub pointer: u32,
     pub oracle_message: Option<OracleMessageSigned>,
+    pub pointer_to_key: Option<u32>,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct BurnOption {
+    pub oracle_message: Option<OracleMessageSigned>,
+    pub pointer_to_key: Option<u32>,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -31,7 +39,7 @@ pub struct MintOption {
 #[serde(rename_all = "snake_case")]
 pub enum CallType {
     Mint(MintOption),
-    Burn,
+    Burn(BurnOption),
     Swap,
     // Collateralized assets
     OpenAccount(OpenAccountOption),
@@ -40,13 +48,13 @@ pub enum CallType {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct OpenAccountOption {
-    pub pointer: u32,
+    pub pointer_to_key: u32,
     pub share_amount: U128, // representation of total value of the inputs
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct CloseAccountOption {
-    pointer: u32
+    pointer: u32,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -68,6 +76,8 @@ pub struct OracleMessage {
     pub asset_id: Option<String>,
     // for raw_btc input it is more straightforward using ratio, output = received_value * ratio
     pub ratio: Option<Fraction>,
+    pub ltv: Option<Fraction>,
+    pub outstanding: Option<U128>,
     // the bitcoin block height when the message is signed
     pub block_height: u64,
 }

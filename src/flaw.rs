@@ -35,6 +35,15 @@ pub enum Flaw {
     MintedZero,
     VestingBlockNotReached,
     VesteeNotFound,
+    PointerKeyNotFound,
+    StateKeyNotFound,
+    LtvMustBeUpdated,
+    MaxLtvExceeded,
+    OutValueNotFound,
+    OutstandingMustBeUpdated,
+
+    // call type::burn
+    BurnValueIncorrect,
 
     // asset contract
     OverflowAmountPerMint,

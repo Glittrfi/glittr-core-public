@@ -14,6 +14,8 @@ pub fn relative_block_height_to_block_height(
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CollateralAccount {
     pub collateral_amounts: Vec<(BlockTxTuple, u128)>,
-    // TODO: using the share amount, and asserting if share amount relative to the global share
-    pub share_amount: u128
+    pub total_collateral_amount: u128,
+    pub ltv: Fraction, // ltv = total_amount_used / total_collateral_amount (in lending amount)
+    pub amount_outstanding: u128,
+    pub share_amount: u128, // TODO: implement
 }

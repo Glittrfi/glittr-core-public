@@ -20,7 +20,7 @@ impl Updater {
             return Some(Flaw::LiveTimeNotReached);
         }
 
-        let mut free_mint_data = match self.get_asset_contract_data(contract_id).await {
+        let mut asset_contract_data = match self.get_asset_contract_data(contract_id).await {
             Ok(data) => data,
             Err(flaw) => return Some(flaw),
         };
@@ -28,7 +28,7 @@ impl Updater {
         let free_mint = asset_contract.mint_mechanism.free_mint.as_ref().unwrap();
         // check the supply
         if let Some(supply_cap) = &free_mint.supply_cap {
-            let next_supply = free_mint_data
+            let next_supply = asset_contract_data
                 .minted_supply
                 .saturating_add(free_mint.amount_per_mint.0);
 
@@ -36,7 +36,7 @@ impl Updater {
                 return Some(Flaw::SupplyCapExceeded);
             }
         }
-        free_mint_data.minted_supply = free_mint_data
+        asset_contract_data.minted_supply = asset_contract_data
             .minted_supply
             .saturating_add(free_mint.amount_per_mint.0);
 
@@ -54,7 +54,7 @@ impl Updater {
         .await;
 
         // update the mint data
-        self.set_asset_contract_data(contract_id, &free_mint_data)
+        self.set_asset_contract_data(contract_id, &asset_contract_data)
             .await;
 
         None
@@ -72,7 +72,7 @@ impl Updater {
         let mut total_unallocated_glittr_asset: u128 = 0;
         let mut total_received_value: u128 = 0;
 
-        let mut out_value: u128 = 0;
+        let out_value: u128;
 
         // VALIDATE INPUT
         match purchase.input_asset {
@@ -160,97 +160,18 @@ impl Updater {
         }
 
         // VALIDATE OUT_VALUE
-        match &purchase.ratio {
-            RatioType::Fixed { ratio } => {
-                out_value = (total_received_value * ratio.0 as u128) / ratio.1 as u128;
-            }
-            RatioType::Oracle { pubkey, setting } => {
-                if let Some(oracle_message_signed) = mint_option.oracle_message {
-                    if setting.asset_id == oracle_message_signed.message.asset_id {
-                        let pubkey: XOnlyPublicKey =
-                            XOnlyPublicKey::from_slice(pubkey.as_slice()).unwrap();
+        let ratio_block_result = self.process_ratio_type(
+            &purchase.ratio,
+            &total_received_value,
+            &mint_option,
+            &tx,
+            &block_tx,
+        );
 
-                        if let Ok(signature) =
-                            Signature::from_slice(&oracle_message_signed.signature)
-                        {
-                            let secp = Secp256k1::new();
-
-                            let msg = Message::from_digest_slice(
-                                sha256::Hash::hash(
-                                    serde_json::to_string(&oracle_message_signed.message)
-                                        .unwrap()
-                                        .as_bytes(),
-                                )
-                                .as_byte_array(),
-                            )
-                            .unwrap();
-
-                            let mut is_btc = false;
-                            if let Some(asset_id) = oracle_message_signed.message.asset_id {
-                                if asset_id == *"btc" {
-                                    is_btc = true;
-                                    if let Some(ratio) = oracle_message_signed.message.ratio {
-                                        out_value = total_received_value
-                                            .saturating_mul(ratio.0 as u128)
-                                            .saturating_div(ratio.1 as u128)
-                                    }
-                                }
-                            }
-
-                            // For non-BTC assets or no asset_id specified
-                            if !is_btc {
-                                if let Some(_out_value) = oracle_message_signed.message.out_value {
-                                    out_value = _out_value.0;
-                                } else {
-                                    return Some(Flaw::OracleMintInfoFailed);
-                                }
-
-                                if let Some(input_outpoint) =
-                                    oracle_message_signed.message.input_outpoint
-                                {
-                                    let mut input_found = false;
-                                    for txin in tx.input.iter() {
-                                        if txin.previous_output == input_outpoint {
-                                            input_found = true;
-                                        }
-                                    }
-                                    if !input_found {
-                                        return Some(Flaw::OracleMintInputNotFound);
-                                    }
-                                } else {
-                                    return Some(Flaw::OracleMintInfoFailed);
-                                }
-
-                                if let Some(min_in_value) =
-                                    oracle_message_signed.message.min_in_value
-                                {
-                                    if total_received_value < min_in_value.0 {
-                                        return Some(Flaw::OracleMintBelowMinValue);
-                                    }
-                                } else {
-                                    return Some(Flaw::OracleMintInfoFailed);
-                                }
-                            }
-
-                            if block_tx.block - oracle_message_signed.message.block_height
-                                > setting.block_height_slippage as u64
-                            {
-                                return Some(Flaw::OracleMintBlockSlippageExceeded);
-                            }
-
-                            if pubkey.verify(&secp, &msg, &signature).is_err() {
-                                return Some(Flaw::OracleMintSignatureFailed);
-                            }
-                        } else {
-                            return Some(Flaw::OracleMintFailed);
-                        }
-                    } else {
-                        return Some(Flaw::OracleMintFailed);
-                    }
-                } else {
-                    return Some(Flaw::OracleMintFailed);
-                };
-            }
+        if let Ok(_out_value) = ratio_block_result {
+            out_value = _out_value
+        } else {
+            return ratio_block_result.err();
         }
 
         // check pointer overflow
@@ -433,37 +354,29 @@ impl Updater {
         match message {
             Ok(op_return_message) => match op_return_message.contract_creation {
                 Some(contract_creation) => match contract_creation.contract_type {
-                    ContractType::Moa(asset_contract) => {
-                        let result_preallocated = if let Some(preallocated) =
-                            &asset_contract.mint_mechanism.preallocated
-                        {
-                            self.mint_preallocated(
-                                &asset_contract,
-                                preallocated,
-                                tx,
-                                block_tx,
-                                contract_id,
-                                mint_option,
-                            )
-                            .await
-                        } else {
-                            Some(Flaw::NotImplemented)
-                        };
+                    ContractType::Moa(moa) => {
+                        let result_preallocated =
+                            if let Some(preallocated) = &moa.mint_mechanism.preallocated {
+                                self.mint_preallocated(
+                                    &moa,
+                                    preallocated,
+                                    tx,
+                                    block_tx,
+                                    contract_id,
+                                    mint_option,
+                                )
+                                .await
+                            } else {
+                                Some(Flaw::NotImplemented)
+                            };
 
                         if result_preallocated.is_none() {
                             return result_preallocated;
                         }
 
-                        let result_free_mint = if asset_contract.mint_mechanism.free_mint.is_some()
-                        {
-                            self.mint_free_mint(
-                                &asset_contract,
-                                tx,
-                                block_tx,
-                                contract_id,
-                                mint_option,
-                            )
-                            .await
+                        let result_free_mint = if moa.mint_mechanism.free_mint.is_some() {
+                            self.mint_free_mint(&moa, tx, block_tx, contract_id, mint_option)
+                                .await
                         } else {
                             Some(Flaw::NotImplemented)
                         };
@@ -472,20 +385,19 @@ impl Updater {
                             return result_free_mint;
                         }
 
-                        let result_purchase =
-                            if let Some(purchase) = &asset_contract.mint_mechanism.purchase {
-                                self.mint_purchase_burn_swap(
-                                    &asset_contract,
-                                    purchase,
-                                    tx,
-                                    block_tx,
-                                    contract_id,
-                                    mint_option.clone(),
-                                )
-                                .await
-                            } else {
-                                Some(Flaw::NotImplemented)
-                            };
+                        let result_purchase = if let Some(purchase) = &moa.mint_mechanism.purchase {
+                            self.mint_purchase_burn_swap(
+                                &moa,
+                                purchase,
+                                tx,
+                                block_tx,
+                                contract_id,
+                                mint_option.clone(),
+                            )
+                            .await
+                        } else {
+                            Some(Flaw::NotImplemented)
+                        };
 
                         if result_purchase.is_none() {
                             return result_purchase;
@@ -499,7 +411,23 @@ impl Updater {
                             result_purchase
                         }
                     }
-                    ContractType::Mba(mint_burn_asset_contract) => todo!(),
+                    ContractType::Mba(mba) => {
+                        // TODO: integrate other mint mechanisms
+                        if let Some(collateralized) = &mba.mint_mechanism.collateralized {
+                            return self
+                                .mint_collateralized(
+                                    &mba,
+                                    collateralized.clone(),
+                                    tx,
+                                    block_tx,
+                                    contract_id,
+                                    mint_option,
+                                )
+                                .await;
+                        } else {
+                            return Some(Flaw::NotImplemented);
+                        }
+                    }
                 },
                 None => Some(Flaw::ContractNotMatch),
             },
@@ -539,5 +467,109 @@ impl Updater {
             return Some(Flaw::InvalidPointer);
         }
         None
+    }
+
+    pub fn process_ratio_type(
+        &self,
+        ratio: &RatioType,
+        total_received_value: &u128,
+        mint_option: &MintOption,
+        tx: &Transaction,
+        block_tx: &BlockTx,
+    ) -> Result<u128, Flaw> {
+        match ratio {
+            RatioType::Fixed { ratio } => {
+                Ok((total_received_value * ratio.0 as u128) / ratio.1 as u128)
+            }
+            RatioType::Oracle { setting } => {
+                if let Some(oracle_message_signed) = &mint_option.oracle_message {
+                    if setting.asset_id == oracle_message_signed.message.asset_id {
+                        if block_tx.block - oracle_message_signed.message.block_height
+                            > setting.block_height_slippage as u64
+                        {
+                            return Err(Flaw::OracleMintBlockSlippageExceeded);
+                        }
+
+                        let pubkey: XOnlyPublicKey =
+                            XOnlyPublicKey::from_slice(&setting.pubkey.as_slice()).unwrap();
+
+                        if let Ok(signature) =
+                            Signature::from_slice(&oracle_message_signed.signature)
+                        {
+                            let secp = Secp256k1::new();
+
+                            let msg = Message::from_digest_slice(
+                                sha256::Hash::hash(
+                                    serde_json::to_string(&oracle_message_signed.message)
+                                        .unwrap()
+                                        .as_bytes(),
+                                )
+                                .as_byte_array(),
+                            )
+                            .unwrap();
+
+                            if pubkey.verify(&secp, &msg, &signature).is_err() {
+                                return Err(Flaw::OracleMintSignatureFailed);
+                            }
+
+                            let mut is_btc = false;
+                            if let Some(asset_id) = &oracle_message_signed.message.asset_id {
+                                if asset_id == "btc" {
+                                    is_btc = true;
+                                    if let Some(ratio) = oracle_message_signed.message.ratio {
+                                        return Ok(total_received_value
+                                            .saturating_mul(ratio.0 as u128)
+                                            .saturating_div(ratio.1 as u128));
+                                    }
+                                }
+                            }
+
+                            // For non-BTC assets or no asset_id specified
+                            if !is_btc {
+                                if let Some(input_outpoint) =
+                                    oracle_message_signed.message.input_outpoint
+                                {
+                                    let mut input_found = false;
+                                    for txin in tx.input.iter() {
+                                        if txin.previous_output == input_outpoint {
+                                            input_found = true;
+                                        }
+                                    }
+                                    if !input_found {
+                                        return Err(Flaw::OracleMintInputNotFound);
+                                    }
+                                } else {
+                                    return Err(Flaw::OracleMintInfoFailed);
+                                }
+
+                                if let Some(min_in_value) =
+                                    &oracle_message_signed.message.min_in_value
+                                {
+                                    if total_received_value < &min_in_value.0 {
+                                        return Err(Flaw::OracleMintBelowMinValue);
+                                    }
+                                } else {
+                                    return Err(Flaw::OracleMintInfoFailed);
+                                }
+
+                                if let Some(_out_value) = &oracle_message_signed.message.out_value {
+                                    return Ok(_out_value.0);
+                                } else {
+                                    return Err(Flaw::OracleMintInfoFailed);
+                                }
+                            } else {
+                                return Err(Flaw::OracleMintFailed);
+                            }
+                        } else {
+                            return Err(Flaw::OracleMintFailed);
+                        }
+                    } else {
+                        return Err(Flaw::OracleMintFailed);
+                    }
+                } else {
+                    return Err(Flaw::OracleMintFailed);
+                };
+            }
+        }
     }
 }

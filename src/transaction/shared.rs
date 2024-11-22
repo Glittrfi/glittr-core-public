@@ -169,7 +169,6 @@ pub enum RatioType {
         ratio: Fraction, // out_value = input_value * ratio
     },
     Oracle {
-        pubkey: Pubkey, // compressed public key
         setting: OracleSetting,
     },
 }
@@ -182,8 +181,8 @@ impl RatioType {
                     return Some(Flaw::DivideByZero);
                 }
             }
-            RatioType::Oracle { pubkey, setting: _ } => {
-                if XOnlyPublicKey::from_slice(pubkey).is_err() {
+            RatioType::Oracle { setting } => {
+                if XOnlyPublicKey::from_slice(&setting.pubkey).is_err() {
                     return Some(Flaw::PubkeyInvalid);
                 }
             }
@@ -196,6 +195,7 @@ impl RatioType {
 #[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct OracleSetting {
+    pub pubkey: Pubkey, // compressed public key
     /// set asset_id to null for fully trust the oracle, ordinal_number if ordinal, rune's block_tx if rune, etc
     pub asset_id: Option<String>,
     /// delta block_height in which the oracle message still valid
