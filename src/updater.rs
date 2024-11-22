@@ -9,7 +9,7 @@ use bitcoin::{
     opcodes,
     script::Instruction,
     secp256k1::{schnorr::Signature, Message},
-    Address, OutPoint, Transaction, TxOut, XOnlyPublicKey,
+    Address, Transaction, TxOut, XOnlyPublicKey,
 };
 use database::{
     DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, MESSAGE_PREFIX,
@@ -51,10 +51,10 @@ pub struct VestingContractData {
     pub claimed_allocations: HashMap<String, u128>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Default)]
 #[serde(rename_all = "snake_case")]
-pub struct SpecContractOwner {
-    pub owner: OutPoint,
+pub struct SpecContractOwned {
+    pub specs: Vec<BlockTxTuple>,
 }
 
 #[derive(Default)]

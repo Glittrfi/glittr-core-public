@@ -1,4 +1,4 @@
-use database::SPEC_CONTRACT_OWNER_PREFIX;
+use database::SPEC_CONTRACT_OWNED_PREFIX;
 use message::ContractCreation;
 
 use crate::spec::{MintOnlyAssetSpecPegInType, SpecContract, SpecContractType};
@@ -19,7 +19,8 @@ impl Updater {
         }
 
         let spec_contract_id = BlockTxTuple::from((block_height, tx_index));
-        self.allocate_new_spec(spec_contract.pointer, &spec_contract_id).await;
+        self.allocate_new_spec(spec_contract.pointer, &spec_contract_id)
+            .await;
 
         None
     }
@@ -29,35 +30,33 @@ impl Updater {
         allocation.specs.push(*spec_contract_id)
     }
 
-    pub async fn set_spec_contract_owner(
+    pub async fn set_spec_contract_owned(
         &self,
-        spec_contract_id: &BlockTxTuple,
-        outpoint: OutPoint,
+        outpoint: &Outpoint,
+        spec_contract_owned: &SpecContractOwned,
     ) {
         if !self.is_read_only {
-            let contract_key = BlockTx::from_tuple(*spec_contract_id).to_string();
             self.database.lock().await.put(
-                SPEC_CONTRACT_OWNER_PREFIX,
-                &contract_key,
-                SpecContractOwner { owner: outpoint },
+                SPEC_CONTRACT_OWNED_PREFIX,
+                &outpoint.to_string(),
+                spec_contract_owned,
             );
         }
     }
 
     pub async fn get_spec_contract_owner(
         &self,
-        spec_contract_id: &BlockTxTuple,
-    ) -> Result<SpecContractOwner, Flaw> {
-        let contract_key = BlockTx::from_tuple(*spec_contract_id).to_string();
-        let data: Result<SpecContractOwner, DatabaseError> = self
+        outpoint: &Outpoint,
+    ) -> Result<SpecContractOwned, Flaw> {
+        let data: Result<SpecContractOwned, DatabaseError> = self
             .database
             .lock()
             .await
-            .get(SPEC_CONTRACT_OWNER_PREFIX, &contract_key);
+            .get(SPEC_CONTRACT_OWNED_PREFIX, &outpoint.to_string());
 
         match data {
             Ok(data) => Ok(data),
-            Err(DatabaseError::NotFound) => Err(Flaw::SpecOwnerNotFound),
+            Err(DatabaseError::NotFound) => Ok(SpecContractOwned::default()),
             Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
         }
     }
