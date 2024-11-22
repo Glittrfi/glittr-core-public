@@ -1,3 +1,4 @@
+use bitcoin::PublicKey;
 use mint_only_asset::InputAsset;
 
 use super::*;
@@ -53,7 +54,13 @@ impl MintOnlyAssetSpec {
             return Some(Flaw::SpecFieldRequired("input_asset".to_string()));
         }
 
-        if self.peg_in_type.is_none() {
+        if let Some(peg_in_type) = &self.peg_in_type {
+            if let MintOnlyAssetSpecPegInType::Pubkey(pubkey) = peg_in_type {
+                if PublicKey::from_slice(&pubkey.as_slice()).is_err() {
+                    return Some(Flaw::PubkeyInvalid);
+                }
+            }
+        } else {
             return Some(Flaw::SpecFieldRequired("peg_in_type".to_string()));
         }
 
@@ -101,6 +108,6 @@ impl SpecContract {
         return match &self.spec {
             SpecContractType::MintOnlyAsset(moa_spec) => moa_spec.validate(),
             SpecContractType::MintBurnAsset(moa_spec) => moa_spec.validate(),
-        }
+        };
     }
 }

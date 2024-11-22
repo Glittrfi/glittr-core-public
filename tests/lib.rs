@@ -264,7 +264,7 @@ async fn test_integration_broadcast_op_return_message_success() {
                     purchase: None,
                 },
             }),
-            spec: None
+            spec: None,
         }),
         transfer: None,
         contract_call: None,
@@ -299,7 +299,7 @@ async fn test_integration_purchaseburnswap() {
                     free_mint: None,
                 },
             }),
-            spec: None
+            spec: None,
         }),
         transfer: None,
         contract_call: None,
@@ -334,7 +334,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
                     free_mint: None,
                 },
             }),
-            spec: None
+            spec: None,
         }),
         transfer: None,
         contract_call: None,
@@ -453,7 +453,7 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
                     free_mint: None,
                 },
             }),
-            spec: None
+            spec: None,
         }),
         transfer: None,
         contract_call: None,
@@ -563,7 +563,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
                     free_mint: None,
                 },
             }),
-            spec: None
+            spec: None,
         }),
         transfer: None,
         contract_call: None,
@@ -724,7 +724,7 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
                     free_mint: None,
                 },
             }),
-            spec: None
+            spec: None,
         }),
         contract_call: None,
         transfer: None,
@@ -854,7 +854,7 @@ async fn test_metaprotocol_to_glittr_asset() {
                     free_mint: None,
                 },
             }),
-            spec: None
+            spec: None,
         }),
         transfer: None,
         contract_call: None,
@@ -981,7 +981,7 @@ async fn test_integration_freemint() {
                     purchase: None,
                 },
             }),
-            spec: None
+            spec: None,
         }),
         transfer: None,
         contract_call: None,
@@ -1018,7 +1018,7 @@ async fn test_integration_mint_freemint() {
                     purchase: None,
                 },
             }),
-            spec: None
+            spec: None,
         }),
         transfer: None,
         contract_call: None,
@@ -1084,7 +1084,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
                     purchase: None,
                 },
             }),
-            spec: None
+            spec: None,
         }),
         transfer: None,
         contract_call: None,
@@ -1158,7 +1158,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
                     purchase: None,
                 },
             }),
-            spec: None
+            spec: None,
         }),
         transfer: None,
         contract_call: None,
@@ -1282,7 +1282,7 @@ async fn test_integration_mint_preallocated_freemint() {
                     purchase: None,
                 },
             }),
-            spec: None
+            spec: None,
         }),
         transfer: None,
         contract_call: None,
@@ -1380,7 +1380,7 @@ async fn test_integration_mint_freemint_invalidpointer() {
                     purchase: None,
                 },
             }),
-            spec: None
+            spec: None,
         }),
         contract_call: None,
         transfer: None,
@@ -1432,7 +1432,7 @@ async fn test_integration_transfer_normal() {
                     purchase: None,
                 },
             }),
-            spec: None
+            spec: None,
         }),
         transfer: None,
         contract_call: None,
@@ -1567,7 +1567,7 @@ async fn test_integration_transfer_overflow_output() {
                     purchase: None,
                 },
             }),
-            spec: None
+            spec: None,
         }),
         transfer: None,
         contract_call: None,
@@ -1683,7 +1683,7 @@ async fn test_integration_transfer_utxo() {
                     purchase: None,
                 },
             }),
-            spec: None
+            spec: None,
         }),
         contract_call: None,
         transfer: None,
@@ -1768,7 +1768,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
                     purchase: None,
                 },
             }),
-            spec: None
+            spec: None,
         }),
         transfer: None,
         contract_call: None,
@@ -1810,7 +1810,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
                     free_mint: None,
                 },
             }),
-            spec: None
+            spec: None,
         }),
         transfer: None,
         contract_call: None,
@@ -1888,7 +1888,7 @@ async fn test_integration_spec() {
                 }),
                 block_tx: None,
             }),
-            spec: None
+            spec: None,
         }),
         transfer: None,
         contract_call: None,
@@ -1917,7 +1917,7 @@ async fn test_integration_spec_update() {
                 }),
                 block_tx: None,
             }),
-            spec: None
+            spec: None,
         }),
         transfer: None,
         contract_call: None,
@@ -1936,7 +1936,7 @@ async fn test_integration_spec_update() {
                 }),
                 block_tx: Some(block_tx_contract.to_tuple()),
             }),
-            spec: None
+            spec: None,
         }),
         transfer: None,
         contract_call: None,
@@ -1968,6 +1968,171 @@ async fn test_integration_spec_update() {
     } else {
         panic!("Invalid contract type");
     };
+
+    ctx.drop().await;
+}
+
+#[tokio::test]
+async fn test_integration_spec_moa_valid_contract_creation() {
+    let (_, address_pubkey) = get_bitcoin_address();
+    let mut ctx = TestContext::new().await;
+    let message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            contract_type: ContractType::Spec(SpecContract {
+                spec: SpecContractType::MintOnlyAsset(MintOnlyAssetSpec {
+                    input_asset: Some(InputAsset::Rune),
+                    peg_in_type: Some(MintOnlyAssetSpecPegInType::Pubkey(address_pubkey.to_bytes())),
+                }),
+                block_tx: None,
+            }),
+            spec: None,
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let block_tx_spec = ctx.build_and_mine_message(&message).await;
+
+    let message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            contract_type: ContractType::Asset(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(1000)),
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MintMechanisms {
+                    purchase: Some(PurchaseBurnSwap {
+                        input_asset: InputAsset::Rune,
+                        pay_to_key: Some(address_pubkey.to_bytes()),
+                        ratio: TransferRatioType::Fixed { ratio: (1, 1) },
+                    }),
+                    preallocated: None,
+                    free_mint: None,
+                },
+            }),
+            // use the spec
+            spec: Some(block_tx_spec.to_tuple()),
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let block_tx_contract = ctx.build_and_mine_message(&message).await;
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    let message = ctx.get_and_verify_message_outcome(block_tx_contract).await;
+    assert_eq!(message.flaw, None);
+
+    ctx.drop().await;
+}
+
+#[tokio::test]
+async fn test_integration_spec_moa_input_asset_invalid() {
+    let mut ctx = TestContext::new().await;
+    let message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            contract_type: ContractType::Spec(SpecContract {
+                spec: SpecContractType::MintOnlyAsset(MintOnlyAssetSpec {
+                    input_asset: Some(InputAsset::Rune),
+                    peg_in_type: Some(MintOnlyAssetSpecPegInType::Burn),
+                }),
+                block_tx: None,
+            }),
+            spec: None,
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let block_tx_spec = ctx.build_and_mine_message(&message).await;
+
+    let message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            contract_type: ContractType::Asset(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(1000)),
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MintMechanisms {
+                    purchase: Some(PurchaseBurnSwap {
+                        input_asset: InputAsset::RawBtc,
+                        pay_to_key: None,
+                        ratio: TransferRatioType::Fixed { ratio: (1, 1) },
+                    }),
+                    preallocated: None,
+                    free_mint: None,
+                },
+            }),
+            // use the spec
+            spec: Some(block_tx_spec.to_tuple()),
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let block_tx_contract = ctx.build_and_mine_message(&message).await;
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    let message = ctx.get_and_verify_message_outcome(block_tx_contract).await;
+    assert_eq!(message.flaw, Some(Flaw::SpecCriteriaInvalid));
+
+    ctx.drop().await;
+}
+
+#[tokio::test]
+async fn test_integration_spec_moa_peg_in_type_invalid() {
+    let (_, address_pubkey) = get_bitcoin_address();
+
+    let mut ctx = TestContext::new().await;
+    let message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            contract_type: ContractType::Spec(SpecContract {
+                spec: SpecContractType::MintOnlyAsset(MintOnlyAssetSpec {
+                    input_asset: Some(InputAsset::Rune),
+                    peg_in_type: Some(MintOnlyAssetSpecPegInType::Pubkey(address_pubkey.to_bytes())),
+                }),
+                block_tx: None,
+            }),
+            spec: None,
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let block_tx_spec = ctx.build_and_mine_message(&message).await;
+
+    let message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            contract_type: ContractType::Asset(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(1000)),
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MintMechanisms {
+                    purchase: Some(PurchaseBurnSwap {
+                        input_asset: InputAsset::Rune,
+                        pay_to_key: None,
+                        ratio: TransferRatioType::Fixed { ratio: (1, 1) },
+                    }),
+                    preallocated: None,
+                    free_mint: None,
+                },
+            }),
+            // use the spec
+            spec: Some(block_tx_spec.to_tuple()),
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let block_tx_contract = ctx.build_and_mine_message(&message).await;
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    let message = ctx.get_and_verify_message_outcome(block_tx_contract).await;
+    assert_eq!(message.flaw, Some(Flaw::SpecCriteriaInvalid));
 
     ctx.drop().await;
 }
