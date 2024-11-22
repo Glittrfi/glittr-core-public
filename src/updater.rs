@@ -122,7 +122,11 @@ impl Updater {
 
         let allocation = self.allocated_outputs.entry(vout).or_default();
 
-        let previous_amount = allocation.asset_list.list.entry(block_tx.to_str()).or_insert(0);
+        let previous_amount = allocation
+            .asset_list
+            .list
+            .entry(block_tx.to_str())
+            .or_insert(0);
         *previous_amount = previous_amount.saturating_add(amount);
     }
 
@@ -149,7 +153,10 @@ impl Updater {
 
         *allocation = allocation.saturating_sub(amount);
         if *allocation == 0 {
-            self.unallocated_inputs.asset_list.list.remove(&block_tx.to_string());
+            self.unallocated_inputs
+                .asset_list
+                .list
+                .remove(&block_tx.to_string());
         }
 
         self.allocate_new_asset(vout, contract_id, amount).await;
@@ -277,7 +284,9 @@ impl Updater {
                         } else {
                             // create the spec
                             if outcome.flaw.is_none() {
-                                outcome.flaw = self.create_spec(tx, &spec_contract).await;
+                                outcome.flaw = self
+                                    .create_spec(block_height, tx_index, tx, &spec_contract)
+                                    .await;
                             }
                         }
                     }
@@ -483,5 +492,15 @@ impl Updater {
                 vesting_contract_data,
             );
         }
+    }
+
+    fn validate_pointer(&self, pointer: u32, tx: &Transaction) -> Option<Flaw> {
+        if pointer >= tx.output.len() as u32 {
+            return Some(Flaw::PointerOverflow);
+        }
+        if self.is_op_return_index(&tx.output[pointer as usize]) {
+            return Some(Flaw::InvalidPointer);
+        }
+        None
     }
 }

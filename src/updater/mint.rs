@@ -41,8 +41,8 @@ impl Updater {
             .minted_supply
             .saturating_add(free_mint.amount_per_mint.0);
 
-        // check pointer overflow
-        if let Some(flaw) = self.validate_mint_pointer(mint_option.pointer, tx) {
+        // validate pointer
+        if let Some(flaw) = self.validate_pointer(mint_option.pointer, tx) {
             return Some(flaw);
         }
 
@@ -257,7 +257,7 @@ impl Updater {
         }
 
         // check pointer overflow
-        if let Some(flaw) = self.validate_mint_pointer(mint_option.pointer, tx) {
+        if let Some(flaw) = self.validate_pointer(mint_option.pointer, tx) {
             return Some(flaw);
         }
 
@@ -409,7 +409,7 @@ impl Updater {
             return Some(flaw);
         }
 
-        if let Some(flaw) = self.validate_mint_pointer(mint_option.pointer, tx) {
+        if let Some(flaw) = self.validate_pointer(mint_option.pointer, tx) {
             return Some(flaw);
         }
 
@@ -536,15 +536,6 @@ impl Updater {
         None
     }
 
-    fn validate_mint_pointer(&self, pointer: u32, tx: &Transaction) -> Option<Flaw> {
-        if pointer >= tx.output.len() as u32 {
-            return Some(Flaw::PointerOverflow);
-        }
-        if self.is_op_return_index(&tx.output[pointer as usize]) {
-            return Some(Flaw::InvalidPointer);
-        }
-        None
-    }
 }
 
 // TODO: move to helper file

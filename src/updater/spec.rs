@@ -6,8 +6,27 @@ use crate::spec::{MintOnlyAssetSpecPegInType, SpecContract, SpecContractType};
 use super::*;
 
 impl Updater {
-    pub async fn create_spec(&self, tx: &Transaction, spec_contract: &SpecContract) -> Option<Flaw> {
+    pub async fn create_spec(
+        &mut self,
+        block_height: u64,
+        tx_index: u32,
+        tx: &Transaction,
+        spec_contract: &SpecContract,
+    ) -> Option<Flaw> {
+        // validate pointer
+        if let Some(flaw) = self.validate_pointer(spec_contract.pointer, tx) {
+            return Some(flaw);
+        }
+
+        let spec_contract_id = BlockTxTuple::from((block_height, tx_index));
+        self.allocate_new_spec(spec_contract.pointer, &spec_contract_id).await;
+
         None
+    }
+
+    pub async fn allocate_new_spec(&mut self, vout: u32, spec_contract_id: &BlockTxTuple) {
+        let allocation = self.allocated_outputs.entry(vout).or_default();
+        allocation.spec = *spec_contract_id
     }
 
     pub async fn set_spec_contract_owner(

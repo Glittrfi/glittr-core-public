@@ -1887,7 +1887,7 @@ async fn test_integration_spec() {
                     peg_in_type: Some(MintOnlyAssetSpecPegInType::Burn),
                 }),
                 block_tx: None,
-                pointer: None
+                pointer: 1
             }),
             spec: None,
         }),
@@ -1917,7 +1917,7 @@ async fn test_integration_spec_update() {
                     mint: Some(MintBurnAssetSpecMint::Proportional),
                 }),
                 block_tx: None,
-                pointer: None
+                pointer: 1
             }),
             spec: None,
         }),
@@ -1937,7 +1937,7 @@ async fn test_integration_spec_update() {
                     mint: None,
                 }),
                 block_tx: Some(block_tx_contract.to_tuple()),
-                pointer: None
+                pointer: 1
             }),
             spec: None,
         }),
@@ -1987,7 +1987,7 @@ async fn test_integration_spec_moa_valid_contract_creation() {
                     peg_in_type: Some(MintOnlyAssetSpecPegInType::Pubkey(address_pubkey.to_bytes())),
                 }),
                 block_tx: None,
-                pointer: None
+                pointer: 1
             }),
             spec: None,
         }),
@@ -2042,7 +2042,7 @@ async fn test_integration_spec_moa_input_asset_invalid() {
                     peg_in_type: Some(MintOnlyAssetSpecPegInType::Burn),
                 }),
                 block_tx: None,
-                pointer: None
+                pointer: 1
             }),
             spec: None,
         }),
@@ -2099,7 +2099,7 @@ async fn test_integration_spec_moa_peg_in_type_invalid() {
                     peg_in_type: Some(MintOnlyAssetSpecPegInType::Pubkey(address_pubkey.to_bytes())),
                 }),
                 block_tx: None,
-                pointer: None
+                pointer: 1
             }),
             spec: None,
         }),
