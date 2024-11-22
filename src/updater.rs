@@ -1,4 +1,4 @@
-mod mint_collateralized;
+mod collateralized;
 mod mint;
 mod updater_shared;
 mod burn;
@@ -309,7 +309,11 @@ impl Updater {
                         }
                     }
                     CallType::CloseAccount(close_account_option) => {
-                        log::info!("Process call type close account");
+                        if outcome.flaw.is_none() {
+                            outcome.flaw = self
+                                .process_close_account(tx, block_tx, &contract_call.contract, &close_account_option)
+                                .await;
+                        }
                     }
                 }
             }

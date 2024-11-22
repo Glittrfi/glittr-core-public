@@ -16,9 +16,7 @@ use glittr::{
         COLLATERAL_ACCOUNT_PREFIX, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX,
     },
     message::{
-        BurnOption, CallType, ContractCall, ContractCreation, ContractType, MintOption,
-        OpReturnMessage, OpenAccountOption, OracleMessage, OracleMessageSigned, Transfer,
-        TxTypeTransfer,
+        BurnOption, CallType, CloseAccountOption, ContractCall, ContractCreation, ContractType, MintOption, OpReturnMessage, OpenAccountOption, OracleMessage, OracleMessageSigned, Transfer, TxTypeTransfer
     },
     mint_burn_asset::{
         AccountType, BurnMechanisms, Collateralized, MBAMintMechanisms, MintBurnAssetContract,
@@ -2195,7 +2193,7 @@ async fn test_integration_collateralized_mba() {
         output_values: &[0, 546], // Values for outputs
         outputs: 2,
         p2tr: false,
-        recipient: Some(owner_address),
+        recipient: Some(owner_address.clone()),
     });
     ctx.core.mine_blocks(1);
 
@@ -2233,6 +2231,135 @@ async fn test_integration_collateralized_mba() {
     assert_eq!(account_after_burn.collateral_amounts, [((3, 1), 100000)]); // Collateral amount unchanged
     assert_eq!(account_after_burn.ltv, (3, 10)); // Updated LTV from oracle message
     assert_eq!(account_after_burn.amount_outstanding, 25_000); // Updated outstanding amount from oracle message
+
+    // Create final burn message to clear outstanding amount
+    let final_burn_oracle_message = OracleMessage {
+        asset_id: None,
+        block_height: ctx.core.height(),
+        input_outpoint: Some(OutPoint {
+            txid: ctx.core.tx(burn_block_tx.block as usize, 1).compute_txid(),
+            vout: 1,
+        }),
+        min_in_value: None,
+        out_value: Some(U128(25_000)), // Burn remaining amount
+        ratio: None,
+        ltv: Some((0, 10)),           // Set LTV to 0
+        outstanding: Some(U128(0)),   // Set outstanding to 0
+    };
+
+    let final_burn_msg = Message::from_digest_slice(
+        sha256::Hash::hash(
+            serde_json::to_string(&final_burn_oracle_message)
+                .unwrap()
+                .as_bytes(),
+        )
+        .as_byte_array(),
+    )
+    .unwrap();
+
+    let final_burn_signature = secp.sign_schnorr(&final_burn_msg, &oracle_keypair);
+
+    // Create final burn message
+    let final_burn_message = OpReturnMessage {
+        contract_call: Some(ContractCall {
+            contract: mba_contract.to_tuple(),
+            call_type: CallType::Burn(BurnOption {
+                oracle_message: Some(OracleMessageSigned {
+                    signature: final_burn_signature.serialize().to_vec(),
+                    message: final_burn_oracle_message.clone(),
+                }),
+                pointer_to_key: Some(1),
+            }),
+        }),
+        transfer: None,
+        contract_creation: None,
+    };
+
+    // Broadcast final burn transaction
+    ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[
+            (burn_block_tx.block as usize, 1, 1, Witness::new()), // UTXO containing collateral account
+            (burn_block_tx.block as usize, 1, 2, Witness::new()), // UTXO containing remaining minted tokens
+            (burn_block_tx.block as usize, 0, 0, Witness::new()),
+        ],
+        op_return: Some(final_burn_message.into_script()),
+        op_return_index: Some(0),
+        op_return_value: Some(0),
+        output_values: &[0, 546], // Values for outputs
+        outputs: 2,
+        p2tr: false,
+        recipient: Some(owner_address.clone()),
+    });
+    ctx.core.mine_blocks(1);
+
+    let final_burn_block_tx = BlockTx {
+        block: ctx.core.height(),
+        tx: 1,
+    };
+
+    // Create close account message
+    let close_account_message = OpReturnMessage {
+        contract_call: Some(ContractCall {
+            contract: mba_contract.to_tuple(),
+            call_type: CallType::CloseAccount(CloseAccountOption {
+                pointer: 1, // Output index for returned collateral
+            }),
+        }),
+        transfer: None,
+        contract_creation: None,
+    };
+
+    // Broadcast close account transaction
+    ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[
+            (final_burn_block_tx.block as usize, 1, 1, Witness::new()), // UTXO containing collateral account
+            (final_burn_block_tx.block as usize, 0, 0, Witness::new()),
+        ],
+        op_return: Some(close_account_message.into_script()),
+        op_return_index: Some(0),
+        op_return_value: Some(0),
+        output_values: &[0, 546], // Values for outputs
+        outputs: 2,
+        p2tr: false,
+        recipient: Some(owner_address.clone()),
+    });
+    ctx.core.mine_blocks(1);
+
+    let close_account_block_tx = BlockTx {
+        block: ctx.core.height(),
+        tx: 1,
+    };
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    // Verify final burn outcome
+    let final_burn_outcome = ctx.get_and_verify_message_outcome(final_burn_block_tx).await;
+    assert!(final_burn_outcome.flaw.is_none(), "{:?}", final_burn_outcome.flaw);
+
+    // Verify close account outcome
+    let close_account_outcome = ctx.get_and_verify_message_outcome(close_account_block_tx).await;
+    assert!(close_account_outcome.flaw.is_none(), "{:?}", close_account_outcome.flaw);
+
+    // Verify all minted tokens are burned
+    let final_asset_lists = ctx.get_asset_map().await;
+    let remaining_minted = final_asset_lists
+        .values()
+        .find_map(|list| list.list.get(&mba_contract.to_str()))
+        .unwrap_or(&0);
+    assert_eq!(*remaining_minted, 0);
+
+    // Verify collateral account is deleted
+    let final_collateral_accounts = ctx.get_collateralize_accounts().await;
+    assert_eq!(final_collateral_accounts.len(), 0);
+
+    // Verify collateral tokens are returned
+    let returned_collateral = final_asset_lists
+        .values()
+        .find_map(|list| list.list.get(&collateral_contract.to_str()))
+        .expect("Returned collateral should exist");
+    assert_eq!(*returned_collateral, 100_000); // Original collateral amount
 
     ctx.drop().await;
 }

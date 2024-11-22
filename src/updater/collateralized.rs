@@ -3,7 +3,7 @@ use std::cmp::min;
 use super::*;
 use crate::updater::database::COLLATERAL_ACCOUNT_PREFIX;
 use bitcoin::{OutPoint, Transaction};
-use message::{MintOption, OpenAccountOption};
+use message::{CloseAccountOption, MintOption, OpenAccountOption};
 use mint_burn_asset::{Collateralized, MintBurnAssetContract};
 
 
@@ -228,6 +228,68 @@ impl Updater {
         // update the mint data
         self.set_asset_contract_data(contract_id, &asset_contract_data)
             .await;
+
+        None
+    }
+
+    pub async fn process_close_account(
+        &mut self,
+        tx: &Transaction,
+        _block_tx: &BlockTx,
+        _contract_id: &BlockTxTuple,
+        close_account_option: &CloseAccountOption,
+    ) -> Option<Flaw> {
+        // Find collateral account in inputs
+        let mut collateral_account: Option<CollateralAccount> = None;
+        let mut collateral_account_outpoint: Option<OutPoint> = None;
+        
+        for input in &tx.input {
+            let result_collateral_account: Result<CollateralAccount, DatabaseError> =
+                self.database.lock().await.get(
+                    COLLATERAL_ACCOUNT_PREFIX,
+                    input.previous_output.to_string().as_str(),
+                );
+
+            if let Some(_collateral_account) = result_collateral_account.ok() {
+                collateral_account = Some(_collateral_account);
+                collateral_account_outpoint = Some(input.previous_output);
+                break;
+            }
+        }
+
+        // Validate collateral account exists in inputs
+        if collateral_account.is_none() {
+            return Some(Flaw::StateKeyNotFound);
+        }
+
+        let collateral_account = collateral_account.unwrap();
+
+        // Validate LTV is 0 and no outstanding amounts
+        if collateral_account.ltv.0 != 0 {
+            return Some(Flaw::LtvMustBeZero);
+        }
+
+        if collateral_account.amount_outstanding != 0 {
+            return Some(Flaw::OutstandingMustBeZero); 
+        }
+
+        // Validate pointer for output
+        if let Some(flaw) = self.validate_pointer(close_account_option.pointer, tx) {
+            return Some(flaw);
+        }
+
+        // Return collateral assets to user
+        for (asset_id, amount) in collateral_account.collateral_amounts {
+            self.allocate_new_asset(close_account_option.pointer, &asset_id, amount).await;
+        }
+
+        // Delete collateral account
+        if !self.is_read_only {
+            self.database.lock().await.delete(
+                COLLATERAL_ACCOUNT_PREFIX,
+                collateral_account_outpoint.unwrap().to_string().as_str(),
+            );
+        }
 
         None
     }

@@ -54,7 +54,7 @@ pub struct OpenAccountOption {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct CloseAccountOption {
-    pointer: u32,
+    pub pointer: u32,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]

@@ -45,6 +45,10 @@ pub enum Flaw {
     // call type::burn
     BurnValueIncorrect,
 
+    // call type::close account
+    LtvMustBeZero,
+    OutstandingMustBeZero,
+
     // asset contract
     OverflowAmountPerMint,
     DivideByZero,
