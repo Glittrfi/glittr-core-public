@@ -264,6 +264,7 @@ async fn test_integration_broadcast_op_return_message_success() {
                     purchase: None,
                 },
             }),
+            spec: None
         }),
         transfer: None,
         contract_call: None,
@@ -298,6 +299,7 @@ async fn test_integration_purchaseburnswap() {
                     free_mint: None,
                 },
             }),
+            spec: None
         }),
         transfer: None,
         contract_call: None,
@@ -332,6 +334,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
                     free_mint: None,
                 },
             }),
+            spec: None
         }),
         transfer: None,
         contract_call: None,
@@ -450,6 +453,7 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
                     free_mint: None,
                 },
             }),
+            spec: None
         }),
         transfer: None,
         contract_call: None,
@@ -559,6 +563,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
                     free_mint: None,
                 },
             }),
+            spec: None
         }),
         transfer: None,
         contract_call: None,
@@ -719,6 +724,7 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
                     free_mint: None,
                 },
             }),
+            spec: None
         }),
         contract_call: None,
         transfer: None,
@@ -848,6 +854,7 @@ async fn test_metaprotocol_to_glittr_asset() {
                     free_mint: None,
                 },
             }),
+            spec: None
         }),
         transfer: None,
         contract_call: None,
@@ -974,6 +981,7 @@ async fn test_integration_freemint() {
                     purchase: None,
                 },
             }),
+            spec: None
         }),
         transfer: None,
         contract_call: None,
@@ -1010,6 +1018,7 @@ async fn test_integration_mint_freemint() {
                     purchase: None,
                 },
             }),
+            spec: None
         }),
         transfer: None,
         contract_call: None,
@@ -1075,6 +1084,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
                     purchase: None,
                 },
             }),
+            spec: None
         }),
         transfer: None,
         contract_call: None,
@@ -1148,6 +1158,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
                     purchase: None,
                 },
             }),
+            spec: None
         }),
         transfer: None,
         contract_call: None,
@@ -1271,6 +1282,7 @@ async fn test_integration_mint_preallocated_freemint() {
                     purchase: None,
                 },
             }),
+            spec: None
         }),
         transfer: None,
         contract_call: None,
@@ -1368,6 +1380,7 @@ async fn test_integration_mint_freemint_invalidpointer() {
                     purchase: None,
                 },
             }),
+            spec: None
         }),
         contract_call: None,
         transfer: None,
@@ -1419,6 +1432,7 @@ async fn test_integration_transfer_normal() {
                     purchase: None,
                 },
             }),
+            spec: None
         }),
         transfer: None,
         contract_call: None,
@@ -1553,6 +1567,7 @@ async fn test_integration_transfer_overflow_output() {
                     purchase: None,
                 },
             }),
+            spec: None
         }),
         transfer: None,
         contract_call: None,
@@ -1668,6 +1683,7 @@ async fn test_integration_transfer_utxo() {
                     purchase: None,
                 },
             }),
+            spec: None
         }),
         contract_call: None,
         transfer: None,
@@ -1752,6 +1768,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
                     purchase: None,
                 },
             }),
+            spec: None
         }),
         transfer: None,
         contract_call: None,
@@ -1793,6 +1810,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
                     free_mint: None,
                 },
             }),
+            spec: None
         }),
         transfer: None,
         contract_call: None,
@@ -1870,6 +1888,7 @@ async fn test_integration_spec() {
                 }),
                 block_tx: None,
             }),
+            spec: None
         }),
         transfer: None,
         contract_call: None,
@@ -1898,6 +1917,7 @@ async fn test_integration_spec_update() {
                 }),
                 block_tx: None,
             }),
+            spec: None
         }),
         transfer: None,
         contract_call: None,
@@ -1916,6 +1936,7 @@ async fn test_integration_spec_update() {
                 }),
                 block_tx: Some(block_tx_contract.to_tuple()),
             }),
+            spec: None
         }),
         transfer: None,
         contract_call: None,

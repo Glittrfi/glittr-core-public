@@ -81,6 +81,7 @@ pub struct Transfer {
 #[serde(rename_all = "snake_case")]
 pub struct ContractCreation {
     pub contract_type: ContractType,
+    pub spec: Option<BlockTxTuple>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -227,6 +228,7 @@ mod test {
                         purchase: None,
                     },
                 }),
+                spec: None
             }),
             contract_call: None,
         };

@@ -222,6 +222,19 @@ impl Updater {
 
             // NOTe: dynamic validation
             if let Some(contract_creation) = message.contract_creation {
+
+                // validate contract creation by spec
+                if let Some(spec_contract_id) = contract_creation.spec {
+                    if outcome.flaw.is_none() {
+                        outcome.flaw = self
+                            .validate_contract_by_spec(
+                                &spec_contract_id,
+                                &contract_creation.contract_type,
+                            )
+                            .await;
+                    }
+                };
+
                 match contract_creation.contract_type {
                     ContractType::Asset(asset_contract) => {
                         if let Some(purchase) = asset_contract.mint_mechanism.purchase {
@@ -241,9 +254,9 @@ impl Updater {
                     }
 
                     ContractType::Spec(spec_contract) => {
-                        if let Some(_) = spec_contract.block_tx {
+                        if let Some(contract_id) = spec_contract.block_tx {
                             if outcome.flaw.is_none() {
-                                outcome.flaw = self.update_spec(&spec_contract).await;
+                                outcome.flaw = self.update_spec(&contract_id, &spec_contract).await;
                             }
                         }
                     }
