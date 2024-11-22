@@ -60,7 +60,7 @@ pub struct SpecContractOwned {
 #[derive(Default)]
 pub struct Allocation {
     asset_list: AssetList,
-    specs: Vec<BlockTxTuple>,
+    spec_owned: SpecContractOwned,
 }
 
 pub struct Updater {
@@ -106,6 +106,15 @@ impl Updater {
 
                 // TODO: Implement a backup mechanism to recover when downtime occurs
                 self.delete_asset(outpoint).await;
+            }
+
+            // set specs
+            if let Ok(spec_contract_owned) = self.get_spec_contract_owned(outpoint).await {
+                for contract in spec_contract_owned.specs.iter() {
+                    self.unallocated_inputs.spec_owned.specs.push(*contract)
+                }
+
+                self.delete_spec_contract_owned(outpoint).await
             }
         }
 
@@ -163,27 +172,39 @@ impl Updater {
     }
 
     pub async fn commit_outputs(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
-        // move unallocated to first non op_return index (fallback)
-        let list = self.unallocated_inputs.asset_list.list.clone();
-        for asset in list.iter() {
-            let block_tx = BlockTx::from_str(asset.0)?;
+        let txid = tx.compute_txid().to_string();
 
-            if let Some(vout) = self.first_non_op_return_index(tx) {
+        if let Some(vout) = self.first_non_op_return_index(tx) {
+            // asset
+            // move unallocated to first non op_return index (fallback)
+            let asset_list = self.unallocated_inputs.asset_list.list.clone();
+            for asset in asset_list.iter() {
+                let block_tx = BlockTx::from_str(asset.0)?;
+
                 self.move_asset_allocation(vout, &block_tx.to_tuple(), *asset.1)
                     .await;
-            } else {
-                log::info!("No non op_return index found, unallocated asset is lost");
             }
-        }
 
-        let txid = tx.compute_txid().to_string();
-        for asset in self.allocated_outputs.iter() {
-            let outpoint = &Outpoint {
-                txid: txid.clone(),
-                vout: *asset.0,
+            // specs
+            let specs = &self.unallocated_inputs.spec_owned.specs.clone();
+            for spec_contract_id in specs.iter() {
+                self.allocate_new_spec(vout, spec_contract_id).await;
             };
 
-            self.set_asset_list(outpoint, &asset.1.asset_list).await;
+        } else {
+            log::info!("No non op_return index, unallocated outputs are lost");
+        }
+
+        for allocation in self.allocated_outputs.iter() {
+            let outpoint = &Outpoint {
+                txid: txid.clone(),
+                vout: *allocation.0,
+            };
+
+            self.set_asset_list(outpoint, &allocation.1.asset_list)
+                .await;
+            self.set_spec_contract_owned(outpoint, &allocation.1.spec_owned)
+                .await;
         }
 
         // reset asset list

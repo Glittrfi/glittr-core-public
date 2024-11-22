@@ -27,7 +27,7 @@ impl Updater {
 
     pub async fn allocate_new_spec(&mut self, vout: u32, spec_contract_id: &BlockTxTuple) {
         let allocation = self.allocated_outputs.entry(vout).or_default();
-        allocation.specs.push(*spec_contract_id)
+        allocation.spec_owned.specs.push(*spec_contract_id)
     }
 
     pub async fn set_spec_contract_owned(
@@ -44,7 +44,16 @@ impl Updater {
         }
     }
 
-    pub async fn get_spec_contract_owner(
+    pub async fn delete_spec_contract_owned(&self, outpoint: &Outpoint) {
+        if !self.is_read_only {
+            self.database
+                .lock()
+                .await
+                .delete(SPEC_CONTRACT_OWNED_PREFIX, &outpoint.to_string());
+        }
+    }
+
+    pub async fn get_spec_contract_owned(
         &self,
         outpoint: &Outpoint,
     ) -> Result<SpecContractOwned, Flaw> {
