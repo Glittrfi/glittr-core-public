@@ -140,6 +140,12 @@ impl Updater {
         contract_id: &BlockTxTuple,
         spec_contract: &SpecContract,
     ) -> Option<Flaw> {
+        let spec_owned = &self.unallocated_inputs.spec_owned;
+        if !spec_owned.specs.contains(contract_id) {
+            return Some(Flaw::SpecUpdateNotAllowed);
+            // TODO: move the spec owner to the next input by the pointer value
+        }
+
         let mut prev_spec_contract = match self.get_spec(contract_id).await {
             Ok(spec) => spec,
             Err(err) => return Some(err),

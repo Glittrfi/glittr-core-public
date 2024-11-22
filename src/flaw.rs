@@ -50,6 +50,7 @@ pub enum Flaw {
     SpecNotFound,
     SpecCriteriaInvalid,
     SpecOwnerNotFound, // should be never happened
+    SpecUpdateNotAllowed,
 
     NotImplemented,
     NonGlittrMessage,
