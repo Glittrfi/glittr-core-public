@@ -79,6 +79,9 @@ pub enum SpecContractType {
 #[serde(rename_all = "snake_case")]
 pub struct SpecContract {
     pub spec: SpecContractType,
+    // the target output index that holds the spec
+    // if the pointer is None, it will point to the first non-op_return output
+    pub pointer: Option<u32>,
     // if the block_tx is provided,
     // the spec would be updated based on valid field
     pub block_tx: Option<BlockTxTuple>,

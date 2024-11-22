@@ -49,6 +49,7 @@ pub enum Flaw {
     SpecFieldRequired(String),
     SpecNotFound,
     SpecCriteriaInvalid,
+    SpecOwnerNotFound, // should be never happened
 
     NotImplemented,
     NonGlittrMessage,

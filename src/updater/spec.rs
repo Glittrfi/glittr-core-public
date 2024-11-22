@@ -1,3 +1,4 @@
+use database::SPEC_CONTRACT_OWNER_PREFIX;
 use message::ContractCreation;
 
 use crate::spec::{MintOnlyAssetSpecPegInType, SpecContract, SpecContractType};
@@ -5,6 +6,43 @@ use crate::spec::{MintOnlyAssetSpecPegInType, SpecContract, SpecContractType};
 use super::*;
 
 impl Updater {
+    pub async fn create_spec(&self, tx: &Transaction, spec_contract: &SpecContract) -> Option<Flaw> {
+        None
+    }
+
+    pub async fn set_spec_contract_owner(
+        &self,
+        spec_contract_id: &BlockTxTuple,
+        outpoint: OutPoint,
+    ) {
+        if !self.is_read_only {
+            let contract_key = BlockTx::from_tuple(*spec_contract_id).to_string();
+            self.database.lock().await.put(
+                SPEC_CONTRACT_OWNER_PREFIX,
+                &contract_key,
+                SpecContractOwner { owner: outpoint },
+            );
+        }
+    }
+
+    pub async fn get_spec_contract_owner(
+        &self,
+        spec_contract_id: &BlockTxTuple,
+    ) -> Result<SpecContractOwner, Flaw> {
+        let contract_key = BlockTx::from_tuple(*spec_contract_id).to_string();
+        let data: Result<SpecContractOwner, DatabaseError> = self
+            .database
+            .lock()
+            .await
+            .get(SPEC_CONTRACT_OWNER_PREFIX, &contract_key);
+
+        match data {
+            Ok(data) => Ok(data),
+            Err(DatabaseError::NotFound) => Err(Flaw::SpecOwnerNotFound),
+            Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
+        }
+    }
+
     pub async fn validate_contract_by_spec(
         &self,
         spec_contract_id: &BlockTxTuple,

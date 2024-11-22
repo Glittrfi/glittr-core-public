@@ -9,7 +9,7 @@ use bitcoin::{
     opcodes,
     script::Instruction,
     secp256k1::{schnorr::Signature, Message},
-    Address, Transaction, TxOut, XOnlyPublicKey,
+    Address, OutPoint, Transaction, TxOut, XOnlyPublicKey,
 };
 use database::{
     DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, MESSAGE_PREFIX,
@@ -51,12 +51,24 @@ pub struct VestingContractData {
     pub claimed_allocations: HashMap<String, u128>,
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SpecContractOwner {
+    pub owner: OutPoint,
+}
+
+#[derive(Default)]
+pub struct Allocation {
+    asset_list: AssetList,
+    spec: BlockTxTuple,
+}
+
 pub struct Updater {
     pub database: Arc<Mutex<Database>>,
     is_read_only: bool,
 
-    unallocated_asset_list: AssetList,
-    allocated_asset_list: HashMap<u32, AssetList>,
+    unallocated_inputs: Allocation,
+    allocated_outputs: HashMap<u32, Allocation>,
 }
 
 impl Updater {
@@ -65,31 +77,36 @@ impl Updater {
             database,
             is_read_only,
 
-            unallocated_asset_list: AssetList::default(),
-            allocated_asset_list: HashMap::new(),
+            unallocated_inputs: Allocation::default(),
+            allocated_outputs: HashMap::new(),
         }
     }
 
-    pub async fn unallocate_asset(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
+    pub async fn unallocate_inputs(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
         for tx_input in tx.input.iter() {
             let outpoint = &Outpoint {
                 txid: tx_input.previous_output.txid.to_string(),
                 vout: tx_input.previous_output.vout,
             };
 
+            // set asset_list
             if let Ok(asset_list) = self.get_asset_list(outpoint).await {
                 for asset in asset_list.list.iter() {
-                    let previous_amount =
-                        self.unallocated_asset_list.list.get(asset.0).unwrap_or(&0);
-                    self.unallocated_asset_list.list.insert(
+                    let previous_amount = self
+                        .unallocated_inputs
+                        .asset_list
+                        .list
+                        .get(asset.0)
+                        .unwrap_or(&0);
+                    self.unallocated_inputs.asset_list.list.insert(
                         asset.0.to_string(),
                         previous_amount.saturating_add(*asset.1),
                     );
                 }
-            }
 
-            // TODO: Implement a backup mechanism to recover when downtime occurs
-            self.delete_asset(outpoint).await;
+                // TODO: Implement a backup mechanism to recover when downtime occurs
+                self.delete_asset(outpoint).await;
+            }
         }
 
         Ok(())
@@ -103,50 +120,49 @@ impl Updater {
     ) {
         let block_tx = BlockTx::from_tuple(*contract_id);
 
-        let asset = self.allocated_asset_list.entry(vout).or_default();
+        let allocation = self.allocated_outputs.entry(vout).or_default();
 
-        let previous_amount = asset.list.entry(block_tx.to_str()).or_insert(0);
+        let previous_amount = allocation.asset_list.list.entry(block_tx.to_str()).or_insert(0);
         *previous_amount = previous_amount.saturating_add(amount);
     }
 
-    pub async fn move_allocation(
+    pub async fn move_asset_allocation(
         &mut self,
         vout: u32,
         contract_id: &BlockTxTuple,
         max_amount: u128,
     ) {
         let block_tx = BlockTx::from_tuple(*contract_id);
-        let Some(asset) = self
-            .unallocated_asset_list
+        let Some(allocation) = self
+            .unallocated_inputs
+            .asset_list
             .list
             .get_mut(&block_tx.to_string())
         else {
             return;
         };
 
-        let amount = max_amount.min(*asset);
+        let amount = max_amount.min(*allocation);
         if amount == 0 {
             return;
         }
 
-        *asset = asset.saturating_sub(amount);
-        if *asset == 0 {
-            self.unallocated_asset_list
-                .list
-                .remove(&block_tx.to_string());
+        *allocation = allocation.saturating_sub(amount);
+        if *allocation == 0 {
+            self.unallocated_inputs.asset_list.list.remove(&block_tx.to_string());
         }
 
         self.allocate_new_asset(vout, contract_id, amount).await;
     }
 
-    pub async fn commit_asset(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
+    pub async fn commit_outputs(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
         // move unallocated to first non op_return index (fallback)
-        let list = self.unallocated_asset_list.list.clone();
+        let list = self.unallocated_inputs.asset_list.list.clone();
         for asset in list.iter() {
             let block_tx = BlockTx::from_str(asset.0)?;
 
             if let Some(vout) = self.first_non_op_return_index(tx) {
-                self.move_allocation(vout, &block_tx.to_tuple(), *asset.1)
+                self.move_asset_allocation(vout, &block_tx.to_tuple(), *asset.1)
                     .await;
             } else {
                 log::info!("No non op_return index found, unallocated asset is lost");
@@ -154,18 +170,18 @@ impl Updater {
         }
 
         let txid = tx.compute_txid().to_string();
-        for asset in self.allocated_asset_list.iter() {
+        for asset in self.allocated_outputs.iter() {
             let outpoint = &Outpoint {
                 txid: txid.clone(),
                 vout: *asset.0,
             };
 
-            self.set_asset_list(outpoint, asset.1).await;
+            self.set_asset_list(outpoint, &asset.1.asset_list).await;
         }
 
         // reset asset list
-        self.unallocated_asset_list = AssetList::default();
-        self.allocated_asset_list = HashMap::new();
+        self.unallocated_inputs = Allocation::default();
+        self.allocated_outputs = HashMap::new();
 
         Ok(())
     }
@@ -222,7 +238,6 @@ impl Updater {
 
             // NOTe: dynamic validation
             if let Some(contract_creation) = message.contract_creation {
-
                 // validate contract creation by spec
                 if let Some(spec_contract_id) = contract_creation.spec {
                     if outcome.flaw.is_none() {
@@ -255,8 +270,14 @@ impl Updater {
 
                     ContractType::Spec(spec_contract) => {
                         if let Some(contract_id) = spec_contract.block_tx {
+                            // update the spec
                             if outcome.flaw.is_none() {
                                 outcome.flaw = self.update_spec(&contract_id, &spec_contract).await;
+                            }
+                        } else {
+                            // create the spec
+                            if outcome.flaw.is_none() {
+                                outcome.flaw = self.create_spec(tx, &spec_contract).await;
                             }
                         }
                     }
@@ -319,7 +340,7 @@ impl Updater {
                 overflow_i.push(i as u32);
                 continue;
             }
-            self.move_allocation(transfer.output, &transfer.asset, transfer.amount.0)
+            self.move_asset_allocation(transfer.output, &transfer.asset, transfer.amount.0)
                 .await;
         }
 

@@ -79,7 +79,8 @@ impl Updater {
         match purchase.input_asset {
             InputAsset::GlittrAsset(asset_contract_id) => {
                 if let Some(amount) = self
-                    .unallocated_asset_list
+                    .unallocated_inputs
+                    .asset_list
                     .list
                     .get(&BlockTx::from_tuple(asset_contract_id).to_str())
                 {
@@ -141,10 +142,11 @@ impl Updater {
                                 total_received_value = output.value.to_sat() as u128;
                             }
                             InputAsset::GlittrAsset(asset_contract_id) => {
-                                if let Some(asset_list) =
-                                    self.allocated_asset_list.get(&(pos as u32))
+                                if let Some(allocation) =
+                                    self.allocated_outputs.get(&(pos as u32))
                                 {
-                                    if let Some(amount) = asset_list
+                                    if let Some(amount) = allocation
+                                        .asset_list
                                         .list
                                         .get(&BlockTx::from_tuple(asset_contract_id).to_str())
                                     {
@@ -267,7 +269,8 @@ impl Updater {
         if purchase.pay_to_key.is_none() {
             if let InputAsset::GlittrAsset(asset_contract_id) = purchase.input_asset {
                 let burned_amount = self
-                    .unallocated_asset_list
+                    .unallocated_inputs
+                    .asset_list
                     .list
                     .remove(&BlockTx::from_tuple(asset_contract_id).to_str())
                     .unwrap_or(0);
