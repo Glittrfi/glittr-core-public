@@ -1887,7 +1887,7 @@ async fn test_integration_spec() {
                     peg_in_type: Some(MintOnlyAssetSpecPegInType::Burn),
                 }),
                 block_tx: None,
-                pointer: 1
+                pointer: 1,
             }),
             spec: None,
         }),
@@ -1900,7 +1900,8 @@ async fn test_integration_spec() {
     start_indexer(Arc::clone(&ctx.indexer)).await;
 
     ctx.verify_last_block(block_tx_contract.block).await;
-    ctx.get_and_verify_message_outcome(block_tx_contract).await;
+    let message = ctx.get_and_verify_message_outcome(block_tx_contract).await;
+    assert_eq!(message.flaw, None);
 
     ctx.drop().await;
 }
@@ -1917,7 +1918,7 @@ async fn test_integration_spec_update() {
                     mint: Some(MintBurnAssetSpecMint::Proportional),
                 }),
                 block_tx: None,
-                pointer: 1
+                pointer: 1,
             }),
             spec: None,
         }),
@@ -1937,7 +1938,7 @@ async fn test_integration_spec_update() {
                     mint: None,
                 }),
                 block_tx: Some(block_tx_contract.to_tuple()),
-                pointer: 1
+                pointer: 1,
             }),
             spec: None,
         }),
@@ -1945,11 +1946,31 @@ async fn test_integration_spec_update() {
         contract_call: None,
     };
 
-    ctx.build_and_mine_message(&message).await;
+    ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[
+            (block_tx_contract.block as usize, 1, 1, Witness::new()), // spec owner 
+            (block_tx_contract.block as usize, 0, 0, Witness::new()),
+        ],
+        op_return: Some(message.into_script()),
+        op_return_index: Some(0),
+        op_return_value: Some(0),
+        output_values: &[1000, 1000, 1000],
+        outputs: 3,
+        p2tr: false,
+        recipient: None,
+    });
+    ctx.core.mine_blocks(1);
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
+    let message = ctx.get_and_verify_message_outcome(BlockTx {
+        block: ctx.core.height(),
+        tx: 1
+    }).await;
+    assert_eq!(message.flaw, None);
 
     let message = ctx.get_and_verify_message_outcome(block_tx_contract).await;
+    assert_eq!(message.flaw, None);
 
     if let ContractType::Spec(spec_contract) = message
         .message
@@ -1976,6 +1997,57 @@ async fn test_integration_spec_update() {
 }
 
 #[tokio::test]
+async fn test_integration_spec_update_not_allowed() {
+    let mut ctx = TestContext::new().await;
+    let message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            contract_type: ContractType::Spec(SpecContract {
+                spec: SpecContractType::MintBurnAsset(MintBurnAssetSpec {
+                    _mutable_assets: true,
+                    input_assets: vec![InputAsset::Rune].into(),
+                    mint: Some(MintBurnAssetSpecMint::Proportional),
+                }),
+                block_tx: None,
+                pointer: 1,
+            }),
+            spec: None,
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let block_tx_contract = ctx.build_and_mine_message(&message).await;
+
+    let message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            contract_type: ContractType::Spec(SpecContract {
+                spec: SpecContractType::MintBurnAsset(MintBurnAssetSpec {
+                    _mutable_assets: true,
+                    input_assets: vec![InputAsset::Rune, InputAsset::RawBtc, InputAsset::Ordinal]
+                        .into(),
+                    mint: None,
+                }),
+                block_tx: Some(block_tx_contract.to_tuple()),
+                pointer: 1,
+            }),
+            spec: None,
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    // the tx would be fail and has a flaw because the UTXO isn't the owner of the spec.
+    let block_tx_update = ctx.build_and_mine_message(&message).await;
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    let message = ctx.get_and_verify_message_outcome(block_tx_update).await;
+    assert_eq!(message.flaw, Some(Flaw::SpecUpdateNotAllowed));
+
+    ctx.drop().await;
+}
+
+#[tokio::test]
 async fn test_integration_spec_moa_valid_contract_creation() {
     let (_, address_pubkey) = get_bitcoin_address();
     let mut ctx = TestContext::new().await;
@@ -1984,10 +2056,12 @@ async fn test_integration_spec_moa_valid_contract_creation() {
             contract_type: ContractType::Spec(SpecContract {
                 spec: SpecContractType::MintOnlyAsset(MintOnlyAssetSpec {
                     input_asset: Some(InputAsset::Rune),
-                    peg_in_type: Some(MintOnlyAssetSpecPegInType::Pubkey(address_pubkey.to_bytes())),
+                    peg_in_type: Some(MintOnlyAssetSpecPegInType::Pubkey(
+                        address_pubkey.to_bytes(),
+                    )),
                 }),
                 block_tx: None,
-                pointer: 1
+                pointer: 1,
             }),
             spec: None,
         }),
@@ -2042,7 +2116,7 @@ async fn test_integration_spec_moa_input_asset_invalid() {
                     peg_in_type: Some(MintOnlyAssetSpecPegInType::Burn),
                 }),
                 block_tx: None,
-                pointer: 1
+                pointer: 1,
             }),
             spec: None,
         }),
@@ -2096,10 +2170,12 @@ async fn test_integration_spec_moa_peg_in_type_invalid() {
             contract_type: ContractType::Spec(SpecContract {
                 spec: SpecContractType::MintOnlyAsset(MintOnlyAssetSpec {
                     input_asset: Some(InputAsset::Rune),
-                    peg_in_type: Some(MintOnlyAssetSpecPegInType::Pubkey(address_pubkey.to_bytes())),
+                    peg_in_type: Some(MintOnlyAssetSpecPegInType::Pubkey(
+                        address_pubkey.to_bytes(),
+                    )),
                 }),
                 block_tx: None,
-                pointer: 1
+                pointer: 1,
             }),
             spec: None,
         }),

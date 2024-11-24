@@ -1,7 +1,10 @@
 mod mint;
 mod spec;
 
-use std::{collections::HashMap, str::FromStr};
+use std::{
+    collections::{HashMap, HashSet},
+    str::FromStr,
+};
 
 use bitcoin::{
     hashes::{sha256, Hash},
@@ -54,7 +57,7 @@ pub struct VestingContractData {
 #[derive(Deserialize, Serialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct SpecContractOwned {
-    pub specs: Vec<BlockTxTuple>,
+    pub specs: HashSet<BlockTxTuple>,
 }
 
 #[derive(Default)]
@@ -111,7 +114,7 @@ impl Updater {
             // set specs
             if let Ok(spec_contract_owned) = self.get_spec_contract_owned(outpoint).await {
                 for contract in spec_contract_owned.specs.iter() {
-                    self.unallocated_inputs.spec_owned.specs.push(*contract)
+                    self.unallocated_inputs.spec_owned.specs.insert(*contract);
                 }
 
                 self.delete_spec_contract_owned(outpoint).await
@@ -188,11 +191,10 @@ impl Updater {
             // specs
             let specs = &self.unallocated_inputs.spec_owned.specs.clone();
             for spec_contract_id in specs.iter() {
-                self.allocate_new_spec(vout, spec_contract_id).await;
-            };
-
+                self.move_spec_allocation(vout, spec_contract_id).await;
+            }
         } else {
-            log::info!("No non op_return index, unallocated outputs are lost");
+            log::info!("No non op_return index, unallocated inputs are lost");
         }
 
         for allocation in self.allocated_outputs.iter() {
@@ -300,7 +302,7 @@ impl Updater {
                         if let Some(contract_id) = spec_contract.block_tx {
                             // update the spec
                             if outcome.flaw.is_none() {
-                                outcome.flaw = self.update_spec(&contract_id, &spec_contract).await;
+                                outcome.flaw = self.update_spec(tx, &contract_id, &spec_contract).await;
                             }
                         } else {
                             // create the spec

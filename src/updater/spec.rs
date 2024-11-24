@@ -13,7 +13,6 @@ impl Updater {
         tx: &Transaction,
         spec_contract: &SpecContract,
     ) -> Option<Flaw> {
-        // validate pointer
         if let Some(flaw) = self.validate_pointer(spec_contract.pointer, tx) {
             return Some(flaw);
         }
@@ -27,7 +26,18 @@ impl Updater {
 
     pub async fn allocate_new_spec(&mut self, vout: u32, spec_contract_id: &BlockTxTuple) {
         let allocation = self.allocated_outputs.entry(vout).or_default();
-        allocation.spec_owned.specs.push(*spec_contract_id)
+        allocation.spec_owned.specs.insert(*spec_contract_id);
+    }
+
+    pub async fn move_spec_allocation(&mut self, vout: u32, spec_contract_id: &BlockTxTuple) {
+        if self
+            .unallocated_inputs
+            .spec_owned
+            .specs
+            .remove(spec_contract_id)
+        {
+            self.allocate_new_spec(vout, spec_contract_id).await;
+        };
     }
 
     pub async fn set_spec_contract_owned(
@@ -137,16 +147,16 @@ impl Updater {
     // TODO: handle spec only can be updated by the creator
     pub async fn update_spec(
         &mut self,
-        contract_id: &BlockTxTuple,
+        tx: &Transaction,
+        spec_contract_id: &BlockTxTuple,
         spec_contract: &SpecContract,
     ) -> Option<Flaw> {
         let spec_owned = &self.unallocated_inputs.spec_owned;
-        if !spec_owned.specs.contains(contract_id) {
+        if !spec_owned.specs.contains(spec_contract_id) {
             return Some(Flaw::SpecUpdateNotAllowed);
-            // TODO: move the spec owner to the next input by the pointer value
         }
 
-        let mut prev_spec_contract = match self.get_spec(contract_id).await {
+        let mut prev_spec_contract = match self.get_spec(spec_contract_id).await {
             Ok(spec) => spec,
             Err(err) => return Some(err),
         };
@@ -182,7 +192,11 @@ impl Updater {
             transfer: None,
         };
 
-        self.set_message(&contract_id, &message).await;
+        self.set_message(&spec_contract_id, &message).await;
+        if let Some(flaw) = self.validate_pointer(spec_contract.pointer, tx) {
+            return Some(flaw);
+        }
+        self.move_spec_allocation(spec_contract.pointer, spec_contract_id).await;
 
         None
     }
