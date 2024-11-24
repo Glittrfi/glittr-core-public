@@ -1949,7 +1949,7 @@ async fn test_integration_spec_update() {
     ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
         inputs: &[
-            (block_tx_contract.block as usize, 1, 1, Witness::new()), // spec owner 
+            (block_tx_contract.block as usize, 1, 1, Witness::new()), // spec owner
             (block_tx_contract.block as usize, 0, 0, Witness::new()),
         ],
         op_return: Some(message.into_script()),
@@ -1961,12 +1961,58 @@ async fn test_integration_spec_update() {
         recipient: None,
     });
     ctx.core.mine_blocks(1);
+    let block_tx_first_update = BlockTx {
+        block: ctx.core.height(),
+        tx: 1,
+    };
+
+    let message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            contract_type: ContractType::Spec(SpecContract {
+                spec: SpecContractType::MintBurnAsset(MintBurnAssetSpec {
+                    _mutable_assets: true,
+                    input_assets: vec![InputAsset::Rune, InputAsset::RawBtc]
+                        .into(),
+                    mint: None,
+                }),
+                block_tx: Some(block_tx_contract.to_tuple()),
+                pointer: 1,
+            }),
+            spec: None,
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[
+            (block_tx_first_update.block as usize, 1, 1, Witness::new()), // spec owner
+            (block_tx_first_update.block as usize, 0, 0, Witness::new()),
+        ],
+        op_return: Some(message.into_script()),
+        op_return_index: Some(0),
+        op_return_value: Some(0),
+        output_values: &[1000, 1000, 1000],
+        outputs: 3,
+        p2tr: false,
+        recipient: None,
+    });
+    ctx.core.mine_blocks(1);
+    let block_tx_second_update = BlockTx {
+        block: ctx.core.height(),
+        tx: 1,
+    };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
-    let message = ctx.get_and_verify_message_outcome(BlockTx {
-        block: ctx.core.height(),
-        tx: 1
-    }).await;
+    let message = ctx
+        .get_and_verify_message_outcome(block_tx_first_update)
+        .await;
+    assert_eq!(message.flaw, None);
+
+    let message = ctx
+        .get_and_verify_message_outcome(block_tx_second_update)
+        .await;
     assert_eq!(message.flaw, None);
 
     let message = ctx.get_and_verify_message_outcome(block_tx_contract).await;
@@ -1981,10 +2027,10 @@ async fn test_integration_spec_update() {
     {
         if let SpecContractType::MintBurnAsset(mba_spec) = spec_contract.spec {
             let prev_input_assets = mba_spec.input_assets.unwrap();
-            assert_eq!(prev_input_assets.len(), 3);
+            assert_eq!(prev_input_assets.len(), 2);
             itertools::assert_equal(
                 prev_input_assets.iter(),
-                vec![InputAsset::Rune, InputAsset::RawBtc, InputAsset::Ordinal].iter(),
+                vec![InputAsset::Rune, InputAsset::RawBtc].iter(),
             );
         } else {
             panic!("Invalid spec contract type")
