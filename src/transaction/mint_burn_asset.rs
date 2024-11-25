@@ -95,10 +95,16 @@ impl Collateralized {
         }
 
         match &self.mint_structure {
-            MintStructure::Ratio(ratio_type) => return ratio_type.validate(),
+            MintStructure::Ratio(ratio_type) => {
+                if self.input_assets.len() != 1 {
+                    return Some(Flaw::InputAssetsOnlyOneForRatio)
+                }
+                return ratio_type.validate()
+            }
+                ,
             MintStructure::Proportional(_proportional_type) => {
                 if self.input_assets.len() != 2 {
-                    return Some(Flaw::InputAssetNotTwoForProportional)
+                    return Some(Flaw::InputAssetsOnlyTwoForProportional)
                 }
             },
             MintStructure::Account(account) => {

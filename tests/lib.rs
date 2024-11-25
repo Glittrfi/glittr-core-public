@@ -16,7 +16,7 @@ use glittr::{
         COLLATERAL_ACCOUNT_PREFIX, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX,
     },
     message::{
-        BurnOption, CallType, CloseAccountOption, ContractCall, ContractCreation, ContractType, MintOption, OpReturnMessage, OpenAccountOption, OracleMessage, OracleMessageSigned, SwapOption, Transfer, TxTypeTransfer
+        CallType, CloseAccountOption, ContractCall, ContractCreation, ContractType, MintBurnOption, OpReturnMessage, OpenAccountOption, OracleMessage, OracleMessageSigned, SwapOption, Transfer, TxTypeTransfer
     },
     mint_burn_asset::{
         AccountType, BurnMechanisms, Collateralized, MBAMintMechanisms, MintBurnAssetContract, MintStructure, ProportionalType, RatioModel, ReturnCollateral, SwapMechanisms
@@ -366,8 +366,8 @@ async fn test_raw_btc_to_glittr_asset_burn() {
     let mint_message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: contract_id.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 1,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
                 oracle_message: None,
                 pointer_to_key: None,
             }),
@@ -482,8 +482,8 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
     let mint_message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: contract_id.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 1,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
                 oracle_message: None,
                 pointer_to_key: None,
             }),
@@ -625,8 +625,8 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
     let mint_message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: contract_id.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 1,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
                 oracle_message: Some(OracleMessageSigned {
                     signature: signature.serialize().to_vec(),
                     message: oracle_message.clone(),
@@ -784,8 +784,8 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
     let mint_message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: contract_id.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 1,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
                 oracle_message: Some(OracleMessageSigned {
                     signature: signature.serialize().to_vec(),
                     message: oracle_message.clone(),
@@ -923,8 +923,8 @@ async fn test_metaprotocol_to_glittr_asset() {
     let mint_message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: contract_id.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 1,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
                 oracle_message: Some(OracleMessageSigned {
                     signature: signature.serialize().to_vec(),
                     message: oracle_message.clone(),
@@ -1051,8 +1051,8 @@ async fn test_integration_mint_freemint() {
         let message = OpReturnMessage {
             contract_call: Some(ContractCall {
                 contract: block_tx_contract.to_tuple(),
-                call_type: CallType::Mint(MintOption {
-                    pointer: 1,
+                call_type: CallType::Mint(MintBurnOption {
+                    pointer: Some(1),
                     oracle_message: None,
                     pointer_to_key: None,
                 }),
@@ -1115,8 +1115,8 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
     let message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: block_tx_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 1,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
                 oracle_message: None,
                 pointer_to_key: None,
             }),
@@ -1131,8 +1131,8 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
     let message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: block_tx_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 0,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(0),
                 oracle_message: None,
                 pointer_to_key: None,
             }),
@@ -1190,8 +1190,8 @@ async fn test_integration_mint_freemint_livetime_notreached() {
     let message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: block_tx_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 1,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
                 oracle_message: None,
                 pointer_to_key: None,
             }),
@@ -1205,8 +1205,8 @@ async fn test_integration_mint_freemint_livetime_notreached() {
     let message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: block_tx_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 1,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
                 oracle_message: None,
                 pointer_to_key: None,
             }),
@@ -1314,8 +1314,8 @@ async fn test_integration_mint_preallocated_freemint() {
     let mint_message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: block_tx_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 1,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
                 oracle_message: None,
                 pointer_to_key: None,
             }),
@@ -1413,8 +1413,8 @@ async fn test_integration_mint_freemint_invalidpointer() {
     let message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: block_tx_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 0,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(0),
                 oracle_message: None,
                 pointer_to_key: None,
             }),
@@ -1463,8 +1463,8 @@ async fn test_integration_transfer_normal() {
     let message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: block_tx_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 1,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
                 oracle_message: None,
                 pointer_to_key: None,
             }),
@@ -1598,8 +1598,8 @@ async fn test_integration_transfer_overflow_output() {
     let message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: block_tx_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 1,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
                 oracle_message: None,
                 pointer_to_key: None,
             }),
@@ -1714,8 +1714,8 @@ async fn test_integration_transfer_utxo() {
     let message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: block_tx_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 1,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
                 oracle_message: None,
                 pointer_to_key: None,
             }),
@@ -1801,8 +1801,8 @@ async fn test_integration_glittr_asset_mint_purchase() {
     let mint_message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: first_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 1,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
                 oracle_message: None,
                 pointer_to_key: None,
             }),
@@ -1843,8 +1843,8 @@ async fn test_integration_glittr_asset_mint_purchase() {
     let second_mint_message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: second_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 1,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
                 oracle_message: None,
                 pointer_to_key: None,
             }),
@@ -1937,8 +1937,8 @@ async fn test_integration_collateralized_mba() {
     let mint_collateral_message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: collateral_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 1,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
                 oracle_message: None,
                 pointer_to_key: None,
             }),
@@ -2058,8 +2058,8 @@ async fn test_integration_collateralized_mba() {
     let mint_message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: mba_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 2,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(2),
                 oracle_message: Some(OracleMessageSigned {
                     signature: signature.serialize().to_vec(),
                     message: oracle_message.clone(),
@@ -2166,12 +2166,13 @@ async fn test_integration_collateralized_mba() {
     let burn_message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: mba_contract.to_tuple(),
-            call_type: CallType::Burn(BurnOption {
+            call_type: CallType::Burn(MintBurnOption {
                 oracle_message: Some(OracleMessageSigned {
                     signature: burn_signature.serialize().to_vec(),
                     message: burn_oracle_message.clone(),
                 }),
                 pointer_to_key: Some(1),
+                pointer: None
             }),
         }),
         transfer: None,
@@ -2262,12 +2263,13 @@ async fn test_integration_collateralized_mba() {
     let final_burn_message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: mba_contract.to_tuple(),
-            call_type: CallType::Burn(BurnOption {
+            call_type: CallType::Burn(MintBurnOption {
                 oracle_message: Some(OracleMessageSigned {
                     signature: final_burn_signature.serialize().to_vec(),
                     message: final_burn_oracle_message.clone(),
                 }),
                 pointer_to_key: Some(1),
+                pointer: None,
             }),
         }),
         transfer: None,
@@ -2430,8 +2432,8 @@ async fn test_integration_proportional_mba_lp() {
     let mint_token1_message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: token1_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 1,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
                 oracle_message: None,
                 pointer_to_key: None,
             }),
@@ -2443,8 +2445,8 @@ async fn test_integration_proportional_mba_lp() {
     let mint_token2_message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: token2_contract.to_tuple(),
-            call_type: CallType::Mint(MintOption {
-                pointer: 1,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
                 oracle_message: None,
                 pointer_to_key: None,
             }),

@@ -1,6 +1,6 @@
 use bitcoin::OutPoint;
 use database::{COLLATERAL_ACCOUNT_PREFIX, POOL_DATA_PREFIX};
-use message::BurnOption;
+use message::MintBurnOption;
 use mint_burn_asset::{MintBurnAssetContract, ReturnCollateral};
 
 use super::*;
@@ -13,8 +13,10 @@ impl Updater {
         tx: &Transaction,
         block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
-        burn_option: &BurnOption,
+        burn_option: &MintBurnOption,
     ) -> Option<Flaw> {
+        let mut burned_amount: u128 = 0;
+        let mut out_values: Vec<u128> = vec![];
         if mba.live_time > block_tx.block {
             return Some(Flaw::LiveTimeNotReached);
         }
@@ -23,219 +25,187 @@ impl Updater {
             return Some(Flaw::PointerKeyNotFound);
         }
 
-        let mut collateral_account: Option<CollateralAccount> = None;
-        let mut collateral_account_outpoint: Option<OutPoint> = None;
-        for input in &tx.input {
-            let result_collateral_account: Result<CollateralAccount, DatabaseError> =
-                self.database.lock().await.get(
-                    COLLATERAL_ACCOUNT_PREFIX,
-                    input.previous_output.to_string().as_str(),
-                );
+        let mut asset_contract_data = match self.get_asset_contract_data(contract_id).await {
+            Ok(data) => data,
+            Err(flaw) => return Some(flaw),
+        };
 
-            if let Some(_collateral_account) = result_collateral_account.ok() {
-                collateral_account = Some(_collateral_account);
-                collateral_account_outpoint = Some(input.previous_output);
-                break;
-            }
-        }
-
-        if collateral_account.is_none() {
-            return Some(Flaw::StateKeyNotFound);
-        }
-
-        let mut collateral_account = collateral_account.unwrap();
-        let burned_amount = self
+        burned_amount = self
             .unallocated_asset_list
             .list
-            .get(&BlockTx::from_tuple(*contract_id).to_str())
-            .unwrap_or(&0);
+            .remove(&BlockTx::from_tuple(*contract_id).to_str())
+            .unwrap_or(0);
 
-        if let Some(oracle_message_signed) = &burn_option.oracle_message {
-            if let Some(expected_input_outpoint) = oracle_message_signed.message.input_outpoint {
-                if expected_input_outpoint != collateral_account_outpoint.unwrap() {
-                    return Some(Flaw::OracleMintFailed);
-                }
-
-                if block_tx.block - oracle_message_signed.message.block_height
-                    > return_collateral.oracle_setting.block_height_slippage as u64
-                {
-                    return Some(Flaw::OracleMintBlockSlippageExceeded);
-                }
-
-                let pubkey: XOnlyPublicKey =
-                    XOnlyPublicKey::from_slice(&return_collateral.oracle_setting.pubkey.as_slice())
-                        .unwrap();
-
-                if let Ok(signature) = Signature::from_slice(&oracle_message_signed.signature) {
-                    let secp = Secp256k1::new();
-
-                    let msg = Message::from_digest_slice(
-                        sha256::Hash::hash(
-                            serde_json::to_string(&oracle_message_signed.message)
-                                .unwrap()
-                                .as_bytes(),
-                        )
-                        .as_byte_array(),
-                    )
-                    .unwrap();
-
-                    if pubkey.verify(&secp, &msg, &signature).is_err() {
-                        return Some(Flaw::OracleMintSignatureFailed);
-                    }
-                }
-
-                // LTV and outstanding always updated by the oracle
-                // LTV is based on off-chain currency (e.g. collateralized * USD)
-                // Outstanding could also include interest
-                if let Some(ltv) = oracle_message_signed.message.ltv {
-                    collateral_account.ltv = ltv;
-                } else {
-                    return Some(Flaw::LtvMustBeUpdated);
-                }
-
-                if let Some(outstanding) = &oracle_message_signed.message.outstanding {
-                    collateral_account.amount_outstanding = outstanding.0;
-                } else {
-                    return Some(Flaw::OutstandingMustBeUpdated);
-                }
-
-                // verify burned asset
-                if let Some(out_value) = &oracle_message_signed.message.out_value {
-                    if burned_amount < &out_value.0 {
-                        return Some(Flaw::BurnValueIncorrect);
-                    }
-
-                    let burned_amount = burned_amount - out_value.0;
-
-                    if burned_amount == 0 {
-                        self.unallocated_asset_list
-                            .list
-                            .remove(&BlockTx::from_tuple(*contract_id).to_str());
-                    } else {
-                        self.unallocated_asset_list
-                            .list
-                            .insert(BlockTx::from_tuple(*contract_id).to_str(), burned_amount);
-                    }
-                } else {
-                    return Some(Flaw::OutValueNotFound);
-                }
-            }
-        } else {
-            if let Some(collateralized) = &mba.mint_mechanism.collateralized {
-                match &collateralized.mint_structure {
-                    mint_burn_asset::MintStructure::Ratio(ratio_type) => {
-                        match ratio_type {
-                            shared::RatioType::Fixed { ratio: _ } => {
-                                collateral_account.amount_outstanding -= burned_amount;
-                                // TODO: partial
-                                if collateral_account.amount_outstanding == 0 {
-                                    collateral_account.ltv = (0, 100);
-                                }
-                            }
-                            shared::RatioType::Oracle { setting: _ } => {
-                                // TODO: Oracle Type
-                            }
-                        }
-                    }
-                    mint_burn_asset::MintStructure::Proportional(_proportional_type) => {
-                        // get pool data
-                        let mut first_asset: BlockTxTuple = (0, 0);
-                        let mut second_asset: BlockTxTuple = (0, 0);
-                        if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[0] {
-                            first_asset = asset_id
-                        }
-
-                        if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[1] {
-                            second_asset = asset_id
-                        }
-
-                        let pool_key = format!(
-                            "{}:{}",
-                            BlockTx::from_tuple(first_asset).to_str(),
-                            BlockTx::from_tuple(second_asset).to_str()
+        if let Some(collateralized) = &mba.mint_mechanism.collateralized {
+            match &collateralized.mint_structure {
+                mint_burn_asset::MintStructure::Ratio(ratio_type) => match ratio_type {
+                    shared::RatioType::Fixed { ratio } => {
+                        let process_ratio_result = self.process_ratio_type(
+                            &ratio_type,
+                            &burned_amount,
+                            burn_option,
+                            &tx,
+                            &block_tx,
                         );
 
-                        let mut pool_data: PoolData = self
-                            .database
-                            .lock()
-                            .await
-                            .get(POOL_DATA_PREFIX, &pool_key)
+                        if let Ok(_out_value) = process_ratio_result {
+                            out_values.push(_out_value);
+                        } else {
+                            return process_ratio_result.err();
+                        }
+                    }
+                    shared::RatioType::Oracle { setting } => todo!(),
+                },
+                mint_burn_asset::MintStructure::Proportional(proportional_type) => todo!(),
+                mint_burn_asset::MintStructure::Account(_account_type) => {
+                    let mut collateral_account: Option<CollateralAccount> = None;
+                    let mut collateral_account_outpoint: Option<OutPoint> = None;
+                    for input in &tx.input {
+                        let result_collateral_account: Result<CollateralAccount, DatabaseError> =
+                            self.database.lock().await.get(
+                                COLLATERAL_ACCOUNT_PREFIX,
+                                input.previous_output.to_string().as_str(),
+                            );
+
+                        if let Some(_collateral_account) = result_collateral_account.ok() {
+                            collateral_account = Some(_collateral_account);
+                            collateral_account_outpoint = Some(input.previous_output);
+                            break;
+                        }
+                    }
+
+                    if collateral_account.is_none() {
+                        return Some(Flaw::StateKeyNotFound);
+                    }
+
+                    let mut collateral_account = collateral_account.unwrap();
+
+                    if let Some(oracle_message_signed) = &burn_option.oracle_message {
+                        if let Some(expected_input_outpoint) =
+                            oracle_message_signed.message.input_outpoint
+                        {
+                            if expected_input_outpoint != collateral_account_outpoint.unwrap() {
+                                return Some(Flaw::OracleMintFailed);
+                            }
+
+                            if block_tx.block - oracle_message_signed.message.block_height
+                                > return_collateral.oracle_setting.block_height_slippage as u64
+                            {
+                                return Some(Flaw::OracleMintBlockSlippageExceeded);
+                            }
+
+                            let pubkey: XOnlyPublicKey = XOnlyPublicKey::from_slice(
+                                &return_collateral.oracle_setting.pubkey.as_slice(),
+                            )
                             .unwrap();
 
-                        let share = burned_amount
-                            .saturating_mul(1_000_000) // Scale for precision
-                            .saturating_div(pool_data.total_supply);
+                            if let Ok(signature) =
+                                Signature::from_slice(&oracle_message_signed.signature)
+                            {
+                                let secp = Secp256k1::new();
 
-                        let return_amount0 = pool_data.amounts[0]
-                            .saturating_mul(share)
-                            .saturating_div(1_000_000);
-                        let return_amount1 = pool_data.amounts[1]
-                            .saturating_mul(share)
-                            .saturating_div(1_000_000);
+                                let msg = Message::from_digest_slice(
+                                    sha256::Hash::hash(
+                                        serde_json::to_string(&oracle_message_signed.message)
+                                            .unwrap()
+                                            .as_bytes(),
+                                    )
+                                    .as_byte_array(),
+                                )
+                                .unwrap();
 
-                        if return_amount0 == 0 || return_amount1 == 0 {
-                            return Some(Flaw::InsufficientOutputAmount);
-                        }
+                                if pubkey.verify(&secp, &msg, &signature).is_err() {
+                                    return Some(Flaw::OracleMintSignatureFailed);
+                                }
+                            }
 
-                        // Update pool state
-                        pool_data.amounts[0] = pool_data.amounts[0].saturating_sub(return_amount0);
-                        pool_data.amounts[1] = pool_data.amounts[1].saturating_sub(return_amount1);
-                        pool_data.total_supply =
-                            pool_data.total_supply.saturating_sub(*burned_amount);
+                            // LTV and outstanding always updated by the oracle
+                            // LTV is based on off-chain currency (e.g. collateralized * USD)
+                            // Outstanding could also include interest
+                            if let Some(ltv) = oracle_message_signed.message.ltv {
+                                collateral_account.ltv = ltv;
+                            } else {
+                                return Some(Flaw::LtvMustBeUpdated);
+                            }
 
-                        if !self.is_read_only {
-                            self.database
-                                .lock()
-                                .await
-                                .put(POOL_DATA_PREFIX, &pool_key, pool_data);
-                        }
+                            if let Some(outstanding) = &oracle_message_signed.message.outstanding {
+                                collateral_account.amount_outstanding = outstanding.0;
+                            } else {
+                                return Some(Flaw::OutstandingMustBeUpdated);
+                            }
 
-                        collateral_account.amount_outstanding -= burned_amount;
+                            // verify burned asset
+                            if let Some(out_value) = &oracle_message_signed.message.out_value {
+                                if burned_amount < out_value.0 {
+                                    return Some(Flaw::BurnValueIncorrect);
+                                }
 
-                        // TODO: partial
-                        if collateral_account.amount_outstanding == 0 {
-                            collateral_account.ltv = (0, 100);
-                        }
+                                let burned_amount = burned_amount - out_value.0;
 
-                        // impermanent lost
-                        for asset in collateral_account.collateral_amounts.iter_mut() {
-                            if asset.0 == first_asset {
-                                asset.1 = return_amount0;
-                            } else if asset.0 == second_asset {
-                                asset.1 = return_amount1
+                                if burned_amount > 0 {
+                                    self.unallocated_asset_list.list.insert(
+                                        BlockTx::from_tuple(*contract_id).to_str(),
+                                        burned_amount,
+                                    );
+                                }
+                            } else {
+                                return Some(Flaw::OutValueNotFound);
                             }
                         }
                     }
-                    _ => {}
+
+                    if let Some(pointer_to_key) = burn_option.pointer_to_key {
+                        if let Some(flaw) = self.validate_pointer(pointer_to_key, tx) {
+                            return Some(flaw);
+                        }
+
+                        let new_outpoint = OutPoint {
+                            txid: tx.compute_txid(),
+                            vout: pointer_to_key,
+                        };
+
+                        // update collateral account
+                        if !self.is_read_only {
+                            self.database.lock().await.delete(
+                                COLLATERAL_ACCOUNT_PREFIX,
+                                collateral_account_outpoint.unwrap().to_string().as_str(),
+                            );
+
+                            self.database.lock().await.put(
+                                COLLATERAL_ACCOUNT_PREFIX,
+                                new_outpoint.to_string().as_str(),
+                                collateral_account,
+                            );
+                        }
+                    } else {
+                        return Some(Flaw::PointerKeyNotFound);
+                    }
                 }
             }
-        }
 
-        if let Some(pointer_to_key) = burn_option.pointer_to_key {
-            if let Some(flaw) = self.validate_pointer(pointer_to_key, tx) {
-                return Some(flaw);
+            asset_contract_data.burned_supply = asset_contract_data
+                .burned_supply
+                .saturating_sub(burned_amount);
+
+            if let Some(pointer) = burn_option.pointer {
+                if let Some(flaw) = self.validate_pointer(pointer, tx) {
+                    return Some(flaw);
+                }
+
+                // allocate return collateral
+                for (pos, out_value) in out_values.iter().enumerate() {
+                    if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[pos] {
+                        self.allocate_new_asset(pointer, &asset_id, *out_value)
+                            .await;
+                    }
+                }
             }
 
-            let new_outpoint = OutPoint {
-                txid: tx.compute_txid(),
-                vout: pointer_to_key,
-            };
-
-            // update collateral account
-            if !self.is_read_only {
-                self.database.lock().await.delete(
-                    COLLATERAL_ACCOUNT_PREFIX,
-                    collateral_account_outpoint.unwrap().to_string().as_str(),
-                );
-
-                self.database.lock().await.put(
-                    COLLATERAL_ACCOUNT_PREFIX,
-                    new_outpoint.to_string().as_str(),
-                    collateral_account,
-                );
-            }
+            // update the mint data
+            self.set_asset_contract_data(contract_id, &asset_contract_data)
+                .await;
         } else {
-            return Some(Flaw::PointerKeyNotFound);
+            return Some(Flaw::InvalidContractType);
         }
 
         None
@@ -350,7 +320,7 @@ impl Updater {
         tx: &Transaction,
         block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
-        burn_option: &BurnOption,
+        burn_option: &MintBurnOption,
     ) -> Option<Flaw> {
         let message = self.get_message(contract_id).await;
         match message {

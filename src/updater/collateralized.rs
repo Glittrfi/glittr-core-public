@@ -5,7 +5,7 @@ use super::*;
 use crate::updater::database::COLLATERAL_ACCOUNT_PREFIX;
 use bitcoin::{OutPoint, Transaction};
 use database::POOL_DATA_PREFIX;
-use message::{CloseAccountOption, MintOption, OpenAccountOption, SwapOption};
+use message::{CloseAccountOption, MintBurnOption, OpenAccountOption, SwapOption};
 use mint_burn_asset::{Collateralized, MintBurnAssetContract, MintStructure, RatioModel};
 
 #[derive(Serialize, Deserialize)]
@@ -22,7 +22,7 @@ impl Updater {
         tx: &Transaction,
         block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
-        mint_option: &MintOption,
+        mint_option: &MintBurnOption,
     ) -> Option<Flaw> {
         let mut out_value: u128 = 0;
 
@@ -40,35 +40,21 @@ impl Updater {
             Err(flaw) => return Some(flaw),
         };
 
-        let mut collateral_account: Option<CollateralAccount> = None;
-        let mut collateral_account_outpoint: Option<OutPoint> = None;
-        for input in &tx.input {
-            let result_collateral_account: Result<CollateralAccount, DatabaseError> =
-                self.database.lock().await.get(
-                    COLLATERAL_ACCOUNT_PREFIX,
-                    input.previous_output.to_string().as_str(),
-                );
-
-            if let Some(_collateral_account) = result_collateral_account.ok() {
-                collateral_account = Some(_collateral_account);
-                collateral_account_outpoint = Some(input.previous_output);
-                break;
-            }
-        }
-
-        if collateral_account.is_none() {
-            return Some(Flaw::StateKeyNotFound);
-        }
-
-        let mut collateral_account = collateral_account.unwrap();
-        let available_amount = collateral_account.total_collateral_amount
-            - (collateral_account
-                .total_collateral_amount
-                .saturating_mul(collateral_account.ltv.0 as u128))
-            .saturating_div(collateral_account.ltv.1 as u128);
-
         match collateralized.mint_structure {
             mint_burn_asset::MintStructure::Ratio(ratio_type) => {
+                let available_amount =
+                    if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[0] {
+                        let burned_amount = self
+                            .unallocated_asset_list
+                            .list
+                            .remove(&BlockTx::from_tuple(asset_id).to_str())
+                            .unwrap_or(0);
+
+                        burned_amount
+                    } else {
+                        0
+                    };
+
                 let process_ratio_result = self.process_ratio_type(
                     &ratio_type,
                     &available_amount,
@@ -82,10 +68,36 @@ impl Updater {
                 } else {
                     return process_ratio_result.err();
                 }
-                collateral_account.ltv = (100, 100);
-                collateral_account.amount_outstanding = out_value;
             }
             mint_burn_asset::MintStructure::Account(account_type) => {
+                let mut collateral_account: Option<CollateralAccount> = None;
+                let mut collateral_account_outpoint: Option<OutPoint> = None;
+                for input in &tx.input {
+                    // TODO: move collateral account fetching and saving to unallocate_input, commit_output
+                    let result_collateral_account: Result<CollateralAccount, DatabaseError> =
+                        self.database.lock().await.get(
+                            COLLATERAL_ACCOUNT_PREFIX,
+                            input.previous_output.to_string().as_str(),
+                        );
+
+                    if let Some(_collateral_account) = result_collateral_account.ok() {
+                        collateral_account = Some(_collateral_account);
+                        collateral_account_outpoint = Some(input.previous_output);
+                        break;
+                    }
+                }
+
+                if collateral_account.is_none() {
+                    return Some(Flaw::StateKeyNotFound);
+                }
+
+                let mut collateral_account = collateral_account.unwrap();
+                let available_amount = collateral_account.total_collateral_amount
+                    - (collateral_account
+                        .total_collateral_amount
+                        .saturating_mul(collateral_account.ltv.0 as u128))
+                    .saturating_div(collateral_account.ltv.1 as u128);
+
                 // get collateral account
                 let available_amount = collateral_account.total_collateral_amount
                     - (collateral_account
@@ -179,32 +191,62 @@ impl Updater {
                         }
                     }
                 }
+
+                if let Some(pointer_to_key) = mint_option.pointer_to_key {
+                    if let Some(flaw) = self.validate_pointer(pointer_to_key, tx) {
+                        return Some(flaw);
+                    }
+
+                    let new_outpoint = OutPoint {
+                        txid: tx.compute_txid(),
+                        vout: pointer_to_key,
+                    };
+
+                    // update collateral account
+                    if !self.is_read_only {
+                        self.database.lock().await.delete(
+                            COLLATERAL_ACCOUNT_PREFIX,
+                            collateral_account_outpoint.unwrap().to_string().as_str(),
+                        );
+
+                        self.database.lock().await.put(
+                            COLLATERAL_ACCOUNT_PREFIX,
+                            new_outpoint.to_string().as_str(),
+                            collateral_account,
+                        );
+                    }
+                } else {
+                    return Some(Flaw::PointerKeyNotFound);
+                }
             }
             mint_burn_asset::MintStructure::Proportional(proportional_type) => {
                 if let RatioModel::ConstantProduct = proportional_type.ratio_model {
-                    let input_amounts = collateral_account.collateral_amounts.clone();
-
-                    if collateral_account.ltv != (0, 100) {
-                        return Some(Flaw::MaxLtvExceeded);
-                    }
-
-                    // TODO: partial mint
-                    collateral_account.ltv = (100, 100);
-
-                    let mut first_asset: BlockTxTuple = (0, 0);
-                    let mut second_asset: BlockTxTuple = (0, 0);
+                    let mut first_asset_id: BlockTxTuple = (0, 0);
+                    let mut second_asset_id: BlockTxTuple = (0, 0);
                     if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[0] {
-                        first_asset = asset_id
+                        first_asset_id = asset_id
                     }
 
                     if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[1] {
-                        second_asset = asset_id
+                        second_asset_id = asset_id
                     }
+
+                    let input_first_asset = self
+                        .unallocated_asset_list
+                        .list
+                        .remove(&BlockTx::from_tuple(first_asset_id).to_str())
+                        .unwrap_or(0);
+
+                    let input_second_asset = self
+                        .unallocated_asset_list
+                        .list
+                        .remove(&BlockTx::from_tuple(second_asset_id).to_str())
+                        .unwrap_or(0);
 
                     let pool_key = format!(
                         "{}:{}",
-                        BlockTx::from_tuple(first_asset).to_str(),
-                        BlockTx::from_tuple(second_asset).to_str()
+                        BlockTx::from_tuple(first_asset_id).to_str(),
+                        BlockTx::from_tuple(second_asset_id).to_str()
                     );
 
                     let pool_data: Result<PoolData, DatabaseError> =
@@ -219,9 +261,9 @@ impl Updater {
 
                             // Add new liquidity
                             let new_amount0 =
-                                existing_pool.amounts[0].saturating_add(input_amounts[0].1);
+                                existing_pool.amounts[0].saturating_add(input_first_asset);
                             let new_amount1 =
-                                existing_pool.amounts[1].saturating_add(input_amounts[1].1);
+                                existing_pool.amounts[1].saturating_add(input_second_asset);
 
                             // Validate k increases proportionally
                             let new_k = new_amount0.saturating_mul(new_amount1);
@@ -233,7 +275,7 @@ impl Updater {
                             let total_supply = existing_pool.total_supply;
 
                             // TODO: validate algo with ref-finance / uniswap
-                            let mint_amount = (input_amounts[0].1.saturating_mul(total_supply))
+                            let mint_amount = (input_first_asset.saturating_mul(total_supply))
                                 .saturating_div(existing_pool.amounts[0]);
 
                             // Update pool data
@@ -250,7 +292,6 @@ impl Updater {
                             }
 
                             out_value = mint_amount;
-                            collateral_account.amount_outstanding = out_value;
                         }
                         // If pool doesn't exist, initialize it
                         Err(DatabaseError::NotFound) => {
@@ -276,10 +317,10 @@ impl Updater {
 
                             // Initialize pool with first deposit
                             let initial_supply =
-                                (input_amounts[0].1.saturating_mul(input_amounts[1].1)).sqrt();
+                                (input_first_asset.saturating_mul(input_second_asset)).sqrt();
 
                             let new_pool = PoolData {
-                                amounts: [input_amounts[0].1, input_amounts[1].1],
+                                amounts: [input_first_asset, input_second_asset],
                                 total_supply: initial_supply,
                             };
 
@@ -292,39 +333,11 @@ impl Updater {
                             }
 
                             out_value = initial_supply;
-                            collateral_account.amount_outstanding = out_value;
                         }
                         Err(_) => return Some(Flaw::FailedDeserialization),
                     }
                 }
             }
-        }
-
-        if let Some(pointer_to_key) = mint_option.pointer_to_key {
-            if let Some(flaw) = self.validate_pointer(pointer_to_key, tx) {
-                return Some(flaw);
-            }
-
-            let new_outpoint = OutPoint {
-                txid: tx.compute_txid(),
-                vout: pointer_to_key,
-            };
-
-            // update collateral account
-            if !self.is_read_only {
-                self.database.lock().await.delete(
-                    COLLATERAL_ACCOUNT_PREFIX,
-                    collateral_account_outpoint.unwrap().to_string().as_str(),
-                );
-
-                self.database.lock().await.put(
-                    COLLATERAL_ACCOUNT_PREFIX,
-                    new_outpoint.to_string().as_str(),
-                    collateral_account,
-                );
-            }
-        } else {
-            return Some(Flaw::PointerKeyNotFound);
         }
 
         // check the supply
@@ -340,13 +353,15 @@ impl Updater {
             asset_contract_data.minted_supply.saturating_add(out_value);
 
         // check pointer overflow
-        if let Some(flaw) = self.validate_pointer(mint_option.pointer, tx) {
-            return Some(flaw);
-        }
+        if let Some(pointer) = mint_option.pointer {
+            if let Some(flaw) = self.validate_pointer(pointer, tx) {
+                return Some(flaw);
+            }
 
-        // allocate enw asset for the mint
-        self.allocate_new_asset(mint_option.pointer, contract_id, out_value)
-            .await;
+            // allocate enw asset for the mint
+            self.allocate_new_asset(pointer, contract_id, out_value)
+                .await;
+        }
 
         // update the mint data
         self.set_asset_contract_data(contract_id, &asset_contract_data)
@@ -437,6 +452,9 @@ impl Updater {
                 match contract_creation.contract_type {
                     ContractType::Mba(mba) => {
                         if let Some(collateralized) = mba.mint_mechanism.collateralized {
+                            if !matches!(collateralized.mint_structure, MintStructure::Account(_)) {
+                                return Some(Flaw::InvalidContractType);
+                            };
                             for input_asset in collateralized.input_assets {
                                 if let InputAsset::GlittrAsset(asset_id) = input_asset {
                                     let burned_amount = self
@@ -451,6 +469,8 @@ impl Updater {
                                     }
                                 }
                             }
+                        } else {
+                            return Some(Flaw::InvalidContractType);
                         }
                     }
                     _ => return Some(Flaw::InvalidContractType),
@@ -599,7 +619,9 @@ impl Updater {
                             // Validate minimum k
                             let new_k = pool_data.amounts[0].saturating_mul(pool_data.amounts[1]);
                             let old_k = (pool_data.amounts[in_idx].saturating_sub(input_amount))
-                                .saturating_mul(pool_data.amounts[out_idx].saturating_add(out_value));
+                                .saturating_mul(
+                                    pool_data.amounts[out_idx].saturating_add(out_value),
+                                );
                             if new_k < old_k {
                                 return Some(Flaw::InvalidConstantProduct);
                             }
@@ -618,8 +640,12 @@ impl Updater {
                             }
 
                             // Allocate output asset
-                            self.allocate_new_asset(swap_option.pointer, &other_asset_id, out_value)
-                                .await;
+                            self.allocate_new_asset(
+                                swap_option.pointer,
+                                &other_asset_id,
+                                out_value,
+                            )
+                            .await;
 
                             return None;
                         }

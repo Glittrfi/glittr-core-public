@@ -21,8 +21,8 @@ pub enum ContractType {
 
 #[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct MintOption {
-    pub pointer: u32,
+pub struct MintBurnOption {
+    pub pointer: Option<u32>,
     pub oracle_message: Option<OracleMessageSigned>,
     pub pointer_to_key: Option<u32>,
 }
@@ -33,19 +33,12 @@ pub struct SwapOption {
     pub pointer: u32,
 }
 
-#[serde_with::skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct BurnOption {
-    pub oracle_message: Option<OracleMessageSigned>,
-    pub pointer_to_key: Option<u32>,
-}
-
 #[allow(clippy::large_enum_variant)]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum CallType {
-    Mint(MintOption),
-    Burn(BurnOption),
+    Mint(MintBurnOption),
+    Burn(MintBurnOption),
     Swap(SwapOption),
     // Collateralized assets
     OpenAccount(OpenAccountOption),

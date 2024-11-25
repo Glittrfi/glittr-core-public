@@ -64,9 +64,10 @@ pub enum Flaw {
     InvalidContractType,
 
     // asset contract: mba
-    InputAssetNotTwoForProportional,
     InvalidInputAssetCount,
     InvalidConstantProduct,
+    InputAssetsOnlyOneForRatio,
+    InputAssetsOnlyTwoForProportional,
 
     NotImplemented,
     NonGlittrMessage,

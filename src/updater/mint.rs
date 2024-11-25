@@ -3,7 +3,7 @@ use bitcoin::{
     hex::{Case, DisplayHex},
     PublicKey, ScriptBuf,
 };
-use message::MintOption;
+use message::MintBurnOption;
 use shared::{Preallocated, RatioType};
 
 impl Updater {
@@ -13,7 +13,7 @@ impl Updater {
         tx: &Transaction,
         block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
-        mint_option: &MintOption,
+        mint_option: &MintBurnOption,
     ) -> Option<Flaw> {
         // check livetime
         if asset_contract.live_time > block_tx.block {
@@ -41,17 +41,15 @@ impl Updater {
             .saturating_add(free_mint.amount_per_mint.0);
 
         // check pointer overflow
-        if let Some(flaw) = self.validate_pointer(mint_option.pointer, tx) {
-            return Some(flaw);
-        }
+        if let Some(pointer) = mint_option.pointer {
+            if let Some(flaw) = self.validate_pointer(pointer, tx) {
+                return Some(flaw);
+            }
 
-        // allocate enw asset for the mint
-        self.allocate_new_asset(
-            mint_option.pointer,
-            contract_id,
-            free_mint.amount_per_mint.0,
-        )
-        .await;
+            // allocate enw asset for the mint
+            self.allocate_new_asset(pointer, contract_id, free_mint.amount_per_mint.0)
+                .await;
+        }
 
         // update the mint data
         self.set_asset_contract_data(contract_id, &asset_contract_data)
@@ -67,7 +65,7 @@ impl Updater {
         tx: &Transaction,
         block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
-        mint_option: MintOption,
+        mint_option: MintBurnOption,
     ) -> Option<Flaw> {
         let mut total_unallocated_glittr_asset: u128 = 0;
         let mut total_received_value: u128 = 0;
@@ -174,11 +172,6 @@ impl Updater {
             return ratio_block_result.err();
         }
 
-        // check pointer overflow
-        if let Some(flaw) = self.validate_pointer(mint_option.pointer, tx) {
-            return Some(flaw);
-        }
-
         if out_value == 0 {
             return Some(Flaw::MintedZero);
         }
@@ -213,8 +206,14 @@ impl Updater {
             return Some(flaw);
         }
 
-        self.allocate_new_asset(mint_option.pointer, contract_id, out_value)
-            .await;
+        if let Some(pointer) = mint_option.pointer {
+            if let Some(flaw) = self.validate_pointer(pointer, tx) {
+                return Some(flaw);
+            }
+
+            self.allocate_new_asset(pointer, contract_id, out_value)
+                .await;
+        }
 
         None
     }
@@ -226,7 +225,7 @@ impl Updater {
         tx: &Transaction,
         block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
-        mint_option: &MintOption,
+        mint_option: &MintBurnOption,
     ) -> Option<Flaw> {
         let mut owner_pub_key: Vec<u8> = Vec::new();
         let mut total_allocation: u128 = 0;
@@ -326,10 +325,6 @@ impl Updater {
             return Some(flaw);
         }
 
-        if let Some(flaw) = self.validate_pointer(mint_option.pointer, tx) {
-            return Some(flaw);
-        }
-
         claimed_allocation = claimed_allocation.saturating_add(out_value);
         vesting_contract_data
             .claimed_allocations
@@ -337,8 +332,13 @@ impl Updater {
         self.set_vesting_contract_data(contract_id, &vesting_contract_data)
             .await;
 
-        self.allocate_new_asset(mint_option.pointer, contract_id, out_value)
-            .await;
+        if let Some(pointer) = mint_option.pointer {
+            if let Some(flaw) = self.validate_pointer(pointer, tx) {
+                return Some(flaw);
+            }
+            self.allocate_new_asset(pointer, contract_id, out_value)
+                .await;
+        }
 
         None
     }
@@ -348,8 +348,12 @@ impl Updater {
         tx: &Transaction,
         block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
-        mint_option: &MintOption,
+        mint_option: &MintBurnOption,
     ) -> Option<Flaw> {
+        if mint_option.pointer.is_none() {
+            return Some(Flaw::InvalidPointer);
+        }
+
         let message = self.get_message(contract_id).await;
         match message {
             Ok(op_return_message) => match op_return_message.contract_creation {
@@ -473,7 +477,7 @@ impl Updater {
         &self,
         ratio: &RatioType,
         total_received_value: &u128,
-        mint_option: &MintOption,
+        mint_option: &MintBurnOption,
         tx: &Transaction,
         block_tx: &BlockTx,
     ) -> Result<u128, Flaw> {
