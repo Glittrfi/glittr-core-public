@@ -54,6 +54,7 @@ impl FromStr for BlockTx {
     }
 }
 
+// TODO: remove this, use OutPoint from bitcoin lib instead
 pub struct Outpoint {
     pub txid: String,
     pub vout: u32,

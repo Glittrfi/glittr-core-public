@@ -10,11 +10,13 @@ use bitcoincore_rpc::jsonrpc::serde_json::{self, Deserializer};
 use constants::OP_RETURN_MAGIC_PREFIX;
 use flaw::Flaw;
 use mint_only_asset::MintOnlyAssetContract;
+use spec::SpecContract;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum ContractType {
     Asset(MintOnlyAssetContract),
+    Spec(SpecContract),
 }
 
 #[serde_with::skip_serializing_none]
@@ -79,6 +81,7 @@ pub struct Transfer {
 #[serde(rename_all = "snake_case")]
 pub struct ContractCreation {
     pub contract_type: ContractType,
+    pub spec: Option<BlockTxTuple>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -163,6 +166,7 @@ impl OpReturnMessage {
         if let Some(contract_creation) = &self.contract_creation {
             return match &contract_creation.contract_type {
                 ContractType::Asset(asset_contract) => asset_contract.validate(),
+                ContractType::Spec(spec_contract) => spec_contract.validate(),
             };
         }
 
@@ -224,6 +228,7 @@ mod test {
                         purchase: None,
                     },
                 }),
+                spec: None
             }),
             contract_call: None,
         };
@@ -255,6 +260,7 @@ mod test {
                     assert_eq!(free_mint.supply_cap, Some(U128(1000)));
                     assert_eq!(free_mint.amount_per_mint, U128(10));
                 }
+                _ => panic!("Invalid contract type"),
             }
         }
     }

@@ -41,8 +41,8 @@ impl Updater {
             .minted_supply
             .saturating_add(free_mint.amount_per_mint.0);
 
-        // check pointer overflow
-        if let Some(flaw) = self.validate_mint_pointer(mint_option.pointer, tx) {
+        // validate pointer
+        if let Some(flaw) = self.validate_pointer(mint_option.pointer, tx) {
             return Some(flaw);
         }
 
@@ -79,7 +79,8 @@ impl Updater {
         match purchase.input_asset {
             InputAsset::GlittrAsset(asset_contract_id) => {
                 if let Some(amount) = self
-                    .unallocated_asset_list
+                    .unallocated_inputs
+                    .asset_list
                     .list
                     .get(&BlockTx::from_tuple(asset_contract_id).to_str())
                 {
@@ -141,10 +142,11 @@ impl Updater {
                                 total_received_value = output.value.to_sat() as u128;
                             }
                             InputAsset::GlittrAsset(asset_contract_id) => {
-                                if let Some(asset_list) =
-                                    self.allocated_asset_list.get(&(pos as u32))
+                                if let Some(allocation) =
+                                    self.allocated_outputs.get(&(pos as u32))
                                 {
-                                    if let Some(amount) = asset_list
+                                    if let Some(amount) = allocation
+                                        .asset_list
                                         .list
                                         .get(&BlockTx::from_tuple(asset_contract_id).to_str())
                                     {
@@ -255,7 +257,7 @@ impl Updater {
         }
 
         // check pointer overflow
-        if let Some(flaw) = self.validate_mint_pointer(mint_option.pointer, tx) {
+        if let Some(flaw) = self.validate_pointer(mint_option.pointer, tx) {
             return Some(flaw);
         }
 
@@ -267,7 +269,8 @@ impl Updater {
         if purchase.pay_to_key.is_none() {
             if let InputAsset::GlittrAsset(asset_contract_id) = purchase.input_asset {
                 let burned_amount = self
-                    .unallocated_asset_list
+                    .unallocated_inputs
+                    .asset_list
                     .list
                     .remove(&BlockTx::from_tuple(asset_contract_id).to_str())
                     .unwrap_or(0);
@@ -406,7 +409,7 @@ impl Updater {
             return Some(flaw);
         }
 
-        if let Some(flaw) = self.validate_mint_pointer(mint_option.pointer, tx) {
+        if let Some(flaw) = self.validate_pointer(mint_option.pointer, tx) {
             return Some(flaw);
         }
 
@@ -500,6 +503,8 @@ impl Updater {
                             result_purchase
                         }
                     }
+                    // TODO implement spec index
+                    ContractType::Spec(_) => None
                 },
                 None => Some(Flaw::ContractNotMatch),
             },
@@ -531,15 +536,6 @@ impl Updater {
         None
     }
 
-    fn validate_mint_pointer(&self, pointer: u32, tx: &Transaction) -> Option<Flaw> {
-        if pointer >= tx.output.len() as u32 {
-            return Some(Flaw::PointerOverflow);
-        }
-        if self.is_op_return_index(&tx.output[pointer as usize]) {
-            return Some(Flaw::InvalidPointer);
-        }
-        None
-    }
 }
 
 // TODO: move to helper file

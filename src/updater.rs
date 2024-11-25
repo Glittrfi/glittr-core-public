@@ -1,8 +1,11 @@
 mod mint;
+mod spec;
 
-use std::{collections::HashMap, str::FromStr};
+use std::{
+    collections::{HashMap, HashSet},
+    str::FromStr,
+};
 
-use mint_only_asset::{MintOnlyAssetContract, InputAsset, PurchaseBurnSwap, VestingPlan};
 use bitcoin::{
     hashes::{sha256, Hash},
     key::Secp256k1,
@@ -17,6 +20,7 @@ use database::{
 };
 use flaw::Flaw;
 use message::{CallType, ContractType, OpReturnMessage, TxTypeTransfer};
+use mint_only_asset::{InputAsset, MintOnlyAssetContract, PurchaseBurnSwap, VestingPlan};
 
 use super::*;
 
@@ -50,12 +54,24 @@ pub struct VestingContractData {
     pub claimed_allocations: HashMap<String, u128>,
 }
 
+#[derive(Deserialize, Serialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct SpecContractOwned {
+    pub specs: HashSet<BlockTxTuple>,
+}
+
+#[derive(Default)]
+pub struct Allocation {
+    asset_list: AssetList,
+    spec_owned: SpecContractOwned,
+}
+
 pub struct Updater {
     pub database: Arc<Mutex<Database>>,
     is_read_only: bool,
 
-    unallocated_asset_list: AssetList,
-    allocated_asset_list: HashMap<u32, AssetList>,
+    unallocated_inputs: Allocation,
+    allocated_outputs: HashMap<u32, Allocation>,
 }
 
 impl Updater {
@@ -64,31 +80,45 @@ impl Updater {
             database,
             is_read_only,
 
-            unallocated_asset_list: AssetList::default(),
-            allocated_asset_list: HashMap::new(),
+            unallocated_inputs: Allocation::default(),
+            allocated_outputs: HashMap::new(),
         }
     }
 
-    pub async fn unallocate_asset(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
+    pub async fn unallocate_inputs(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
         for tx_input in tx.input.iter() {
             let outpoint = &Outpoint {
                 txid: tx_input.previous_output.txid.to_string(),
                 vout: tx_input.previous_output.vout,
             };
 
+            // set asset_list
             if let Ok(asset_list) = self.get_asset_list(outpoint).await {
                 for asset in asset_list.list.iter() {
-                    let previous_amount =
-                        self.unallocated_asset_list.list.get(asset.0).unwrap_or(&0);
-                    self.unallocated_asset_list.list.insert(
+                    let previous_amount = self
+                        .unallocated_inputs
+                        .asset_list
+                        .list
+                        .get(asset.0)
+                        .unwrap_or(&0);
+                    self.unallocated_inputs.asset_list.list.insert(
                         asset.0.to_string(),
                         previous_amount.saturating_add(*asset.1),
                     );
                 }
+
+                // TODO: Implement a backup mechanism to recover when downtime occurs
+                self.delete_asset(outpoint).await;
             }
 
-            // TODO: Implement a backup mechanism to recover when downtime occurs
-            self.delete_asset(outpoint).await;
+            // set specs
+            if let Ok(spec_contract_owned) = self.get_spec_contract_owned(outpoint).await {
+                for contract in spec_contract_owned.specs.iter() {
+                    self.unallocated_inputs.spec_owned.specs.insert(*contract);
+                }
+
+                self.delete_spec_contract_owned(outpoint).await
+            }
         }
 
         Ok(())
@@ -102,35 +132,41 @@ impl Updater {
     ) {
         let block_tx = BlockTx::from_tuple(*contract_id);
 
-        let asset = self.allocated_asset_list.entry(vout).or_default();
+        let allocation = self.allocated_outputs.entry(vout).or_default();
 
-        let previous_amount = asset.list.entry(block_tx.to_str()).or_insert(0);
+        let previous_amount = allocation
+            .asset_list
+            .list
+            .entry(block_tx.to_str())
+            .or_insert(0);
         *previous_amount = previous_amount.saturating_add(amount);
     }
 
-    pub async fn move_allocation(
+    pub async fn move_asset_allocation(
         &mut self,
         vout: u32,
         contract_id: &BlockTxTuple,
         max_amount: u128,
     ) {
         let block_tx = BlockTx::from_tuple(*contract_id);
-        let Some(asset) = self
-            .unallocated_asset_list
+        let Some(allocation) = self
+            .unallocated_inputs
+            .asset_list
             .list
             .get_mut(&block_tx.to_string())
         else {
             return;
         };
 
-        let amount = max_amount.min(*asset);
+        let amount = max_amount.min(*allocation);
         if amount == 0 {
             return;
         }
 
-        *asset = asset.saturating_sub(amount);
-        if *asset == 0 {
-            self.unallocated_asset_list
+        *allocation = allocation.saturating_sub(amount);
+        if *allocation == 0 {
+            self.unallocated_inputs
+                .asset_list
                 .list
                 .remove(&block_tx.to_string());
         }
@@ -138,33 +174,44 @@ impl Updater {
         self.allocate_new_asset(vout, contract_id, amount).await;
     }
 
-    pub async fn commit_asset(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
-        // move unallocated to first non op_return index (fallback)
-        let list = self.unallocated_asset_list.list.clone();
-        for asset in list.iter() {
-            let block_tx = BlockTx::from_str(asset.0)?;
+    pub async fn commit_outputs(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
+        let txid = tx.compute_txid().to_string();
 
-            if let Some(vout) = self.first_non_op_return_index(tx) {
-                self.move_allocation(vout, &block_tx.to_tuple(), *asset.1)
+        if let Some(vout) = self.first_non_op_return_index(tx) {
+            // asset
+            // move unallocated to first non op_return index (fallback)
+            let asset_list = self.unallocated_inputs.asset_list.list.clone();
+            for asset in asset_list.iter() {
+                let block_tx = BlockTx::from_str(asset.0)?;
+
+                self.move_asset_allocation(vout, &block_tx.to_tuple(), *asset.1)
                     .await;
-            } else {
-                log::info!("No non op_return index found, unallocated asset is lost");
             }
+
+            // specs
+            let specs = &self.unallocated_inputs.spec_owned.specs.clone();
+            for spec_contract_id in specs.iter() {
+                self.move_spec_allocation(vout, spec_contract_id).await;
+            }
+        } else {
+            log::info!("No non op_return index, unallocated inputs are lost");
         }
 
-        let txid = tx.compute_txid().to_string();
-        for asset in self.allocated_asset_list.iter() {
+        for allocation in self.allocated_outputs.iter() {
             let outpoint = &Outpoint {
                 txid: txid.clone(),
-                vout: *asset.0,
+                vout: *allocation.0,
             };
 
-            self.set_asset_list(outpoint, asset.1).await;
+            self.set_asset_list(outpoint, &allocation.1.asset_list)
+                .await;
+            self.set_spec_contract_owned(outpoint, &allocation.1.spec_owned)
+                .await;
         }
 
         // reset asset list
-        self.unallocated_asset_list = AssetList::default();
-        self.allocated_asset_list = HashMap::new();
+        self.unallocated_inputs = Allocation::default();
+        self.allocated_outputs = HashMap::new();
 
         Ok(())
     }
@@ -221,17 +268,48 @@ impl Updater {
 
             // NOTe: dynamic validation
             if let Some(contract_creation) = message.contract_creation {
-                if let ContractType::Asset(asset_contract) = contract_creation.contract_type {
-                    if let Some(purchase) = asset_contract.mint_mechanism.purchase {
-                        if let InputAsset::GlittrAsset(block_tx_tuple) = purchase.input_asset {
-                            let message = self.get_message(&block_tx_tuple).await;
+                // validate contract creation by spec
+                if let Some(spec_contract_id) = contract_creation.spec {
+                    if outcome.flaw.is_none() {
+                        outcome.flaw = self
+                            .validate_contract_by_spec(
+                                &spec_contract_id,
+                                &contract_creation.contract_type,
+                            )
+                            .await;
+                    }
+                };
 
-                            if let Ok(message) = message {
-                                if message.contract_creation.is_none() && outcome.flaw.is_none() {
-                                    outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx)
+                match contract_creation.contract_type {
+                    ContractType::Asset(asset_contract) => {
+                        if let Some(purchase) = asset_contract.mint_mechanism.purchase {
+                            if let InputAsset::GlittrAsset(block_tx_tuple) = purchase.input_asset {
+                                let message = self.get_message(&block_tx_tuple).await;
+
+                                if let Ok(message) = message {
+                                    if message.contract_creation.is_none() && outcome.flaw.is_none()
+                                    {
+                                        outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx)
+                                    }
+                                } else if outcome.flaw.is_none() {
+                                    outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx);
                                 }
-                            } else if outcome.flaw.is_none() {
-                                outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx);
+                            }
+                        }
+                    }
+
+                    ContractType::Spec(spec_contract) => {
+                        if let Some(contract_id) = spec_contract.block_tx {
+                            // update the spec
+                            if outcome.flaw.is_none() {
+                                outcome.flaw = self.update_spec(tx, &contract_id, &spec_contract).await;
+                            }
+                        } else {
+                            // create the spec
+                            if outcome.flaw.is_none() {
+                                outcome.flaw = self
+                                    .create_spec(block_height, tx_index, tx, &spec_contract)
+                                    .await;
                             }
                         }
                     }
@@ -294,7 +372,7 @@ impl Updater {
                 overflow_i.push(i as u32);
                 continue;
             }
-            self.move_allocation(transfer.output, &transfer.asset, transfer.amount.0)
+            self.move_asset_allocation(transfer.output, &transfer.asset, transfer.amount.0)
                 .await;
         }
 
@@ -355,6 +433,21 @@ impl Updater {
             }
             Err(DatabaseError::NotFound) => Err(Flaw::ContractNotFound),
             Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
+        }
+    }
+
+    async fn set_message(&self, contract_id: &BlockTxTuple, message: &OpReturnMessage) {
+        let outcome = MessageDataOutcome {
+            message: Some(message.clone()),
+            flaw: None,
+        };
+
+        if !self.is_read_only {
+            let contract_key = BlockTx::from_tuple(*contract_id).to_string();
+            self.database
+                .lock()
+                .await
+                .put(MESSAGE_PREFIX, &contract_key, outcome);
         }
     }
 
@@ -422,5 +515,15 @@ impl Updater {
                 vesting_contract_data,
             );
         }
+    }
+
+    fn validate_pointer(&self, pointer: u32, tx: &Transaction) -> Option<Flaw> {
+        if pointer >= tx.output.len() as u32 {
+            return Some(Flaw::PointerOverflow);
+        }
+        if self.is_op_return_index(&tx.output[pointer as usize]) {
+            return Some(Flaw::InvalidPointer);
+        }
+        None
     }
 }
