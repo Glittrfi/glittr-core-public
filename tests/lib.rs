@@ -1983,7 +1983,6 @@ async fn test_integration_collateralized_mba() {
                             block_height_slippage: 5,
                         },
                         fee: None,
-                        partial_returns: false,
                     }),
                 },
                 swap_mechanism: SwapMechanisms { fee: None },

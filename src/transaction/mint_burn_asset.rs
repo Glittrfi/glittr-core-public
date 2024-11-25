@@ -80,7 +80,6 @@ pub enum RatioModel {
 #[serde(rename_all = "snake_case")]
 pub struct ReturnCollateral {
     pub fee: Option<Fraction>, // TODO: fee
-    pub partial_returns: bool, // TODO: to return collateral you have to close out the account
     pub oracle_setting: OracleSetting,
 }
 
