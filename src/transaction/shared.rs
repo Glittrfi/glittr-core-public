@@ -66,6 +66,10 @@ impl Preallocated {
                 supply_cap = mint_burn_asset_contract.supply_cap.clone();
                 free_mint = mint_burn_asset_contract.mint_mechanism.free_mint.clone();
             }
+            ContractType::Spec(_) => {
+                supply_cap = None;
+                free_mint = None;
+            },
         }
 
         if let Some(supply_cap) = &supply_cap {
@@ -108,15 +112,17 @@ impl Preallocated {
 
 impl FreeMint {
     pub fn validate(&self, contract: &ContractType) -> Option<Flaw> {
-        let super_supply_cap: Option<U128>;
-        match contract {
+        let super_supply_cap = match contract {
             ContractType::Moa(mint_only_asset_contract) => {
-                super_supply_cap = mint_only_asset_contract.supply_cap.clone();
+                mint_only_asset_contract.supply_cap.clone()
             }
             ContractType::Mba(mint_burn_asset_contract) => {
-                super_supply_cap = mint_burn_asset_contract.supply_cap.clone();
+                mint_burn_asset_contract.supply_cap.clone()
             }
-        }
+            ContractType::Spec(_) => {
+                None
+            },
+        };
 
         if let Some(supply_cap) = &self.supply_cap {
             if self.amount_per_mint.0 > supply_cap.0 {
@@ -153,7 +159,7 @@ impl PurchaseBurnSwap {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum InputAsset {
     RawBtc,

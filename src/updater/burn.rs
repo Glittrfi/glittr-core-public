@@ -26,7 +26,7 @@ impl Updater {
         };
 
         let burned_amount = self
-            .unallocated_asset_list
+        .unallocated_inputs.asset_list
             .list
             .remove(&BlockTx::from_tuple(*contract_id).to_str())
             .unwrap_or(0);
@@ -201,7 +201,7 @@ impl Updater {
                                 let burned_amount = burned_amount - out_value.0;
 
                                 if burned_amount > 0 {
-                                    self.unallocated_asset_list.list.insert(
+                                    self.unallocated_inputs.asset_list.list.insert(
                                         BlockTx::from_tuple(*contract_id).to_str(),
                                         burned_amount,
                                     );
@@ -297,6 +297,7 @@ impl Updater {
                             return Some(Flaw::NotImplemented);
                         }
                     }
+                    _ => Some(Flaw::ContractNotMatch),
                 },
                 None => Some(Flaw::ContractNotMatch),
             },

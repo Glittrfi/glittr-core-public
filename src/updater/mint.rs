@@ -76,7 +76,8 @@ impl Updater {
         match purchase.input_asset {
             InputAsset::GlittrAsset(asset_contract_id) => {
                 if let Some(amount) = self
-                    .unallocated_asset_list
+                    .unallocated_inputs
+                    .asset_list
                     .list
                     .get(&BlockTx::from_tuple(asset_contract_id).to_str())
                 {
@@ -138,10 +139,10 @@ impl Updater {
                                 total_received_value = output.value.to_sat() as u128;
                             }
                             InputAsset::GlittrAsset(asset_contract_id) => {
-                                if let Some(asset_list) =
-                                    self.allocated_asset_list.get(&(pos as u32))
+                                if let Some(allocation) = self.allocated_outputs.get(&(pos as u32))
                                 {
-                                    if let Some(amount) = asset_list
+                                    if let Some(amount) = allocation
+                                        .asset_list
                                         .list
                                         .get(&BlockTx::from_tuple(asset_contract_id).to_str())
                                     {
@@ -180,7 +181,8 @@ impl Updater {
         if purchase.pay_to_key.is_none() {
             if let InputAsset::GlittrAsset(asset_contract_id) = purchase.input_asset {
                 let burned_amount = self
-                    .unallocated_asset_list
+                    .unallocated_inputs
+                    .asset_list
                     .list
                     .remove(&BlockTx::from_tuple(asset_contract_id).to_str())
                     .unwrap_or(0);
@@ -325,6 +327,12 @@ impl Updater {
             return Some(flaw);
         }
 
+        if let Some(pointer) = mint_option.pointer {
+            if let Some(flaw) = self.validate_pointer(pointer, tx) {
+                return Some(flaw);
+            }
+        }
+
         claimed_allocation = claimed_allocation.saturating_add(out_value);
         vesting_contract_data
             .claimed_allocations
@@ -432,6 +440,8 @@ impl Updater {
                             return Some(Flaw::NotImplemented);
                         }
                     }
+                    // TODO implement spec index
+                    ContractType::Spec(_) => None,
                 },
                 None => Some(Flaw::ContractNotMatch),
             },
@@ -459,16 +469,6 @@ impl Updater {
             asset_contract_data.minted_supply = next_supply;
             self.set_asset_contract_data(contract_id, &asset_contract_data)
                 .await;
-        }
-        None
-    }
-
-    pub fn validate_pointer(&self, pointer: u32, tx: &Transaction) -> Option<Flaw> {
-        if pointer >= tx.output.len() as u32 {
-            return Some(Flaw::PointerOverflow);
-        }
-        if self.is_op_return_index(&tx.output[pointer as usize]) {
-            return Some(Flaw::InvalidPointer);
         }
         None
     }

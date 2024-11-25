@@ -69,6 +69,15 @@ pub enum Flaw {
     InputAssetsOnlyOneForRatio,
     InputAssetsOnlyTwoForProportional,
 
+    // spec
+    SpecNotMutable,
+    SpecFieldRequired(String),
+    SpecFieldNotNecessary(String),
+    SpecNotFound,
+    SpecCriteriaInvalid,
+    SpecOwnerNotFound, // should be never happened
+    SpecUpdateNotAllowed,
+
     NotImplemented,
     NonGlittrMessage,
     PoolNotFound,

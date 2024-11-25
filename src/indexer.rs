@@ -71,13 +71,13 @@ impl Indexer {
                 for (pos, tx) in block.txdata.iter().enumerate() {
                     let message = OpReturnMessage::parse_tx(tx);
 
-                    updater.unallocate_asset(tx).await?;
+                    updater.unallocate_inputs(tx).await?;
 
                     if !matches!(message.as_ref(), Err(Flaw::NonGlittrMessage)) {
                         updater.index(block_height, pos as u32, tx, message).await?;
                     }
 
-                    updater.commit_asset(tx).await?;
+                    updater.commit_outputs(tx).await?;
                 }
 
                 self.last_indexed_block = Some(block_height);

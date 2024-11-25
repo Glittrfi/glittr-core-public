@@ -41,7 +41,8 @@ impl Updater {
                 let available_amount =
                     if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[0] {
                         let burned_amount = self
-                            .unallocated_asset_list
+                            .unallocated_inputs
+                            .asset_list
                             .list
                             .remove(&BlockTx::from_tuple(asset_id).to_str())
                             .unwrap_or(0);
@@ -223,13 +224,13 @@ impl Updater {
                     }
 
                     let input_first_asset = self
-                        .unallocated_asset_list
+                    .unallocated_inputs.asset_list
                         .list
                         .remove(&BlockTx::from_tuple(first_asset_id).to_str())
                         .unwrap_or(0);
 
                     let input_second_asset = self
-                        .unallocated_asset_list
+                    .unallocated_inputs.asset_list
                         .list
                         .remove(&BlockTx::from_tuple(second_asset_id).to_str())
                         .unwrap_or(0);
@@ -449,7 +450,8 @@ impl Updater {
                             for input_asset in collateralized.input_assets {
                                 if let InputAsset::GlittrAsset(asset_id) = input_asset {
                                     let burned_amount = self
-                                        .unallocated_asset_list
+                                    .unallocated_inputs.asset_list
+
                                         .list
                                         .remove(&BlockTx::from_tuple(asset_id).to_str())
                                         .unwrap_or(0);
@@ -527,7 +529,7 @@ impl Updater {
                             for input_asset in collateralized.input_assets.clone() {
                                 if let InputAsset::GlittrAsset(asset_id) = input_asset {
                                     let amount = self
-                                        .unallocated_asset_list
+                                    .unallocated_inputs.asset_list
                                         .list
                                         .remove(&BlockTx::from_tuple(asset_id).to_str())
                                         .unwrap_or(0);
