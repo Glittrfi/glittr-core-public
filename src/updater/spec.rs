@@ -144,7 +144,6 @@ impl Updater {
         };
     }
 
-    // TODO: handle spec only can be updated by the creator
     pub async fn update_spec(
         &mut self,
         tx: &Transaction,
@@ -163,7 +162,6 @@ impl Updater {
 
         match &spec_contract.spec {
             SpecContractType::MintOnlyAsset(_) => {
-                // TODO: implemented in the future if needed
                 return Some(Flaw::NotImplemented);
             }
             SpecContractType::MintBurnAsset(mba_spec) => {
@@ -172,7 +170,7 @@ impl Updater {
                     _ => return Some(Flaw::SpecNotFound),
                 };
 
-                // update assets
+                // update assets value
                 if !prev_mba_spec._mutable_assets {
                     return Some(Flaw::SpecNotMutable);
                 } else {
