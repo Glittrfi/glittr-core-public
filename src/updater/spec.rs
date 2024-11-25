@@ -13,13 +13,14 @@ impl Updater {
         tx: &Transaction,
         spec_contract: &SpecContract,
     ) -> Option<Flaw> {
-        if let Some(flaw) = self.validate_pointer(spec_contract.pointer, tx) {
-            return Some(flaw);
-        }
+        if let Some(pointer) = spec_contract.pointer {
+            if let Some(flaw) = self.validate_pointer(pointer, tx) {
+                return Some(flaw);
+            }
 
-        let spec_contract_id = BlockTxTuple::from((block_height, tx_index));
-        self.allocate_new_spec(spec_contract.pointer, &spec_contract_id)
-            .await;
+            let spec_contract_id = BlockTxTuple::from((block_height, tx_index));
+            self.allocate_new_spec(pointer, &spec_contract_id).await;
+        }
 
         None
     }
@@ -190,11 +191,15 @@ impl Updater {
             transfer: None,
         };
 
+        let pointer = spec_contract
+            .pointer
+            .expect("Error mismatch, this should never happen");
+
         self.set_message(&spec_contract_id, &message).await;
-        if let Some(flaw) = self.validate_pointer(spec_contract.pointer, tx) {
+        if let Some(flaw) = self.validate_pointer(pointer, tx) {
             return Some(flaw);
         }
-        self.move_spec_allocation(spec_contract.pointer, spec_contract_id).await;
+        self.move_spec_allocation(pointer, spec_contract_id).await;
 
         None
     }
