@@ -1,7 +1,7 @@
 use bitcoin::OutPoint;
 use database::{COLLATERAL_ACCOUNT_PREFIX, POOL_DATA_PREFIX};
 use message::MintBurnOption;
-use mint_burn_asset::{MintBurnAssetContract, ReturnCollateral};
+use mint_burn_asset::{MintBurnAssetContract, RatioModel, ReturnCollateral};
 
 use super::*;
 
@@ -15,14 +15,9 @@ impl Updater {
         contract_id: &BlockTxTuple,
         burn_option: &MintBurnOption,
     ) -> Option<Flaw> {
-        let mut burned_amount: u128 = 0;
         let mut out_values: Vec<u128> = vec![];
         if mba.live_time > block_tx.block {
             return Some(Flaw::LiveTimeNotReached);
-        }
-
-        if burn_option.pointer_to_key.is_none() {
-            return Some(Flaw::PointerKeyNotFound);
         }
 
         let mut asset_contract_data = match self.get_asset_contract_data(contract_id).await {
@@ -30,11 +25,15 @@ impl Updater {
             Err(flaw) => return Some(flaw),
         };
 
-        burned_amount = self
+        let burned_amount = self
             .unallocated_asset_list
             .list
             .remove(&BlockTx::from_tuple(*contract_id).to_str())
             .unwrap_or(0);
+
+        if burned_amount == 0 {
+            return Some(Flaw::InsufficientInputAmount);
+        }
 
         if let Some(collateralized) = &mba.mint_mechanism.collateralized {
             match &collateralized.mint_structure {
@@ -52,8 +51,69 @@ impl Updater {
                     } else {
                         return process_ratio_result.err();
                     }
-                },
-                mint_burn_asset::MintStructure::Proportional(proportional_type) => todo!(),
+                }
+                mint_burn_asset::MintStructure::Proportional(proportional_type) => {
+                    if let RatioModel::ConstantProduct = proportional_type.ratio_model {
+                        // Get pool data
+                        let mut first_asset_id: BlockTxTuple = (0, 0);
+                        let mut second_asset_id: BlockTxTuple = (0, 0);
+                        if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[0] {
+                            first_asset_id = asset_id
+                        }
+
+                        if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[1] {
+                            second_asset_id = asset_id
+                        }
+
+                        let pool_key = format!(
+                            "{}:{}",
+                            BlockTx::from_tuple(first_asset_id).to_str(),
+                            BlockTx::from_tuple(second_asset_id).to_str()
+                        );
+
+                        let pool_data: Result<PoolData, DatabaseError> =
+                            self.database.lock().await.get(POOL_DATA_PREFIX, &pool_key);
+
+                        if pool_data.is_err() {
+                            return Some(Flaw::PoolNotFound);
+                        }
+
+                        let mut pool_data = pool_data.unwrap();
+
+                        // Calculate proportion of pool to return
+                        let share = burned_amount
+                            .saturating_mul(1_000_000) // Scale for precision
+                            .saturating_div(pool_data.total_supply);
+
+                        // Calculate return amounts
+                        let return_amount0 = pool_data.amounts[0]
+                            .saturating_mul(share)
+                            .saturating_div(1_000_000);
+                        let return_amount1 = pool_data.amounts[1]
+                            .saturating_mul(share)
+                            .saturating_div(1_000_000);
+
+                        if return_amount0 == 0 || return_amount1 == 0 {
+                            return Some(Flaw::InsufficientOutputAmount);
+                        }
+
+                        // Update pool state
+                        pool_data.amounts[0] = pool_data.amounts[0].saturating_sub(return_amount0);
+                        pool_data.amounts[1] = pool_data.amounts[1].saturating_sub(return_amount1);
+                        pool_data.total_supply =
+                            pool_data.total_supply.saturating_sub(burned_amount);
+
+                        if !self.is_read_only {
+                            self.database
+                                .lock()
+                                .await
+                                .put(POOL_DATA_PREFIX, &pool_key, pool_data);
+                        }
+
+                        out_values.push(return_amount0);
+                        out_values.push(return_amount1);
+                    }
+                }
                 mint_burn_asset::MintStructure::Account(_account_type) => {
                     let mut collateral_account: Option<CollateralAccount> = None;
                     let mut collateral_account_outpoint: Option<OutPoint> = None;
@@ -81,38 +141,39 @@ impl Updater {
                         if let Some(expected_input_outpoint) =
                             oracle_message_signed.message.input_outpoint
                         {
-                            if expected_input_outpoint != collateral_account_outpoint.unwrap() {
-                                return Some(Flaw::OracleMintFailed);
-                            }
+                            if let Some(oracle_setting) = &return_collateral.oracle_setting {
+                                if expected_input_outpoint != collateral_account_outpoint.unwrap() {
+                                    return Some(Flaw::OracleMintFailed);
+                                }
 
-                            if block_tx.block - oracle_message_signed.message.block_height
-                                > return_collateral.oracle_setting.block_height_slippage as u64
-                            {
-                                return Some(Flaw::OracleMintBlockSlippageExceeded);
-                            }
+                                if block_tx.block - oracle_message_signed.message.block_height
+                                    > oracle_setting.block_height_slippage as u64
+                                {
+                                    return Some(Flaw::OracleMintBlockSlippageExceeded);
+                                }
 
-                            let pubkey: XOnlyPublicKey = XOnlyPublicKey::from_slice(
-                                &return_collateral.oracle_setting.pubkey.as_slice(),
-                            )
-                            .unwrap();
+                                let pubkey: XOnlyPublicKey =
+                                    XOnlyPublicKey::from_slice(&oracle_setting.pubkey.as_slice())
+                                        .unwrap();
 
-                            if let Ok(signature) =
-                                Signature::from_slice(&oracle_message_signed.signature)
-                            {
-                                let secp = Secp256k1::new();
+                                if let Ok(signature) =
+                                    Signature::from_slice(&oracle_message_signed.signature)
+                                {
+                                    let secp = Secp256k1::new();
 
-                                let msg = Message::from_digest_slice(
-                                    sha256::Hash::hash(
-                                        serde_json::to_string(&oracle_message_signed.message)
-                                            .unwrap()
-                                            .as_bytes(),
+                                    let msg = Message::from_digest_slice(
+                                        sha256::Hash::hash(
+                                            serde_json::to_string(&oracle_message_signed.message)
+                                                .unwrap()
+                                                .as_bytes(),
+                                        )
+                                        .as_byte_array(),
                                     )
-                                    .as_byte_array(),
-                                )
-                                .unwrap();
+                                    .unwrap();
 
-                                if pubkey.verify(&secp, &msg, &signature).is_err() {
-                                    return Some(Flaw::OracleMintSignatureFailed);
+                                    if pubkey.verify(&secp, &msg, &signature).is_err() {
+                                        return Some(Flaw::OracleMintSignatureFailed);
+                                    }
                                 }
                             }
 
@@ -207,110 +268,6 @@ impl Updater {
 
         None
     }
-
-    // pub async fn burn_proportional(
-    //     &mut self,
-    //     tx: &Transaction,
-    //     block_tx: &BlockTx,
-    //     contract_id: &BlockTxTuple,
-    //     burn_option: &BurnOption,
-    // ) -> Option<Flaw> {
-    //     let message = self.get_message(contract_id).await;
-    //     let contract_creation = match message {
-    //         Ok(op_return_message) => op_return_message.contract_creation?,
-    //         Err(flaw) => return Some(flaw),
-    //     };
-
-    //     match contract_creation.contract_type {
-    //         ContractType::Mba(mba) => {
-    //             if let Some(collateralized) = mba.mint_mechanism.collateralized {
-    //                 if let MintStructure::Proportional(proportional_type) = collateralized.mint_structure {
-    //                     if let RatioModel::ConstantProduct = proportional_type.ratio_model {
-    //                         // Get LP tokens from unallocated
-    //                         let lp_amount = self
-    //                             .unallocated_asset_list
-    //                             .list
-    //                             .remove(&block_tx.to_str())
-    //                             .unwrap_or(0);
-
-    //                         if lp_amount == 0 {
-    //                             return Some(Flaw::InsufficientInputAmount);
-    //                         }
-
-    //                         // Get pool data
-    //                         let pool_key = format!(
-    //                             "{}:{}_{}",
-    //                             POOL_DATA_PREFIX,
-    //                             BlockTx::from_tuple(collateralized.input_assets[0].asset_id()).to_str(),
-    //                             BlockTx::from_tuple(collateralized.input_assets[1].asset_id()).to_str()
-    //                         );
-
-    //                         let mut pool_data: PoolData = self
-    //                             .database
-    //                             .lock()
-    //                             .await
-    //                             .get(POOL_DATA_PREFIX, &pool_key)
-    //                             .map_err(|_| Flaw::PoolNotFound)?;
-
-    //                         // Calculate proportion of pool to return
-    //                         let share = lp_amount
-    //                             .saturating_mul(1_000_000) // Scale for precision
-    //                             .saturating_div(pool_data.total_supply);
-
-    //                         // Calculate return amounts
-    //                         let return_amount0 = pool_data.amounts[0]
-    //                             .saturating_mul(share)
-    //                             .saturating_div(1_000_000);
-    //                         let return_amount1 = pool_data.amounts[1]
-    //                             .saturating_mul(share)
-    //                             .saturating_div(1_000_000);
-
-    //                         if return_amount0 == 0 || return_amount1 == 0 {
-    //                             return Some(Flaw::InsufficientOutputAmount);
-    //                         }
-
-    //                         // Update pool state
-    //                         pool_data.amounts[0] = pool_data.amounts[0].saturating_sub(return_amount0);
-    //                         pool_data.amounts[1] = pool_data.amounts[1].saturating_sub(return_amount1);
-    //                         pool_data.total_supply = pool_data.total_supply.saturating_sub(lp_amount);
-
-    //                         if !self.is_read_only {
-    //                             self.database
-    //                                 .lock()
-    //                                 .await
-    //                                 .put(POOL_DATA_PREFIX, &pool_key, pool_data);
-    //                         }
-
-    //                         // Validate pointer for output if specified
-    //                         if let Some(pointer) = burn_option.pointer_to_key {
-    //                             if let Some(flaw) = self.validate_pointer(pointer, tx) {
-    //                                 return Some(flaw);
-    //                             }
-    //                         }
-
-    //                         // Return underlying assets
-    //                         let output_pointer = burn_option.pointer_to_key.unwrap_or(1);
-    //                         self.allocate_new_asset(
-    //                             output_pointer,
-    //                             &collateralized.input_assets[0].asset_id(),
-    //                             return_amount0
-    //                         ).await;
-    //                         self.allocate_new_asset(
-    //                             output_pointer,
-    //                             &collateralized.input_assets[1].asset_id(),
-    //                             return_amount1
-    //                         ).await;
-
-    //                         return None;
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //         _ => return Some(Flaw::InvalidContractType),
-    //     }
-
-    //     None
-    // }
 
     pub async fn burn(
         &mut self,

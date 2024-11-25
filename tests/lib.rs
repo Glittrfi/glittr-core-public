@@ -16,10 +16,13 @@ use glittr::{
         COLLATERAL_ACCOUNT_PREFIX, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX,
     },
     message::{
-        CallType, CloseAccountOption, ContractCall, ContractCreation, ContractType, MintBurnOption, OpReturnMessage, OpenAccountOption, OracleMessage, OracleMessageSigned, SwapOption, Transfer, TxTypeTransfer
+        CallType, CloseAccountOption, ContractCall, ContractCreation, ContractType, MintBurnOption,
+        OpReturnMessage, OpenAccountOption, OracleMessage, OracleMessageSigned, SwapOption,
+        Transfer, TxTypeTransfer,
     },
     mint_burn_asset::{
-        AccountType, BurnMechanisms, Collateralized, MBAMintMechanisms, MintBurnAssetContract, MintStructure, ProportionalType, RatioModel, ReturnCollateral, SwapMechanisms
+        AccountType, BurnMechanisms, Collateralized, MBAMintMechanisms, MintBurnAssetContract,
+        MintStructure, ProportionalType, RatioModel, ReturnCollateral, SwapMechanisms,
     },
     mint_only_asset::MintOnlyAssetContract,
     shared::{
@@ -1977,11 +1980,11 @@ async fn test_integration_collateralized_mba() {
                 },
                 burn_mechanism: BurnMechanisms {
                     return_collateral: Some(ReturnCollateral {
-                        oracle_setting: OracleSetting {
+                        oracle_setting: Some(OracleSetting {
                             pubkey: oracle_xonly.0.serialize().to_vec(),
                             asset_id: Some("collateral".to_string()),
                             block_height_slippage: 5,
-                        },
+                        }),
                         fee: None,
                     }),
                 },
@@ -2172,7 +2175,7 @@ async fn test_integration_collateralized_mba() {
                     message: burn_oracle_message.clone(),
                 }),
                 pointer_to_key: Some(1),
-                pointer: None
+                pointer: None,
             }),
         }),
         transfer: None,
@@ -2414,7 +2417,7 @@ async fn test_integration_proportional_mba_lp() {
                 mint_mechanism: MintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(1_000_000)),
-                        amount_per_mint: U128(100_000),
+                        amount_per_mint: U128(50_000),
                     }),
                     preallocated: None,
                     purchase: None,
@@ -2483,7 +2486,10 @@ async fn test_integration_proportional_mba_lp() {
                     }),
                 },
                 burn_mechanism: BurnMechanisms {
-                    return_collateral: None,
+                    return_collateral: Some(ReturnCollateral {
+                        fee: None,
+                        oracle_setting: None,
+                    }),
                 },
                 swap_mechanism: SwapMechanisms { fee: None },
             }),
@@ -2494,29 +2500,17 @@ async fn test_integration_proportional_mba_lp() {
 
     let lp_contract = ctx.build_and_mine_message(&lp_message).await;
 
-    // Open LP account and provide initial liquidity
-    let open_account_message = OpReturnMessage {
+    // Provide liquidity and mint LP tokens
+    let mint_lp_message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: lp_contract.to_tuple(),
-            call_type: CallType::OpenAccount(OpenAccountOption {
-                pointer_to_key: 1,
-                share_amount: U128(100),
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
+                oracle_message: None,
+                pointer_to_key: None,
             }),
         }),
-        transfer: Some(Transfer {
-            transfers: vec![
-                TxTypeTransfer {
-                    asset: token1_contract.to_tuple(),
-                    output: 1,
-                    amount: U128(1000),
-                },
-                TxTypeTransfer {
-                    asset: token2_contract.to_tuple(),
-                    output: 1,
-                    amount: U128(1000),
-                },
-            ],
-        }),
+        transfer: None,
         contract_creation: None,
     };
 
@@ -2528,7 +2522,7 @@ async fn test_integration_proportional_mba_lp() {
             (token2_mint_tx.block as usize, 1, 1, Witness::new()),
             (token2_mint_tx.block as usize, 0, 0, Witness::new()),
         ],
-        op_return: Some(open_account_message.into_script()),
+        op_return: Some(mint_lp_message.into_script()),
         op_return_index: Some(0),
         op_return_value: Some(0),
         output_values: &[1000, 1000],
@@ -2538,7 +2532,7 @@ async fn test_integration_proportional_mba_lp() {
     });
     ctx.core.mine_blocks(1);
 
-    let account_block_tx = BlockTx {
+    let mint_lp_block_tx = BlockTx {
         block: ctx.core.height(),
         tx: 1,
     };
@@ -2546,35 +2540,64 @@ async fn test_integration_proportional_mba_lp() {
     start_indexer(Arc::clone(&ctx.indexer)).await;
 
     // Verify initial setup
-    let account_outcome = ctx.get_and_verify_message_outcome(account_block_tx).await;
-    assert!(account_outcome.flaw.is_none(), "{:?}", account_outcome.flaw);
+    let mint_lp_outcome = ctx.get_and_verify_message_outcome(mint_lp_block_tx).await;
+    assert!(mint_lp_outcome.flaw.is_none(), "{:?}", mint_lp_outcome.flaw);
 
-    // Verify collateral accounts
-    let collateral_accounts = ctx.get_collateralize_accounts().await;
-    assert_eq!(collateral_accounts.len(), 1);
+    let asset_lists = ctx.get_asset_map().await;
 
-    let account = collateral_accounts.values().next().unwrap();
-    assert_eq!(account.share_amount, 100);
-    assert_eq!(account.ltv, (0, 100));
-    assert_eq!(account.collateral_amounts.len(), 2);
-    assert_eq!(account.collateral_amounts[0].1, 1000);
-    assert_eq!(account.collateral_amounts[1].1, 1000);
+    let lp_minted_amount = asset_lists
+        .values()
+        .find_map(|list| list.list.get(&lp_contract.to_str()))
+        .expect("Minted asset should exist");
+
+    // Minted LP: https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol#L120-L123
+    assert_eq!(*lp_minted_amount, 70710);
 
     // Test swap functionality
-    let swap_message = OpReturnMessage {
-        contract_call: Some(ContractCall {
-            contract: lp_contract.to_tuple(),
-            call_type: CallType::Swap(SwapOption {
-                pointer: 2,
-            }),
-        }),
+
+    let token1_mint_tx = ctx.build_and_mine_message(&mint_token1_message).await;
+
+    let rebase_token1_message = OpReturnMessage {
         transfer: Some(Transfer {
             transfers: vec![TxTypeTransfer {
                 asset: token1_contract.to_tuple(),
-                output: 1,
+                output: 2,
                 amount: U128(100),
             }],
         }),
+        contract_creation: None,
+        contract_call: None,
+    };
+
+    ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[
+            (token1_mint_tx.block as usize, 1, 1, Witness::new()),
+            (token1_mint_tx.block as usize, 0, 0, Witness::new()),
+        ],
+        op_return: Some(rebase_token1_message.into_script()),
+        op_return_index: Some(0),
+        op_return_value: Some(0),
+        output_values: &[1000, 1000, 1000],
+        outputs: 3,
+        p2tr: false,
+        recipient: Some(owner_address.clone()),
+    });
+    ctx.core.mine_blocks(1);
+
+    let rebase_block_tx = BlockTx {
+        block: ctx.core.height(),
+        tx: 1,
+    };
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    let swap_message = OpReturnMessage {
+        contract_call: Some(ContractCall {
+            contract: lp_contract.to_tuple(),
+            call_type: CallType::Swap(SwapOption { pointer: 1 }),
+        }),
+        transfer: None,
         contract_creation: None,
     };
 
@@ -2582,14 +2605,14 @@ async fn test_integration_proportional_mba_lp() {
     ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
         inputs: &[
-            (token1_mint_tx.block as usize, 1, 1, Witness::new()),
-            (account_block_tx.block as usize, 0, 0, Witness::new()),
+            (rebase_block_tx.block as usize, 1, 2, Witness::new()),
+            (rebase_block_tx.block as usize, 0, 0, Witness::new()),
         ],
         op_return: Some(swap_message.into_script()),
         op_return_index: Some(0),
         op_return_value: Some(0),
-        output_values: &[1000, 1000, 1000],
-        outputs: 3,
+        output_values: &[1000, 1000],
+        outputs: 2,
         p2tr: false,
         recipient: Some(owner_address.clone()),
     });
@@ -2606,26 +2629,44 @@ async fn test_integration_proportional_mba_lp() {
     let swap_outcome = ctx.get_and_verify_message_outcome(swap_block_tx).await;
     assert!(swap_outcome.flaw.is_none(), "{:?}", swap_outcome.flaw);
 
-    // Close account and verify final state
-    let close_account_message = OpReturnMessage {
+    let asset_lists = ctx.get_asset_map().await;
+    let token_2_swapped = asset_lists
+        .values()
+        .find_map(|list| list.list.get(&token2_contract.to_str()))
+        .expect("Minted asset should exist");
+
+    // token_1_input = 100
+    // token_1_total = 100_000
+    // token_2_total = 50_000
+    // k_before == k_after
+    // token_1_total * token_2_total = (token_1_total + token_1_input) * (token_2_total - token_2_out)
+    // token_2_out = token_2_total - (token_1_total * token_2_total) / (token_1_total + token_1_input )
+    // token_2_out = 50_000 - (100_000 * 50_000) / (100_100)
+    // token_2_out = 49
+    assert_eq!(*token_2_swapped, 49);
+
+    // Burn LP
+    let burn_lp_message = OpReturnMessage {
         contract_call: Some(ContractCall {
             contract: lp_contract.to_tuple(),
-            call_type: CallType::CloseAccount(CloseAccountOption {
-                pointer: 1,
+            call_type: CallType::Burn(MintBurnOption {
+                pointer: Some(1),
+                oracle_message: None,
+                pointer_to_key: None,
             }),
         }),
         transfer: None,
         contract_creation: None,
     };
 
-    // Broadcast close account transaction
+    // Broadcast burn transaction
     ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
         inputs: &[
-            (swap_block_tx.block as usize, 1, 1, Witness::new()),
-            (swap_block_tx.block as usize, 0, 0, Witness::new()),
+            (mint_lp_block_tx.block as usize, 1, 1, Witness::new()),
+            (mint_lp_block_tx.block as usize, 0, 0, Witness::new()),
         ],
-        op_return: Some(close_account_message.into_script()),
+        op_return: Some(burn_lp_message.into_script()),
         op_return_index: Some(0),
         op_return_value: Some(0),
         output_values: &[1000, 1000],
@@ -2635,16 +2676,16 @@ async fn test_integration_proportional_mba_lp() {
     });
     ctx.core.mine_blocks(1);
 
-    let close_block_tx = BlockTx {
+    let burn_block_tx = BlockTx {
         block: ctx.core.height(),
         tx: 1,
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
 
-    // Verify close account outcome
-    let close_outcome = ctx.get_and_verify_message_outcome(close_block_tx).await;
-    assert!(close_outcome.flaw.is_none(), "{:?}", close_outcome.flaw);
+    // Verify burn outcome
+    let burn_outcome = ctx.get_and_verify_message_outcome(burn_block_tx).await;
+    assert!(burn_outcome.flaw.is_none(), "{:?}", burn_outcome.flaw);
 
     // Verify final state
     let final_collateral_accounts = ctx.get_collateralize_accounts().await;
@@ -2658,4 +2699,3 @@ async fn test_integration_proportional_mba_lp() {
 
     ctx.drop().await;
 }
-

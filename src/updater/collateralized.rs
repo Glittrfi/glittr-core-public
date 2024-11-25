@@ -31,10 +31,6 @@ impl Updater {
             return Some(Flaw::LiveTimeNotReached);
         }
 
-        if mint_option.pointer_to_key.is_none() {
-            return Some(Flaw::PointerKeyNotFound);
-        }
-
         let mut asset_contract_data = match self.get_asset_contract_data(contract_id).await {
             Ok(data) => data,
             Err(flaw) => return Some(flaw),
@@ -92,11 +88,6 @@ impl Updater {
                 }
 
                 let mut collateral_account = collateral_account.unwrap();
-                let available_amount = collateral_account.total_collateral_amount
-                    - (collateral_account
-                        .total_collateral_amount
-                        .saturating_mul(collateral_account.ltv.0 as u128))
-                    .saturating_div(collateral_account.ltv.1 as u128);
 
                 // get collateral account
                 let available_amount = collateral_account.total_collateral_amount

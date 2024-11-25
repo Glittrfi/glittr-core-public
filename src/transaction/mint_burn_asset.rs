@@ -80,7 +80,7 @@ pub enum RatioModel {
 #[serde(rename_all = "snake_case")]
 pub struct ReturnCollateral {
     pub fee: Option<Fraction>, // TODO: fee
-    pub oracle_setting: OracleSetting,
+    pub oracle_setting: Option<OracleSetting>,
 }
 
 impl Collateralized {
