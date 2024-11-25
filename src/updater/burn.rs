@@ -38,23 +38,20 @@ impl Updater {
 
         if let Some(collateralized) = &mba.mint_mechanism.collateralized {
             match &collateralized.mint_structure {
-                mint_burn_asset::MintStructure::Ratio(ratio_type) => match ratio_type {
-                    shared::RatioType::Fixed { ratio } => {
-                        let process_ratio_result = self.process_ratio_type(
-                            &ratio_type,
-                            &burned_amount,
-                            burn_option,
-                            &tx,
-                            &block_tx,
-                        );
+                mint_burn_asset::MintStructure::Ratio(ratio_type) => {
+                    let process_ratio_result = self.process_ratio_type(
+                        &ratio_type,
+                        &burned_amount,
+                        burn_option,
+                        &tx,
+                        &block_tx,
+                    );
 
-                        if let Ok(_out_value) = process_ratio_result {
-                            out_values.push(_out_value);
-                        } else {
-                            return process_ratio_result.err();
-                        }
+                    if let Ok(_out_value) = process_ratio_result {
+                        out_values.push(_out_value);
+                    } else {
+                        return process_ratio_result.err();
                     }
-                    shared::RatioType::Oracle { setting } => todo!(),
                 },
                 mint_burn_asset::MintStructure::Proportional(proportional_type) => todo!(),
                 mint_burn_asset::MintStructure::Account(_account_type) => {
