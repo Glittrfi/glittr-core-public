@@ -1,5 +1,5 @@
 use bitcoin::OutPoint;
-use database::{COLLATERAL_ACCOUNT_PREFIX, POOL_DATA_PREFIX};
+use database::POOL_DATA_PREFIX;
 use message::MintBurnOption;
 use mint_burn_asset::{MintBurnAssetContract, RatioModel, ReturnCollateral};
 
@@ -117,27 +117,21 @@ impl Updater {
                     }
                 }
                 mint_burn_asset::MintStructure::Account(_account_type) => {
-                    let mut collateral_account: Option<CollateralAccount> = None;
-                    let mut collateral_account_outpoint: Option<OutPoint> = None;
-                    for input in &tx.input {
-                        let result_collateral_account: Result<CollateralAccount, DatabaseError> =
-                            self.database.lock().await.get(
-                                COLLATERAL_ACCOUNT_PREFIX,
-                                input.previous_output.to_string().as_str(),
-                            );
-
-                        if let Some(_collateral_account) = result_collateral_account.ok() {
-                            collateral_account = Some(_collateral_account);
-                            collateral_account_outpoint = Some(input.previous_output);
-                            break;
-                        }
-                    }
+                    let collateral_account: Option<CollateralAccount> = self
+                        .unallocated_inputs
+                        .collateral_accounts
+                        .collateral_accounts
+                        .remove(&BlockTx::from_tuple(*contract_id).to_string());
 
                     if collateral_account.is_none() {
-                        return Some(Flaw::StateKeyNotFound);
+                        return Some(Flaw::CollateralAccountNotFound);
                     }
 
                     let mut collateral_account = collateral_account.unwrap();
+                    let collateral_account_outpoint: Option<OutPoint> = self
+                        .unallocated_inputs
+                        .helper_outpoint_collateral_accounts
+                        .remove(&collateral_account);
 
                     if let Some(oracle_message_signed) = &burn_option.oracle_message {
                         if let Some(expected_input_outpoint) =
@@ -232,24 +226,12 @@ impl Updater {
                             return Some(flaw);
                         }
 
-                        let new_outpoint = OutPoint {
-                            txid: tx.compute_txid(),
-                            vout: pointer_to_key,
-                        };
-
-                        // update collateral account
-                        if !self.is_read_only {
-                            self.database.lock().await.delete(
-                                COLLATERAL_ACCOUNT_PREFIX,
-                                collateral_account_outpoint.unwrap().to_string().as_str(),
-                            );
-
-                            self.database.lock().await.put(
-                                COLLATERAL_ACCOUNT_PREFIX,
-                                new_outpoint.to_string().as_str(),
-                                collateral_account,
-                            );
-                        }
+                        self.allocate_new_collateral_accounts(
+                            pointer_to_key,
+                            &collateral_account,
+                            BlockTx::from_tuple(*contract_id).to_string(),
+                        )
+                        .await;
                     } else {
                         return Some(Flaw::PointerKeyNotFound);
                     }

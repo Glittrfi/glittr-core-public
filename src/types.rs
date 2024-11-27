@@ -54,29 +54,6 @@ impl FromStr for BlockTx {
     }
 }
 
-// TODO: remove this, use OutPoint from bitcoin lib instead
-pub struct Outpoint {
-    pub txid: String,
-    pub vout: u32,
-}
-
-impl fmt::Display for Outpoint {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}:{}", self.txid, self.vout)
-    }
-}
-
-impl FromStr for Outpoint {
-    type Err = Box<dyn Error>;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (txid, vout) = s.split_once(':').ok_or("Split error")?;
-        Ok(Outpoint {
-            txid: txid.to_string(),
-            vout: vout.parse().expect("Invalid Outpoint vout format"),
-        })
-    }
-}
 
 /// U128 is wrapped u128, represented as string when serialized
 /// This is because JSON only supports up to u32 as integer representation

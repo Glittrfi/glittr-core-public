@@ -24,7 +24,7 @@ use glittr::{
     }, mint_only_asset::{MOAMintMechanisms, MintOnlyAssetContract}, shared::{
         FreeMint, InputAsset, OracleSetting, Preallocated, PurchaseBurnSwap,
         RatioType, VestingPlan,
-    }, spec::{MintBurnAssetSpec, MintBurnAssetSpecMint, MintOnlyAssetSpec, MintOnlyAssetSpecPegInType, SpecContract, SpecContractType}, AssetContractData, AssetList, BlockTx, CollateralAccount, Flaw, Indexer, MessageDataOutcome, Outpoint, Pubkey, U128
+    }, spec::{MintBurnAssetSpec, MintBurnAssetSpecMint, MintOnlyAssetSpec, MintOnlyAssetSpecPegInType, SpecContract, SpecContractType}, AssetContractData, AssetList, BlockTx, CollateralAccounts, Flaw, Indexer, MessageDataOutcome, Pubkey, U128
 };
 
 // Test utilities
@@ -157,8 +157,8 @@ impl TestContext {
         asset_map.expect("asset map should exist")
     }
 
-    async fn get_collateralize_accounts(&self) -> HashMap<String, CollateralAccount> {
-        let collateralize_account: Result<HashMap<String, CollateralAccount>, DatabaseError> = self
+    async fn get_collateralize_accounts(&self) -> HashMap<String, CollateralAccounts> {
+        let collateralize_account: Result<HashMap<String, CollateralAccounts>, DatabaseError> = self
             .indexer
             .lock()
             .await
@@ -184,7 +184,7 @@ impl TestContext {
         &self,
         asset_lists: &HashMap<String, AssetList>,
         block_tx_contract: &BlockTx,
-        outpoint: &Outpoint,
+        outpoint: &OutPoint,
         expected_value: u128,
     ) {
         let asset_output = asset_lists
@@ -425,8 +425,8 @@ async fn test_raw_btc_to_glittr_asset_burn() {
             == format!(
                 "{}:{}",
                 "asset_list",
-                Outpoint {
-                    txid: tx.compute_txid().to_string(),
+                OutPoint {
+                    txid: tx.compute_txid(),
                     vout: 1
                 }
                 .to_string()
@@ -542,8 +542,8 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
             == format!(
                 "{}:{}",
                 "asset_list",
-                Outpoint {
-                    txid: tx.compute_txid().to_string(),
+                OutPoint {
+                    txid: tx.compute_txid(),
                     vout: 1
                 }
                 .to_string()
@@ -681,8 +681,8 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
             == format!(
                 "{}:{}",
                 "asset_list",
-                Outpoint {
-                    txid: tx.compute_txid().to_string(),
+                OutPoint {
+                    txid: tx.compute_txid(),
                     vout: 1
                 }
                 .to_string()
@@ -840,8 +840,8 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
             == format!(
                 "{}:{}",
                 "asset_list",
-                Outpoint {
-                    txid: tx.compute_txid().to_string(),
+                OutPoint {
+                    txid: tx.compute_txid(),
                     vout: 1
                 }
                 .to_string()
@@ -980,8 +980,8 @@ async fn test_metaprotocol_to_glittr_asset() {
             == format!(
                 "{}:{}",
                 "asset_list",
-                Outpoint {
-                    txid: tx.compute_txid().to_string(),
+                OutPoint {
+                    txid: tx.compute_txid(),
                     vout: 1
                 }
                 .to_string()
@@ -1548,8 +1548,8 @@ async fn test_integration_transfer_normal() {
     ctx.verify_asset_output(
         &asset_map,
         &block_tx_contract,
-        &Outpoint {
-            txid: new_output_txid.to_string(),
+        &OutPoint {
+            txid: new_output_txid,
             vout: 1,
         },
         10_000,
@@ -1558,8 +1558,8 @@ async fn test_integration_transfer_normal() {
     ctx.verify_asset_output(
         &asset_map,
         &block_tx_contract,
-        &Outpoint {
-            txid: new_output_txid.to_string(),
+        &OutPoint {
+            txid: new_output_txid,
             vout: 2,
         },
         2500,
@@ -1570,8 +1570,8 @@ async fn test_integration_transfer_normal() {
     ctx.verify_asset_output(
         &asset_map,
         &block_tx_contract,
-        &Outpoint {
-            txid: new_output_txid.to_string(),
+        &OutPoint {
+            txid: new_output_txid,
             vout: 3,
         },
         7500,
@@ -1687,8 +1687,8 @@ async fn test_integration_transfer_overflow_output() {
     ctx.verify_asset_output(
         &asset_map,
         &block_tx_contract,
-        &Outpoint {
-            txid: new_output_txid.to_string(),
+        &OutPoint {
+            txid: new_output_txid,
             vout: 1,
         },
         20_000,
@@ -1772,8 +1772,8 @@ async fn test_integration_transfer_utxo() {
     ctx.verify_asset_output(
         &asset_map,
         &block_tx_contract,
-        &Outpoint {
-            txid: new_output_txid.to_string(),
+        &OutPoint {
+            txid: new_output_txid,
             vout: 0,
         },
         20_000,
@@ -2144,13 +2144,15 @@ async fn test_integration_collateralized_mba() {
 
     // Verify collateral accounts
     let collateral_accounts = ctx.get_collateralize_accounts().await;
+    println!("{:?}", collateral_accounts);
     assert_eq!(collateral_accounts.len(), 1);
 
-    let account = collateral_accounts.values().next().unwrap();
-    assert_eq!(account.share_amount, 100);
-    assert_eq!(account.collateral_amounts, [((3, 1), 100000)]);
-    assert_eq!(account.ltv, (5, 10)); // LTV from oracle message
-    assert_eq!(account.amount_outstanding, 50_000); // Outstanding amount from oracle message
+    let accounts = collateral_accounts.values().next().unwrap();
+    let collateral_account = accounts.collateral_accounts.get(&mba_contract.to_string()).unwrap();
+    assert_eq!(collateral_account.share_amount, 100);
+    assert_eq!(collateral_account.collateral_amounts, [((3, 1), 100000)]);
+    assert_eq!(collateral_account.ltv, (5, 10)); // LTV from oracle message
+    assert_eq!(collateral_account.amount_outstanding, 50_000); // Outstanding amount from oracle message
 
     // Create oracle message for burn
     let burn_oracle_message = OracleMessage {
@@ -2243,7 +2245,8 @@ async fn test_integration_collateralized_mba() {
     let collateral_accounts_after_burn = ctx.get_collateralize_accounts().await;
     assert_eq!(collateral_accounts_after_burn.len(), 1);
 
-    let account_after_burn = collateral_accounts_after_burn.values().next().unwrap();
+    let accounts = collateral_accounts_after_burn.values().next().unwrap();
+    let account_after_burn = accounts.collateral_accounts.get(&mba_contract.to_str()).unwrap();
     assert_eq!(account_after_burn.share_amount, 100);
     assert_eq!(account_after_burn.collateral_amounts, [((3, 1), 100000)]); // Collateral amount unchanged
     assert_eq!(account_after_burn.ltv, (3, 10)); // Updated LTV from oracle message

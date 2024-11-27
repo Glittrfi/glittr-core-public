@@ -36,6 +36,7 @@ pub enum Flaw {
     VestingBlockNotReached,
     VesteeNotFound,
     PointerKeyNotFound,
+    CollateralAccountNotFound,
     StateKeyNotFound,
     LtvMustBeUpdated,
     MaxLtvExceeded,

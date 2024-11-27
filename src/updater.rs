@@ -17,7 +17,7 @@ use bitcoin::{
     opcodes,
     script::Instruction,
     secp256k1::{schnorr::Signature, Message},
-    Address, Transaction, TxOut, XOnlyPublicKey,
+    Address, OutPoint, Transaction, TxOut, XOnlyPublicKey,
 };
 use database::{
     DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, MESSAGE_PREFIX, STATE_KEY_PREFIX,
@@ -60,9 +60,14 @@ pub struct VestingContractData {
     pub claimed_allocations: HashMap<String, u128>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct CollateralAccounts {
+    pub collateral_accounts: HashMap<BlockTxString, CollateralAccount>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default, Eq, Hash, PartialEq)]
 pub struct CollateralAccount {
-    pub contract_id: BlockTxTuple,
     pub collateral_amounts: Vec<(BlockTxTuple, u128)>,
     // TODO: remove total_collateral_amount
     pub total_collateral_amount: u128,
@@ -72,9 +77,9 @@ pub struct CollateralAccount {
 }
 
 // TODO: statekey should be general, could accept dynamic value for the key value
-#[derive(Serialize, Deserialize)]
-pub struct StateKey {
-    pub contract: BlockTxTuple,
+#[derive(Serialize, Deserialize, Default, Eq, PartialEq, Debug)]
+pub struct StateKeys {
+    pub contract_ids: HashSet<BlockTxTuple>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -93,6 +98,10 @@ pub struct SpecContractOwned {
 pub struct Allocation {
     asset_list: AssetList,
     spec_owned: SpecContractOwned,
+    state_keys: StateKeys,
+    collateral_accounts: CollateralAccounts,
+
+    helper_outpoint_collateral_accounts: HashMap<CollateralAccount, OutPoint>,
 }
 
 pub struct Updater {
@@ -116,8 +125,8 @@ impl Updater {
 
     pub async fn unallocate_inputs(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
         for tx_input in tx.input.iter() {
-            let outpoint = &Outpoint {
-                txid: tx_input.previous_output.txid.to_string(),
+            let outpoint = &OutPoint {
+                txid: tx_input.previous_output.txid,
                 vout: tx_input.previous_output.vout,
             };
 
@@ -147,6 +156,34 @@ impl Updater {
                 }
 
                 self.delete_spec_contract_owned(outpoint).await
+            }
+
+            // set state_keys
+            if let Ok(state_keys) = self.get_state_keys(outpoint).await {
+                self.unallocated_inputs.state_keys.contract_ids = self
+                    .unallocated_inputs
+                    .state_keys
+                    .contract_ids
+                    .union(&state_keys.contract_ids)
+                    .cloned()
+                    .collect();
+                self.delete_state_keys(outpoint).await
+            }
+
+            // set collateral_account
+            if let Ok(collateral_accounts) = self.get_collateral_accounts(outpoint).await {
+                for (contract_id, collateral_account) in collateral_accounts.collateral_accounts {
+                    self.unallocated_inputs
+                        .collateral_accounts
+                        .collateral_accounts
+                        .insert(contract_id, collateral_account.clone());
+
+                    self.unallocated_inputs
+                        .helper_outpoint_collateral_accounts
+                        .insert(collateral_account, *outpoint);
+                }
+
+                self.delete_collateral_accounts(outpoint).await
             }
         }
 
@@ -204,7 +241,7 @@ impl Updater {
     }
 
     pub async fn commit_outputs(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
-        let txid = tx.compute_txid().to_string();
+        let txid = tx.compute_txid();
 
         if let Some(vout) = self.first_non_op_return_index(tx) {
             // asset
@@ -222,12 +259,31 @@ impl Updater {
             for spec_contract_id in specs.iter() {
                 self.move_spec_allocation(vout, spec_contract_id).await;
             }
+
+            // state keys
+            let state_keys_contract_ids = &self.unallocated_inputs.state_keys.contract_ids.clone();
+            for contract_id in state_keys_contract_ids {
+                self.move_state_keys_allocation(vout, contract_id).await;
+            }
+
+            // collateral accounts
+            let collateral_accounts = &self
+                .unallocated_inputs
+                .collateral_accounts
+                .collateral_accounts
+                .clone();
+
+            for (contract_id, collateral_account) in collateral_accounts {
+                println!("moved {:?}", collateral_account);
+                self.move_collateral_account_allocation(vout, collateral_account, BlockTx::from_str(&contract_id).unwrap().to_string())
+                    .await;
+            }
         } else {
             log::info!("No non op_return index, unallocated inputs are lost");
         }
 
         for allocation in self.allocated_outputs.iter() {
-            let outpoint = &Outpoint {
+            let outpoint = &OutPoint {
                 txid: txid.clone(),
                 vout: *allocation.0,
             };
@@ -235,6 +291,10 @@ impl Updater {
             self.set_asset_list(outpoint, &allocation.1.asset_list)
                 .await;
             self.set_spec_contract_owned(outpoint, &allocation.1.spec_owned)
+                .await;
+            self.set_state_keys(outpoint, &allocation.1.state_keys)
+                .await;
+            self.set_collateral_accounts(outpoint, &allocation.1.collateral_accounts)
                 .await;
         }
 
@@ -371,19 +431,11 @@ impl Updater {
                                         {
                                             outcome.flaw = Some(flaw)
                                         } else {
-                                            let new_outpoint = Outpoint {
-                                                txid: tx.compute_txid().to_string(),
-                                                vout: pointer_to_key,
-                                            };
-                                            if !self.is_read_only {
-                                                self.database.lock().await.put(
-                                                    STATE_KEY_PREFIX,
-                                                    new_outpoint.to_string().as_str(),
-                                                    StateKey {
-                                                        contract: block_tx.to_tuple(),
-                                                    },
-                                                );
-                                            }
+                                            self.allocate_new_state_key(
+                                                pointer_to_key,
+                                                &block_tx.to_tuple(),
+                                            )
+                                            .await;
                                         }
                                     }
                                 }
@@ -509,7 +561,7 @@ impl Updater {
         None
     }
 
-    async fn delete_asset(&self, outpoint: &Outpoint) {
+    async fn delete_asset(&self, outpoint: &OutPoint) {
         if !self.is_read_only {
             self.database
                 .lock()
@@ -518,7 +570,7 @@ impl Updater {
         }
     }
 
-    pub async fn get_asset_list(&self, outpoint: &Outpoint) -> Result<AssetList, Flaw> {
+    pub async fn get_asset_list(&self, outpoint: &OutPoint) -> Result<AssetList, Flaw> {
         let result: Result<AssetList, DatabaseError> = self
             .database
             .lock()
@@ -532,7 +584,7 @@ impl Updater {
         }
     }
 
-    async fn set_asset_list(&self, outpoint: &Outpoint, asset_list: &AssetList) {
+    async fn set_asset_list(&self, outpoint: &OutPoint, asset_list: &AssetList) {
         if !self.is_read_only {
             self.database
                 .lock()
