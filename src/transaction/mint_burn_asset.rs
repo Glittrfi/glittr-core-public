@@ -42,7 +42,7 @@ pub struct SwapMechanisms {
 #[serde(rename_all = "snake_case")]
 pub struct Collateralized {
     pub input_assets: Vec<InputAsset>,
-    pub is_asset_mutable: bool,
+    pub _mutable_assets: bool,
     pub mint_structure: MintStructure,
 }
 
@@ -73,7 +73,6 @@ pub struct ProportionalType {
 #[serde(rename_all = "snake_case")]
 pub enum RatioModel {
     ConstantProduct
-    // TODO: more ratio model
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]

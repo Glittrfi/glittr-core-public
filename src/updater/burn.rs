@@ -26,7 +26,8 @@ impl Updater {
         };
 
         let burned_amount = self
-        .unallocated_inputs.asset_list
+            .unallocated_inputs
+            .asset_list
             .list
             .remove(&BlockTx::from_tuple(*contract_id).to_str())
             .unwrap_or(0);
@@ -44,6 +45,7 @@ impl Updater {
                         burn_option,
                         &tx,
                         &block_tx,
+                        true,
                     );
 
                     if let Ok(_out_value) = process_ratio_result {
@@ -198,13 +200,26 @@ impl Updater {
                                     return Some(Flaw::BurnValueIncorrect);
                                 }
 
-                                let burned_amount = burned_amount - out_value.0;
+                                let burned_remainder = burned_amount - out_value.0;
 
-                                if burned_amount > 0 {
-                                    self.unallocated_inputs.asset_list.list.insert(
-                                        BlockTx::from_tuple(*contract_id).to_str(),
-                                        burned_amount,
-                                    );
+                                if burned_remainder > 0 {
+                                    if let Some(pointer) = burn_option.pointer {
+                                        if let Some(flaw) = self.validate_pointer(pointer, tx) {
+                                            return Some(flaw);
+                                        }
+
+                                        self.allocate_new_asset(
+                                            pointer,
+                                            &contract_id,
+                                            burned_remainder,
+                                        )
+                                        .await;
+                                    } else {
+                                        self.unallocated_inputs.asset_list.list.insert(
+                                            BlockTx::from_tuple(*contract_id).to_str(),
+                                            burned_remainder,
+                                        );
+                                    }
                                 }
                             } else {
                                 return Some(Flaw::OutValueNotFound);

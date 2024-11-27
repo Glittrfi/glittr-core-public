@@ -165,6 +165,7 @@ impl Updater {
             &mint_option,
             &tx,
             &block_tx,
+            false,
         );
 
         if let Ok(_out_value) = ratio_block_result {
@@ -480,10 +481,15 @@ impl Updater {
         mint_option: &MintBurnOption,
         tx: &Transaction,
         block_tx: &BlockTx,
+        is_burn: bool
     ) -> Result<u128, Flaw> {
         match ratio {
             RatioType::Fixed { ratio } => {
-                Ok((total_received_value * ratio.0 as u128) / ratio.1 as u128)
+                if !is_burn {
+                    Ok((total_received_value * ratio.0 as u128) / ratio.1 as u128)
+                } else {
+                    Ok((total_received_value * ratio.1 as u128) / ratio.0 as u128)
+                }
             }
             RatioType::Oracle { setting } => {
                 if let Some(oracle_message_signed) = &mint_option.oracle_message {

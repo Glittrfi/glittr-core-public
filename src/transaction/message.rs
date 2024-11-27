@@ -232,7 +232,8 @@ mod test {
     use crate::transaction::mint_only_asset::MintOnlyAssetContract;
     use crate::U128;
 
-    use super::shared::{FreeMint, MintMechanisms};
+    use super::mint_only_asset::MOAMintMechanisms;
+    use super::shared::FreeMint;
     use super::{ContractCreation, OpReturnMessage};
 
     fn create_dummy_tx() -> Transaction {
@@ -244,7 +245,7 @@ mod test {
                     supply_cap: Some(U128(1000)),
                     divisibility: 18,
                     live_time: 0,
-                    mint_mechanism: MintMechanisms {
+                    mint_mechanism: MOAMintMechanisms {
                         free_mint: Some(FreeMint {
                             supply_cap: Some(U128(1000)),
                             amount_per_mint: U128(10),
@@ -253,7 +254,7 @@ mod test {
                         purchase: None,
                     },
                 }),
-                spec: None
+                spec: None,
             }),
             contract_call: None,
         };

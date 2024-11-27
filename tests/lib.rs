@@ -21,8 +21,8 @@ use glittr::{
     }, mint_burn_asset::{
         AccountType, BurnMechanisms, Collateralized, MBAMintMechanisms, MintBurnAssetContract,
         MintStructure, ProportionalType, RatioModel, ReturnCollateral, SwapMechanisms,
-    }, mint_only_asset::MintOnlyAssetContract, shared::{
-        FreeMint, InputAsset, MintMechanisms, OracleSetting, Preallocated, PurchaseBurnSwap,
+    }, mint_only_asset::{MOAMintMechanisms, MintOnlyAssetContract}, shared::{
+        FreeMint, InputAsset, OracleSetting, Preallocated, PurchaseBurnSwap,
         RatioType, VestingPlan,
     }, spec::{MintBurnAssetSpec, MintBurnAssetSpecMint, MintOnlyAssetSpec, MintOnlyAssetSpecPegInType, SpecContract, SpecContractType}, AssetContractData, AssetList, BlockTx, CollateralAccount, Flaw, Indexer, MessageDataOutcome, Outpoint, Pubkey, U128
 };
@@ -275,7 +275,7 @@ async fn test_integration_broadcast_op_return_message_success() {
                 supply_cap: Some(U128(1000)),
                 divisibility: 18,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(1000)),
                         amount_per_mint: U128(10),
@@ -309,7 +309,7 @@ async fn test_integration_purchaseburnswap() {
                 supply_cap: Some(U128(1000)),
                 divisibility: 18,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
                         pay_to_key: None,
@@ -344,7 +344,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
                 supply_cap: None,
                 divisibility: 18,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
                         pay_to_key: None,
@@ -464,7 +464,7 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
                 supply_cap: Some(U128(21_000_000 * 10u128.pow(8))),
                 divisibility: 8,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
                         pay_to_key: Some(contract_treasury_pub_key.to_bytes()),
@@ -569,7 +569,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
                 supply_cap: None,
                 divisibility: 18,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
                         pay_to_key: None,
@@ -733,7 +733,7 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
                 supply_cap: Some(U128(21_000_000 * 10u128.pow(8))),
                 divisibility: 8,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
                         pay_to_key: Some(treasury_address_pub_key.to_bytes()),
@@ -866,7 +866,7 @@ async fn test_metaprotocol_to_glittr_asset() {
                 supply_cap: None,
                 divisibility: 18,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::Rune,
                         pay_to_key: None,
@@ -1003,7 +1003,7 @@ async fn test_integration_freemint() {
                 supply_cap: Some(U128(1000)),
                 divisibility: 18,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(1000)),
                         amount_per_mint: U128(10),
@@ -1035,7 +1035,7 @@ async fn test_integration_mint_freemint() {
                 supply_cap: Some(U128(1000)),
                 divisibility: 18,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(1000)),
                         amount_per_mint: U128(10),
@@ -1102,7 +1102,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
                 supply_cap: Some(U128(50)),
                 divisibility: 18,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(50)),
                         amount_per_mint: U128(50),
@@ -1178,7 +1178,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
                 supply_cap: Some(U128(1000)),
                 divisibility: 18,
                 live_time: 5,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(1000)),
                         amount_per_mint: U128(50),
@@ -1300,7 +1300,7 @@ async fn test_integration_mint_preallocated_freemint() {
                 supply_cap: Some(U128(1000)),
                 divisibility: 18,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     preallocated: Some(Preallocated {
                         // total 400 + 300 = 700
                         allocations,
@@ -1403,7 +1403,7 @@ async fn test_integration_mint_freemint_invalidpointer() {
                 supply_cap: Some(U128(1000)),
                 divisibility: 18,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(1000)),
                         amount_per_mint: U128(50),
@@ -1456,7 +1456,7 @@ async fn test_integration_transfer_normal() {
                 supply_cap: Some(U128(100_000)),
                 divisibility: 18,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(100_000)),
                         amount_per_mint: U128(20_000),
@@ -1592,7 +1592,7 @@ async fn test_integration_transfer_overflow_output() {
                 supply_cap: Some(U128(100_000)),
                 divisibility: 18,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(100_000)),
                         amount_per_mint: U128(20_000),
@@ -1709,7 +1709,7 @@ async fn test_integration_transfer_utxo() {
                 supply_cap: Some(U128(100_000)),
                 divisibility: 18,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(100_000)),
                         amount_per_mint: U128(20_000),
@@ -1795,7 +1795,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
                 supply_cap: Some(U128(1000)),
                 divisibility: 18,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(1000)),
                         amount_per_mint: U128(100),
@@ -1837,7 +1837,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
                 supply_cap: Some(U128(500)),
                 divisibility: 18,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::GlittrAsset(first_contract.to_tuple()),
                         pay_to_key: Some(treasury_pub_key.to_bytes()),
@@ -1933,7 +1933,7 @@ async fn test_integration_collateralized_mba() {
                 supply_cap: Some(U128(1_000_000)),
                 divisibility: 18,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(1_000_000)),
                         amount_per_mint: U128(100_000),
@@ -1979,7 +1979,7 @@ async fn test_integration_collateralized_mba() {
                     purchase: None,
                     collateralized: Some(Collateralized {
                         input_assets: vec![InputAsset::GlittrAsset(collateral_contract.to_tuple())],
-                        is_asset_mutable: false,
+                        _mutable_assets: false,
                         mint_structure: MintStructure::Account(AccountType {
                             max_ltv: (7, 10),
                             ratio: RatioType::Oracle {
@@ -2408,7 +2408,7 @@ async fn test_integration_proportional_mba_lp() {
                 supply_cap: Some(U128(1_000_000)),
                 divisibility: 18,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(1_000_000)),
                         amount_per_mint: U128(100_000),
@@ -2430,7 +2430,7 @@ async fn test_integration_proportional_mba_lp() {
                 supply_cap: Some(U128(1_000_000)),
                 divisibility: 18,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(U128(1_000_000)),
                         amount_per_mint: U128(50_000),
@@ -2495,7 +2495,7 @@ async fn test_integration_proportional_mba_lp() {
                             InputAsset::GlittrAsset(token1_contract.to_tuple()),
                             InputAsset::GlittrAsset(token2_contract.to_tuple()),
                         ],
-                        is_asset_mutable: false,
+                        _mutable_assets: false,
                         mint_structure: MintStructure::Proportional(ProportionalType {
                             ratio_model: RatioModel::ConstantProduct,
                             inital_mint_pointer_to_key: None,
@@ -2965,7 +2965,7 @@ async fn test_integration_spec_moa_valid_contract_creation() {
                 supply_cap: Some(U128(1000)),
                 divisibility: 18,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::Rune,
                         pay_to_key: Some(address_pubkey.to_bytes()),
@@ -3020,7 +3020,7 @@ async fn test_integration_spec_moa_input_asset_invalid() {
                 supply_cap: Some(U128(1000)),
                 divisibility: 18,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
                         pay_to_key: None,
@@ -3079,7 +3079,7 @@ async fn test_integration_spec_moa_peg_in_type_invalid() {
                 supply_cap: Some(U128(1000)),
                 divisibility: 18,
                 live_time: 0,
-                mint_mechanism: MintMechanisms {
+                mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::Rune,
                         pay_to_key: None,

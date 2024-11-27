@@ -58,6 +58,7 @@ impl Updater {
                     &mint_option,
                     &tx,
                     &block_tx,
+                    false,
                 );
 
                 if let Ok(_out_value) = process_ratio_result {
@@ -89,25 +90,24 @@ impl Updater {
                 }
 
                 let mut collateral_account = collateral_account.unwrap();
-
-                // get collateral account
-                let available_amount = collateral_account.total_collateral_amount
-                    - (collateral_account
-                        .total_collateral_amount
-                        .saturating_mul(collateral_account.ltv.0 as u128))
-                    .saturating_div(collateral_account.ltv.1 as u128);
-
-                // Allowed amount = min(total_amount * max_ltv, available_amount)
-                let allowed_amount = min(
-                    collateral_account
-                        .total_collateral_amount
-                        .saturating_mul(account_type.max_ltv.0 as u128)
-                        .saturating_div(account_type.max_ltv.1 as u128),
-                    available_amount,
-                );
-
                 match account_type.ratio {
                     shared::RatioType::Fixed { ratio } => {
+                        // get collateral account
+                        let available_amount = collateral_account.total_collateral_amount
+                            - (collateral_account
+                                .total_collateral_amount
+                                .saturating_mul(collateral_account.ltv.0 as u128))
+                            .saturating_div(collateral_account.ltv.1 as u128);
+
+                        // Allowed amount = min(total_amount * max_ltv, available_amount)
+                        let allowed_amount = min(
+                            collateral_account
+                                .total_collateral_amount
+                                .saturating_mul(account_type.max_ltv.0 as u128)
+                                .saturating_div(account_type.max_ltv.1 as u128),
+                            available_amount,
+                        );
+
                         out_value = allowed_amount
                             .saturating_mul(ratio.0 as u128)
                             .saturating_div(ratio.1 as u128);
@@ -130,6 +130,7 @@ impl Updater {
                                     return Some(Flaw::OracleMintBlockSlippageExceeded);
                                 }
 
+                                // TODO: create a shared function to validate the oracle message
                                 let pubkey: XOnlyPublicKey =
                                     XOnlyPublicKey::from_slice(&setting.pubkey.as_slice()).unwrap();
 
@@ -212,7 +213,8 @@ impl Updater {
                 }
             }
             mint_burn_asset::MintStructure::Proportional(proportional_type) => {
-                if let RatioModel::ConstantProduct = proportional_type.ratio_model {
+                match proportional_type.ratio_model {
+                    RatioModel::ConstantProduct => {
                     let mut first_asset_id: BlockTxTuple = (0, 0);
                     let mut second_asset_id: BlockTxTuple = (0, 0);
                     if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[0] {
@@ -224,13 +226,15 @@ impl Updater {
                     }
 
                     let input_first_asset = self
-                    .unallocated_inputs.asset_list
+                        .unallocated_inputs
+                        .asset_list
                         .list
                         .remove(&BlockTx::from_tuple(first_asset_id).to_str())
                         .unwrap_or(0);
 
                     let input_second_asset = self
-                    .unallocated_inputs.asset_list
+                        .unallocated_inputs
+                        .asset_list
                         .list
                         .remove(&BlockTx::from_tuple(second_asset_id).to_str())
                         .unwrap_or(0);
@@ -328,7 +332,7 @@ impl Updater {
                         }
                         Err(_) => return Some(Flaw::FailedDeserialization),
                     }
-                }
+                }}
             }
         }
 
@@ -450,8 +454,8 @@ impl Updater {
                             for input_asset in collateralized.input_assets {
                                 if let InputAsset::GlittrAsset(asset_id) = input_asset {
                                     let burned_amount = self
-                                    .unallocated_inputs.asset_list
-
+                                        .unallocated_inputs
+                                        .asset_list
                                         .list
                                         .remove(&BlockTx::from_tuple(asset_id).to_str())
                                         .unwrap_or(0);
@@ -529,7 +533,8 @@ impl Updater {
                             for input_asset in collateralized.input_assets.clone() {
                                 if let InputAsset::GlittrAsset(asset_id) = input_asset {
                                     let amount = self
-                                    .unallocated_inputs.asset_list
+                                        .unallocated_inputs
+                                        .asset_list
                                         .list
                                         .remove(&BlockTx::from_tuple(asset_id).to_str())
                                         .unwrap_or(0);

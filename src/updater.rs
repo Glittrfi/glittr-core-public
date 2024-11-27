@@ -71,6 +71,7 @@ pub struct CollateralAccount {
     pub share_amount: u128, // TODO: implement
 }
 
+// TODO: statekey should be general, could accept dynamic value for the key value
 #[derive(Serialize, Deserialize)]
 pub struct StateKey {
     pub contract: BlockTxTuple,

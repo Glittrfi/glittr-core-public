@@ -1,7 +1,15 @@
 use flaw::Flaw;
-use shared::MintMechanisms;
+use shared::{FreeMint, Preallocated, PurchaseBurnSwap};
 
 use super::*;
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct MOAMintMechanisms {
+    pub preallocated: Option<Preallocated>,
+    pub free_mint: Option<FreeMint>,
+    pub purchase: Option<PurchaseBurnSwap>,
+}
 
 #[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -11,7 +19,7 @@ pub struct MintOnlyAssetContract {
     pub supply_cap: Option<U128>,
     pub divisibility: u8,
     pub live_time: BlockHeight,
-    pub mint_mechanism: MintMechanisms,
+    pub mint_mechanism: MOAMintMechanisms,
 }
 
 /// Mix of distribution schemes only applicable for preallocated and free_mint or preallocated and purchase
