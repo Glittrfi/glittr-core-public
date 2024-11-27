@@ -31,7 +31,7 @@ pub struct MintBurnOption {
 
 #[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct SwapOption {
+pub struct SwapOption { // TODO: expected in, expected out, expected pool supply
     pub pointer: u32,
 }
 
