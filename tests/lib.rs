@@ -29,8 +29,8 @@ use glittr::{
         FreeMint, InputAsset, OracleSetting, Preallocated, PurchaseBurnSwap, RatioType, VestingPlan,
     },
     spec::{
-        MintBurnAssetCollateralizedSpec, MintBurnAssetSpec, MintBurnAssetSpecMint,
-        MintOnlyAssetSpec, MintOnlyAssetSpecPegInType, SpecContract, SpecContractType,
+        MintBurnAssetCollateralizedSpec, MintBurnAssetSpec, MintOnlyAssetSpec,
+        MintOnlyAssetSpecPegInType, SpecContract, SpecContractType,
     },
     AssetContractData, AssetList, BlockTx, CollateralAccounts, Flaw, Indexer, MessageDataOutcome,
     Pubkey, U128,
@@ -2775,7 +2775,9 @@ async fn test_integration_spec_update() {
                     collateralized: Some(MintBurnAssetCollateralizedSpec {
                         _mutable_assets: true,
                         input_assets: vec![InputAsset::Rune].into(),
-                        mint: Some(MintBurnAssetSpecMint::Proportional),
+                        mint_structure: Some(MintStructure::Ratio(RatioType::Fixed {
+                            ratio: (10, 10),
+                        })),
                     }),
                 }),
                 block_tx: None,
@@ -2801,7 +2803,7 @@ async fn test_integration_spec_update() {
                             InputAsset::Ordinal,
                         ]
                         .into(),
-                        mint: None,
+                        mint_structure: None,
                     }),
                 }),
                 block_tx: Some(block_tx_contract.to_tuple()),
@@ -2840,7 +2842,7 @@ async fn test_integration_spec_update() {
                     collateralized: Some(MintBurnAssetCollateralizedSpec {
                         _mutable_assets: true,
                         input_assets: vec![InputAsset::Rune, InputAsset::RawBtc].into(),
-                        mint: None,
+                        mint_structure: None,
                     }),
                 }),
                 block_tx: Some(block_tx_contract.to_tuple()),
@@ -2920,7 +2922,9 @@ async fn test_integration_spec_update_not_allowed() {
                     collateralized: Some(MintBurnAssetCollateralizedSpec {
                         _mutable_assets: true,
                         input_assets: vec![InputAsset::Rune].into(),
-                        mint: Some(MintBurnAssetSpecMint::Proportional),
+                        mint_structure: Some(MintStructure::Ratio(RatioType::Fixed {
+                            ratio: (10, 10),
+                        })),
                     }),
                 }),
                 block_tx: None,
@@ -2946,7 +2950,7 @@ async fn test_integration_spec_update_not_allowed() {
                             InputAsset::Ordinal,
                         ]
                         .into(),
-                        mint: None,
+                        mint_structure: None,
                     }),
                 }),
                 block_tx: Some(block_tx_contract.to_tuple()),
@@ -3140,4 +3144,3 @@ async fn test_integration_spec_moa_peg_in_type_invalid() {
 
     ctx.drop().await;
 }
-

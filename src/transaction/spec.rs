@@ -1,14 +1,8 @@
 use bitcoin::PublicKey;
+use mint_burn_asset::MintStructure;
 use shared::InputAsset;
 
 use super::*;
-
-#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
-#[serde(rename_all = "snake_case")]
-pub enum MintBurnAssetSpecMint {
-    Proportional,
-    Fixed,
-}
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -17,7 +11,7 @@ pub struct MintBurnAssetCollateralizedSpec {
     // and can be updated
     pub _mutable_assets: bool,
     pub input_assets: Option<Vec<InputAsset>>,
-    pub mint: Option<MintBurnAssetSpecMint>,
+    pub mint_structure: Option<MintStructure>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -33,7 +27,7 @@ impl MintBurnAssetSpec {
                 return Some(Flaw::SpecFieldRequired("input_assets".to_string()));
             }
 
-            if collateralized.mint.is_none() {
+            if collateralized.mint_structure.is_none() {
                 return Some(Flaw::SpecFieldRequired("mint".to_string()));
             }
         } else {
@@ -164,8 +158,9 @@ impl SpecContract {
 #[cfg(test)]
 mod test {
     use crate::{
-        shared::InputAsset,
-        spec::{MintBurnAssetCollateralizedSpec, MintBurnAssetSpec, MintBurnAssetSpecMint},
+        mint_burn_asset::MintStructure,
+        shared::{InputAsset, RatioType},
+        spec::{MintBurnAssetCollateralizedSpec, MintBurnAssetSpec},
         BlockTxTuple, Flaw,
     };
 
@@ -223,7 +218,9 @@ mod test {
                 collateralized: Some(MintBurnAssetCollateralizedSpec {
                     _mutable_assets: false,
                     input_assets: Some(vec![InputAsset::Rune]),
-                    mint: Some(MintBurnAssetSpecMint::Proportional),
+                    mint_structure: Some(MintStructure::Ratio(RatioType::Fixed {
+                        ratio: (10, 10),
+                    })),
                 }),
             }),
             block_tx: None,
@@ -240,7 +237,7 @@ mod test {
                 collateralized: Some(MintBurnAssetCollateralizedSpec {
                     _mutable_assets: true,
                     input_assets: Some(vec![InputAsset::Rune]),
-                    mint: None,
+                    mint_structure: None,
                 }),
             }),
             block_tx: None,
@@ -257,7 +254,7 @@ mod test {
                 collateralized: Some(MintBurnAssetCollateralizedSpec {
                     _mutable_assets: true,
                     input_assets: Some(vec![InputAsset::Rune]),
-                    mint: None,
+                    mint_structure: None,
                 }),
             }),
             block_tx: Some(BlockTxTuple::default()),
@@ -274,7 +271,7 @@ mod test {
                 collateralized: Some(MintBurnAssetCollateralizedSpec {
                     _mutable_assets: true,
                     input_assets: Some(vec![InputAsset::Rune]),
-                    mint: None,
+                    mint_structure: None,
                 }),
             }),
             block_tx: Some(BlockTxTuple::default()),

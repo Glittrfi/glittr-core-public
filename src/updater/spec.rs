@@ -183,7 +183,7 @@ impl Updater {
                     let collateralized = mba_spec.clone().collateralized.unwrap();
                     prev_mba_spec.collateralized = Some(MintBurnAssetCollateralizedSpec {
                         input_assets: collateralized.input_assets,
-                        ..*prev_collateralized
+                        ..prev_collateralized.clone()
                     });
                 }
 
