@@ -100,8 +100,8 @@ impl SpecContract {
                 SpecContractType::MintOnlyAsset(_) => {
                     return Some(Flaw::SpecNotMutable);
                 }
-                SpecContractType::MintBurnAsset(moa_spec) => {
-                    if let Some(collateralized) = &moa_spec.collateralized {
+                SpecContractType::MintBurnAsset(mba_spec) => {
+                    if let Some(collateralized) = &mba_spec.collateralized {
                         if collateralized._mutable_assets {
                             if collateralized.input_assets.is_none() {
                                 return Some(Flaw::SpecFieldRequired("input_assets".to_string()));
@@ -128,8 +128,8 @@ impl SpecContract {
                         return Some(Flaw::SpecFieldNotNecessary("pointer".to_string()));
                     }
                 }
-                SpecContractType::MintBurnAsset(moa_spec) => {
-                    if let Some(collateralized) = &moa_spec.collateralized {
+                SpecContractType::MintBurnAsset(mba_spec) => {
+                    if let Some(collateralized) = &mba_spec.collateralized {
                         if collateralized._mutable_assets {
                             if self.pointer.is_none() {
                                 return Some(Flaw::SpecFieldRequired("pointer".to_string()));
