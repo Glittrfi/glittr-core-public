@@ -124,7 +124,26 @@ impl Updater {
                 _ => return Some(Flaw::SpecCriteriaInvalid),
             },
             SpecContractType::MintBurnAsset(mint_burn_asset_spec) => match contract_type {
-                ContractType::Mba(mint_burn_asset) => {}
+                ContractType::Mba(mint_burn_asset) => {
+                    if let Some(collateralized_spec) = mint_burn_asset_spec.collateralized {
+                        if let Some(collateralized) = &mint_burn_asset.mint_mechanism.collateralized
+                        {
+                            if collateralized.input_assets
+                                != collateralized_spec.input_assets.unwrap()
+                            {
+                                return Some(Flaw::SpecCriteriaInvalid);
+                            }
+
+                            if collateralized.mint_structure
+                                != collateralized_spec.mint_structure.unwrap()
+                            {
+                                return Some(Flaw::SpecCriteriaInvalid);
+                            }
+                        } else {
+                            return Some(Flaw::SpecCriteriaInvalid);
+                        }
+                    }
+                }
                 _ => return Some(Flaw::SpecCriteriaInvalid),
             },
         };

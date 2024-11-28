@@ -46,7 +46,7 @@ pub struct Collateralized {
     pub mint_structure: MintStructure,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum MintStructure {
     Ratio(RatioType),
@@ -54,14 +54,14 @@ pub enum MintStructure {
     Account(AccountType),
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct AccountType {
     pub max_ltv: Fraction,
     pub ratio: RatioType,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct ProportionalType {
     pub ratio_model: RatioModel,
@@ -69,7 +69,7 @@ pub struct ProportionalType {
     pub inital_mint_pointer_to_key: Option<u32>, 
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum RatioModel {
     ConstantProduct
