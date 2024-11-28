@@ -1,5 +1,5 @@
 use bitcoin::PublicKey;
-use mint_only_asset::InputAsset;
+use shared::InputAsset;
 
 use super::*;
 
@@ -143,10 +143,10 @@ impl SpecContract {
 
 #[cfg(test)]
 mod test {
-    use crate::{spec::{MintBurnAssetSpec, MintBurnAssetSpecMint}, BlockTxTuple, Flaw};
+    use crate::{shared::InputAsset, spec::{MintBurnAssetSpec, MintBurnAssetSpecMint}, BlockTxTuple, Flaw};
 
     use super::{
-        mint_only_asset::InputAsset, MintOnlyAssetSpec, MintOnlyAssetSpecPegInType, SpecContract,
+        MintOnlyAssetSpec, MintOnlyAssetSpecPegInType, SpecContract,
         SpecContractType,
     };
 

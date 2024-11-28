@@ -35,6 +35,24 @@ pub enum Flaw {
     MintedZero,
     VestingBlockNotReached,
     VesteeNotFound,
+    PointerKeyNotFound,
+    CollateralAccountNotFound,
+    StateKeyNotFound,
+    LtvMustBeUpdated,
+    MaxLtvExceeded,
+    OutValueNotFound,
+    OutstandingMustBeUpdated,
+
+    // call type::burn
+    BurnValueIncorrect,
+
+    // call type::close account
+    LtvMustBeZero,
+    OutstandingMustBeZero,
+    
+    // call type: swap
+    InsufficientInputAmount,
+    InsufficientOutputAmount,
 
     // asset contract
     OverflowAmountPerMint,
@@ -43,6 +61,14 @@ pub enum Flaw {
     OracleMessageFormatInvalid,
     SupplyCapInvalid,
     SupplyRemainder,
+    FractionInvalid,
+    InvalidContractType,
+
+    // asset contract: mba
+    InvalidInputAssetCount,
+    InvalidConstantProduct,
+    InputAssetsOnlyOneForRatio,
+    InputAssetsOnlyTwoForProportional,
 
     // spec
     SpecNotMutable,
@@ -55,4 +81,5 @@ pub enum Flaw {
 
     NotImplemented,
     NonGlittrMessage,
+    PoolNotFound,
 }

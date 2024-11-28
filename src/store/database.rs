@@ -9,6 +9,9 @@ pub const TRANSACTION_TO_BLOCK_TX_PREFIX: &str = "tx_to_blocktx";
 pub const ASSET_LIST_PREFIX: &str = "asset_list";
 pub const ASSET_CONTRACT_DATA_PREFIX: &str = "asset_contract_data";
 pub const VESTING_CONTRACT_DATA_PREFIX: &str = "vesting_contract_data";
+pub const COLLATERAL_ACCOUNT_PREFIX: &str = "collateral_account";
+pub const POOL_DATA_PREFIX: &str = "pool_data";
+pub const STATE_KEY_PREFIX: &str = "state_key";
 pub const SPEC_CONTRACT_OWNED_PREFIX: &str = "spec_contract_owned";
 
 pub struct Database {

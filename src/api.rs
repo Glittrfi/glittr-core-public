@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
 use super::*;
 use axum::{
@@ -7,7 +7,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use bitcoin::{consensus::deserialize, Transaction};
+use bitcoin::{consensus::deserialize, OutPoint, Transaction, Txid};
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use serde_json::{json, Value};
 use store::database::{DatabaseError, MESSAGE_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX};
@@ -114,7 +114,7 @@ async fn get_assets(
     Path((txid, vout)): Path<(String, u32)>,
 ) -> Result<Json<Value>, StatusCode> {
     let updater = Updater::new(state.database, true).await;
-    let outpoint = Outpoint { txid, vout };
+    let outpoint = OutPoint {     txid: Txid::from_str(txid.as_str()).unwrap()       , vout };
     if let Ok(asset_list) = updater.get_asset_list(&outpoint).await {
         Ok(Json(json!({"assets": asset_list})))
     } else {

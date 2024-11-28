@@ -1,4 +1,9 @@
+mod burn;
+mod collateralized;
 mod mint;
+mod updater_shared;
+
+pub use updater_shared::*;
 mod spec;
 
 use std::{
@@ -12,15 +17,16 @@ use bitcoin::{
     opcodes,
     script::Instruction,
     secp256k1::{schnorr::Signature, Message},
-    Address, Transaction, TxOut, XOnlyPublicKey,
+    Address, OutPoint, Transaction, TxOut, XOnlyPublicKey,
 };
 use database::{
-    DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, MESSAGE_PREFIX,
+    DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, MESSAGE_PREFIX, STATE_KEY_PREFIX,
     TRANSACTION_TO_BLOCK_TX_PREFIX, VESTING_CONTRACT_DATA_PREFIX,
 };
 use flaw::Flaw;
 use message::{CallType, ContractType, OpReturnMessage, TxTypeTransfer};
-use mint_only_asset::{InputAsset, MintOnlyAssetContract, PurchaseBurnSwap, VestingPlan};
+use mint_only_asset::MintOnlyAssetContract;
+use shared::{InputAsset, PurchaseBurnSwap, VestingPlan};
 
 use super::*;
 
@@ -54,6 +60,34 @@ pub struct VestingContractData {
     pub claimed_allocations: HashMap<String, u128>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Default, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct CollateralAccounts {
+    pub collateral_accounts: HashMap<BlockTxString, CollateralAccount>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default, Eq, Hash, PartialEq)]
+pub struct CollateralAccount {
+    pub collateral_amounts: Vec<(BlockTxTuple, u128)>,
+    // TODO: remove total_collateral_amount
+    pub total_collateral_amount: u128,
+    pub ltv: Fraction, // ltv = total_amount_used / total_collateral_amount (in lending amount)
+    pub amount_outstanding: u128,
+    pub share_amount: u128, // TODO: implement
+}
+
+// TODO: statekey should be general, could accept dynamic value for the key value
+#[derive(Serialize, Deserialize, Default, Eq, PartialEq, Debug)]
+pub struct StateKeys {
+    pub contract_ids: HashSet<BlockTxTuple>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct PoolData {
+    amounts: [u128; 2],
+    total_supply: u128,
+}
+
 #[derive(Deserialize, Serialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct SpecContractOwned {
@@ -64,6 +98,10 @@ pub struct SpecContractOwned {
 pub struct Allocation {
     asset_list: AssetList,
     spec_owned: SpecContractOwned,
+    state_keys: StateKeys,
+    collateral_accounts: CollateralAccounts,
+
+    helper_outpoint_collateral_accounts: HashMap<CollateralAccount, OutPoint>,
 }
 
 pub struct Updater {
@@ -87,8 +125,8 @@ impl Updater {
 
     pub async fn unallocate_inputs(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
         for tx_input in tx.input.iter() {
-            let outpoint = &Outpoint {
-                txid: tx_input.previous_output.txid.to_string(),
+            let outpoint = &OutPoint {
+                txid: tx_input.previous_output.txid,
                 vout: tx_input.previous_output.vout,
             };
 
@@ -118,6 +156,34 @@ impl Updater {
                 }
 
                 self.delete_spec_contract_owned(outpoint).await
+            }
+
+            // set state_keys
+            if let Ok(state_keys) = self.get_state_keys(outpoint).await {
+                self.unallocated_inputs.state_keys.contract_ids = self
+                    .unallocated_inputs
+                    .state_keys
+                    .contract_ids
+                    .union(&state_keys.contract_ids)
+                    .cloned()
+                    .collect();
+                self.delete_state_keys(outpoint).await
+            }
+
+            // set collateral_account
+            if let Ok(collateral_accounts) = self.get_collateral_accounts(outpoint).await {
+                for (contract_id, collateral_account) in collateral_accounts.collateral_accounts {
+                    self.unallocated_inputs
+                        .collateral_accounts
+                        .collateral_accounts
+                        .insert(contract_id, collateral_account.clone());
+
+                    self.unallocated_inputs
+                        .helper_outpoint_collateral_accounts
+                        .insert(collateral_account, *outpoint);
+                }
+
+                self.delete_collateral_accounts(outpoint).await
             }
         }
 
@@ -175,7 +241,7 @@ impl Updater {
     }
 
     pub async fn commit_outputs(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
-        let txid = tx.compute_txid().to_string();
+        let txid = tx.compute_txid();
 
         if let Some(vout) = self.first_non_op_return_index(tx) {
             // asset
@@ -193,12 +259,31 @@ impl Updater {
             for spec_contract_id in specs.iter() {
                 self.move_spec_allocation(vout, spec_contract_id).await;
             }
+
+            // state keys
+            let state_keys_contract_ids = &self.unallocated_inputs.state_keys.contract_ids.clone();
+            for contract_id in state_keys_contract_ids {
+                self.move_state_keys_allocation(vout, contract_id).await;
+            }
+
+            // collateral accounts
+            let collateral_accounts = &self
+                .unallocated_inputs
+                .collateral_accounts
+                .collateral_accounts
+                .clone();
+
+            for (contract_id, collateral_account) in collateral_accounts {
+                println!("moved {:?}", collateral_account);
+                self.move_collateral_account_allocation(vout, collateral_account, BlockTx::from_str(&contract_id).unwrap().to_string())
+                    .await;
+            }
         } else {
             log::info!("No non op_return index, unallocated inputs are lost");
         }
 
         for allocation in self.allocated_outputs.iter() {
-            let outpoint = &Outpoint {
+            let outpoint = &OutPoint {
                 txid: txid.clone(),
                 vout: *allocation.0,
             };
@@ -206,6 +291,10 @@ impl Updater {
             self.set_asset_list(outpoint, &allocation.1.asset_list)
                 .await;
             self.set_spec_contract_owned(outpoint, &allocation.1.spec_owned)
+                .await;
+            self.set_state_keys(outpoint, &allocation.1.state_keys)
+                .await;
+            self.set_collateral_accounts(outpoint, &allocation.1.collateral_accounts)
                 .await;
         }
 
@@ -260,13 +349,13 @@ impl Updater {
                 outcome.flaw = Some(flaw)
             }
 
+            // NOTE: dynamic validation
             if let Some(transfer) = message.transfer {
                 if outcome.flaw.is_none() {
                     outcome.flaw = self.transfers(tx, transfer.transfers).await;
                 }
             }
 
-            // NOTe: dynamic validation
             if let Some(contract_creation) = message.contract_creation {
                 // validate contract creation by spec
                 if let Some(spec_contract_id) = contract_creation.spec {
@@ -281,8 +370,8 @@ impl Updater {
                 };
 
                 match contract_creation.contract_type {
-                    ContractType::Asset(asset_contract) => {
-                        if let Some(purchase) = asset_contract.mint_mechanism.purchase {
+                    ContractType::Moa(mint_only_asset_contract) => {
+                        if let Some(purchase) = mint_only_asset_contract.mint_mechanism.purchase {
                             if let InputAsset::GlittrAsset(block_tx_tuple) = purchase.input_asset {
                                 let message = self.get_message(&block_tx_tuple).await;
 
@@ -297,12 +386,69 @@ impl Updater {
                             }
                         }
                     }
+                    ContractType::Mba(mint_burn_asset_contract) => {
+                        if let Some(purchase) = mint_burn_asset_contract.mint_mechanism.purchase {
+                            if let InputAsset::GlittrAsset(block_tx_tuple) = purchase.input_asset {
+                                let message = self.get_message(&block_tx_tuple).await;
 
+                                if let Ok(message) = message {
+                                    if message.contract_creation.is_none() && outcome.flaw.is_none()
+                                    {
+                                        outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx)
+                                    }
+                                } else if outcome.flaw.is_none() {
+                                    outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx);
+                                }
+                            }
+                        }
+
+                        if let Some(collateralized) =
+                            mint_burn_asset_contract.mint_mechanism.collateralized
+                        {
+                            for input_asset in collateralized.input_assets {
+                                if let InputAsset::GlittrAsset(block_tx_tuple) = input_asset {
+                                    let message = self.get_message(&block_tx_tuple).await;
+
+                                    if let Ok(message) = message {
+                                        if message.contract_creation.is_none()
+                                            && outcome.flaw.is_none()
+                                        {
+                                            outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx)
+                                        }
+                                    } else if outcome.flaw.is_none() {
+                                        outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx);
+                                    }
+                                }
+                            }
+
+                            match collateralized.mint_structure {
+                                mint_burn_asset::MintStructure::Proportional(proportional_type) => {
+                                    if let Some(pointer_to_key) =
+                                        proportional_type.inital_mint_pointer_to_key
+                                    {
+                                        if let Some(flaw) =
+                                            self.validate_pointer(pointer_to_key, tx)
+                                        {
+                                            outcome.flaw = Some(flaw)
+                                        } else {
+                                            self.allocate_new_state_key(
+                                                pointer_to_key,
+                                                &block_tx.to_tuple(),
+                                            )
+                                            .await;
+                                        }
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
                     ContractType::Spec(spec_contract) => {
                         if let Some(contract_id) = spec_contract.block_tx {
                             // update the spec
                             if outcome.flaw.is_none() {
-                                outcome.flaw = self.update_spec(tx, &contract_id, &spec_contract).await;
+                                outcome.flaw =
+                                    self.update_spec(tx, &contract_id, &spec_contract).await;
                             }
                         } else {
                             // create the spec
@@ -325,11 +471,43 @@ impl Updater {
                                 .await;
                         }
                     }
-                    CallType::Burn => {
-                        log::info!("Process call type burn");
+                    CallType::Burn(burn_option) => {
+                        if outcome.flaw.is_none() {
+                            outcome.flaw = self
+                                .burn(tx, block_tx, &contract_call.contract, &burn_option)
+                                .await;
+                        }
                     }
-                    CallType::Swap => {
-                        log::info!("Process call type swap");
+                    CallType::Swap(swap_option) => {
+                        if outcome.flaw.is_none() {
+                            outcome.flaw = self
+                                .process_swap(tx, block_tx, &contract_call.contract, &swap_option)
+                                .await;
+                        }
+                    }
+                    CallType::OpenAccount(open_account_option) => {
+                        if outcome.flaw.is_none() {
+                            outcome.flaw = self
+                                .process_open_account(
+                                    tx,
+                                    block_tx,
+                                    &contract_call.contract,
+                                    &open_account_option,
+                                )
+                                .await;
+                        }
+                    }
+                    CallType::CloseAccount(close_account_option) => {
+                        if outcome.flaw.is_none() {
+                            outcome.flaw = self
+                                .process_close_account(
+                                    tx,
+                                    block_tx,
+                                    &contract_call.contract,
+                                    &close_account_option,
+                                )
+                                .await;
+                        }
                     }
                 }
             }
@@ -383,7 +561,7 @@ impl Updater {
         None
     }
 
-    async fn delete_asset(&self, outpoint: &Outpoint) {
+    async fn delete_asset(&self, outpoint: &OutPoint) {
         if !self.is_read_only {
             self.database
                 .lock()
@@ -392,7 +570,7 @@ impl Updater {
         }
     }
 
-    pub async fn get_asset_list(&self, outpoint: &Outpoint) -> Result<AssetList, Flaw> {
+    pub async fn get_asset_list(&self, outpoint: &OutPoint) -> Result<AssetList, Flaw> {
         let result: Result<AssetList, DatabaseError> = self
             .database
             .lock()
@@ -406,7 +584,7 @@ impl Updater {
         }
     }
 
-    async fn set_asset_list(&self, outpoint: &Outpoint, asset_list: &AssetList) {
+    async fn set_asset_list(&self, outpoint: &OutPoint, asset_list: &AssetList) {
         if !self.is_read_only {
             self.database
                 .lock()
