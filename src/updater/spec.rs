@@ -1,7 +1,9 @@
 use database::SPEC_CONTRACT_OWNED_PREFIX;
 use message::ContractCreation;
 
-use crate::spec::{MintOnlyAssetSpecPegInType, SpecContract, SpecContractType};
+use crate::spec::{
+    MintBurnAssetCollateralizedSpec, MintOnlyAssetSpecPegInType, SpecContract, SpecContractType,
+};
 
 use super::*;
 
@@ -121,7 +123,10 @@ impl Updater {
                 }
                 _ => return Some(Flaw::SpecCriteriaInvalid),
             },
-            SpecContractType::MintBurnAsset(_) => return Some(Flaw::NotImplemented),
+            SpecContractType::MintBurnAsset(mint_burn_asset_spec) => match contract_type {
+                ContractType::Mba(mint_burn_asset) => {}
+                _ => return Some(Flaw::SpecCriteriaInvalid),
+            },
         };
 
         None
@@ -171,11 +176,15 @@ impl Updater {
                     _ => return Some(Flaw::SpecNotFound),
                 };
 
-                // update assets value
-                if !prev_mba_spec._mutable_assets {
-                    return Some(Flaw::SpecNotMutable);
-                } else {
-                    prev_mba_spec.input_assets = mba_spec.input_assets.clone()
+                if let Some(prev_collateralized) = &prev_mba_spec.collateralized {
+                    if !prev_collateralized._mutable_assets {
+                        return Some(Flaw::SpecNotMutable);
+                    }
+                    let collateralized = mba_spec.clone().collateralized.unwrap();
+                    prev_mba_spec.collateralized = Some(MintBurnAssetCollateralizedSpec {
+                        input_assets: collateralized.input_assets,
+                        ..*prev_collateralized
+                    });
                 }
 
                 prev_spec_contract.spec = SpecContractType::MintBurnAsset(prev_mba_spec)

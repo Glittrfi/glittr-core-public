@@ -12,7 +12,7 @@ pub enum MintBurnAssetSpecMint {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
-pub struct MintBurnAssetSpec {
+pub struct MintBurnAssetCollateralizedSpec {
     // if this is true, the assets are mutable
     // and can be updated
     pub _mutable_assets: bool,
@@ -20,14 +20,24 @@ pub struct MintBurnAssetSpec {
     pub mint: Option<MintBurnAssetSpecMint>,
 }
 
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct MintBurnAssetSpec {
+    pub collateralized: Option<MintBurnAssetCollateralizedSpec>,
+}
+
 impl MintBurnAssetSpec {
     pub fn validate(&self) -> Option<Flaw> {
-        if self.input_assets.is_none() {
-            return Some(Flaw::SpecFieldRequired("input_assets".to_string()));
-        }
+        if let Some(collateralized) = &self.collateralized {
+            if collateralized.input_assets.is_none() {
+                return Some(Flaw::SpecFieldRequired("input_assets".to_string()));
+            }
 
-        if self.mint.is_none() {
-            return Some(Flaw::SpecFieldRequired("mint".to_string()));
+            if collateralized.mint.is_none() {
+                return Some(Flaw::SpecFieldRequired("mint".to_string()));
+            }
+        } else {
+            return Some(Flaw::SpecFieldRequired("collateralized".to_string()));
         }
 
         None
@@ -97,9 +107,13 @@ impl SpecContract {
                     return Some(Flaw::SpecNotMutable);
                 }
                 SpecContractType::MintBurnAsset(moa_spec) => {
-                    if moa_spec._mutable_assets {
-                        if moa_spec.input_assets.is_none() {
-                            return Some(Flaw::SpecFieldRequired("input_assets".to_string()));
+                    if let Some(collateralized) = &moa_spec.collateralized {
+                        if collateralized._mutable_assets {
+                            if collateralized.input_assets.is_none() {
+                                return Some(Flaw::SpecFieldRequired("input_assets".to_string()));
+                            }
+                        } else {
+                            return Some(Flaw::SpecNotMutable);
                         }
                     } else {
                         return Some(Flaw::SpecNotMutable);
@@ -121,9 +135,15 @@ impl SpecContract {
                     }
                 }
                 SpecContractType::MintBurnAsset(moa_spec) => {
-                    if moa_spec._mutable_assets {
-                        if self.pointer.is_none() {
-                            return Some(Flaw::SpecFieldRequired("pointer".to_string()));
+                    if let Some(collateralized) = &moa_spec.collateralized {
+                        if collateralized._mutable_assets {
+                            if self.pointer.is_none() {
+                                return Some(Flaw::SpecFieldRequired("pointer".to_string()));
+                            }
+                        } else {
+                            if self.pointer.is_some() {
+                                return Some(Flaw::SpecFieldNotNecessary("pointer".to_string()));
+                            }
                         }
                     } else {
                         if self.pointer.is_some() {
@@ -143,12 +163,13 @@ impl SpecContract {
 
 #[cfg(test)]
 mod test {
-    use crate::{shared::InputAsset, spec::{MintBurnAssetSpec, MintBurnAssetSpecMint}, BlockTxTuple, Flaw};
-
-    use super::{
-        MintOnlyAssetSpec, MintOnlyAssetSpecPegInType, SpecContract,
-        SpecContractType,
+    use crate::{
+        shared::InputAsset,
+        spec::{MintBurnAssetCollateralizedSpec, MintBurnAssetSpec, MintBurnAssetSpecMint},
+        BlockTxTuple, Flaw,
     };
+
+    use super::{MintOnlyAssetSpec, MintOnlyAssetSpecPegInType, SpecContract, SpecContractType};
 
     #[test]
     pub fn validate_moa_create_spec_contract() {
@@ -199,9 +220,11 @@ mod test {
     pub fn validate_mba_create_spec_contract() {
         let spec = SpecContract {
             spec: SpecContractType::MintBurnAsset(MintBurnAssetSpec {
-                _mutable_assets: false,
-                input_assets: Some(vec![InputAsset::Rune]),
-                mint: Some(MintBurnAssetSpecMint::Proportional),
+                collateralized: Some(MintBurnAssetCollateralizedSpec {
+                    _mutable_assets: false,
+                    input_assets: Some(vec![InputAsset::Rune]),
+                    mint: Some(MintBurnAssetSpecMint::Proportional),
+                }),
             }),
             block_tx: None,
             pointer: None,
@@ -214,9 +237,11 @@ mod test {
     pub fn validate_mba_create_spec_contract_mutable_pointer_required() {
         let spec = SpecContract {
             spec: SpecContractType::MintBurnAsset(MintBurnAssetSpec {
-                _mutable_assets: true,
-                input_assets: Some(vec![InputAsset::Rune]),
-                mint: None,
+                collateralized: Some(MintBurnAssetCollateralizedSpec {
+                    _mutable_assets: true,
+                    input_assets: Some(vec![InputAsset::Rune]),
+                    mint: None,
+                }),
             }),
             block_tx: None,
             pointer: None,
@@ -229,9 +254,11 @@ mod test {
     pub fn validate_mba_update_spec_contract() {
         let spec = SpecContract {
             spec: SpecContractType::MintBurnAsset(MintBurnAssetSpec {
-                _mutable_assets: true,
-                input_assets: Some(vec![InputAsset::Rune]),
-                mint: None,
+                collateralized: Some(MintBurnAssetCollateralizedSpec {
+                    _mutable_assets: true,
+                    input_assets: Some(vec![InputAsset::Rune]),
+                    mint: None,
+                }),
             }),
             block_tx: Some(BlockTxTuple::default()),
             pointer: Some(1),
@@ -244,9 +271,11 @@ mod test {
     pub fn validate_mba_update_spec_contract_pointer_required() {
         let spec = SpecContract {
             spec: SpecContractType::MintBurnAsset(MintBurnAssetSpec {
-                _mutable_assets: true,
-                input_assets: Some(vec![InputAsset::Rune]),
-                mint: None,
+                collateralized: Some(MintBurnAssetCollateralizedSpec {
+                    _mutable_assets: true,
+                    input_assets: Some(vec![InputAsset::Rune]),
+                    mint: None,
+                }),
             }),
             block_tx: Some(BlockTxTuple::default()),
             pointer: None,
@@ -254,5 +283,4 @@ mod test {
         let flaw = spec.validate();
         assert_eq!(flaw, Some(Flaw::SpecFieldRequired("pointer".to_string())));
     }
-
 }

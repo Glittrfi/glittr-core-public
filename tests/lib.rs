@@ -14,17 +14,26 @@ use glittr::{
     database::{
         Database, DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX,
         COLLATERAL_ACCOUNT_PREFIX, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX,
-    }, message::{
+    },
+    message::{
         CallType, CloseAccountOption, ContractCall, ContractCreation, ContractType, MintBurnOption,
         OpReturnMessage, OpenAccountOption, OracleMessage, OracleMessageSigned, SwapOption,
         Transfer, TxTypeTransfer,
-    }, mint_burn_asset::{
+    },
+    mint_burn_asset::{
         AccountType, BurnMechanisms, Collateralized, MBAMintMechanisms, MintBurnAssetContract,
         MintStructure, ProportionalType, RatioModel, ReturnCollateral, SwapMechanisms,
-    }, mint_only_asset::{MOAMintMechanisms, MintOnlyAssetContract}, shared::{
-        FreeMint, InputAsset, OracleSetting, Preallocated, PurchaseBurnSwap,
-        RatioType, VestingPlan,
-    }, spec::{MintBurnAssetSpec, MintBurnAssetSpecMint, MintOnlyAssetSpec, MintOnlyAssetSpecPegInType, SpecContract, SpecContractType}, AssetContractData, AssetList, BlockTx, CollateralAccounts, Flaw, Indexer, MessageDataOutcome, Pubkey, U128
+    },
+    mint_only_asset::{MOAMintMechanisms, MintOnlyAssetContract},
+    shared::{
+        FreeMint, InputAsset, OracleSetting, Preallocated, PurchaseBurnSwap, RatioType, VestingPlan,
+    },
+    spec::{
+        MintBurnAssetCollateralizedSpec, MintBurnAssetSpec, MintBurnAssetSpecMint,
+        MintOnlyAssetSpec, MintOnlyAssetSpecPegInType, SpecContract, SpecContractType,
+    },
+    AssetContractData, AssetList, BlockTx, CollateralAccounts, Flaw, Indexer, MessageDataOutcome,
+    Pubkey, U128,
 };
 
 // Test utilities
@@ -158,25 +167,25 @@ impl TestContext {
     }
 
     async fn get_collateralize_accounts(&self) -> HashMap<String, CollateralAccounts> {
-        let collateralize_account: Result<HashMap<String, CollateralAccounts>, DatabaseError> = self
-            .indexer
-            .lock()
-            .await
-            .database
-            .lock()
-            .await
-            .expensive_find_by_prefix(COLLATERAL_ACCOUNT_PREFIX)
-            .map(|vec| {
-                vec.into_iter()
-                    .map(|(k, v)| {
-                        (
-                            k.trim_start_matches(&format!("{}:", COLLATERAL_ACCOUNT_PREFIX))
-                                .to_string(),
-                            v,
-                        )
-                    })
-                    .collect()
-            });
+        let collateralize_account: Result<HashMap<String, CollateralAccounts>, DatabaseError> =
+            self.indexer
+                .lock()
+                .await
+                .database
+                .lock()
+                .await
+                .expensive_find_by_prefix(COLLATERAL_ACCOUNT_PREFIX)
+                .map(|vec| {
+                    vec.into_iter()
+                        .map(|(k, v)| {
+                            (
+                                k.trim_start_matches(&format!("{}:", COLLATERAL_ACCOUNT_PREFIX))
+                                    .to_string(),
+                                v,
+                            )
+                        })
+                        .collect()
+                });
         collateralize_account.expect("collateral account should exist")
     }
 
@@ -2148,7 +2157,10 @@ async fn test_integration_collateralized_mba() {
     assert_eq!(collateral_accounts.len(), 1);
 
     let accounts = collateral_accounts.values().next().unwrap();
-    let collateral_account = accounts.collateral_accounts.get(&mba_contract.to_string()).unwrap();
+    let collateral_account = accounts
+        .collateral_accounts
+        .get(&mba_contract.to_string())
+        .unwrap();
     assert_eq!(collateral_account.share_amount, 100);
     assert_eq!(collateral_account.collateral_amounts, [((3, 1), 100000)]);
     assert_eq!(collateral_account.ltv, (5, 10)); // LTV from oracle message
@@ -2246,7 +2258,10 @@ async fn test_integration_collateralized_mba() {
     assert_eq!(collateral_accounts_after_burn.len(), 1);
 
     let accounts = collateral_accounts_after_burn.values().next().unwrap();
-    let account_after_burn = accounts.collateral_accounts.get(&mba_contract.to_str()).unwrap();
+    let account_after_burn = accounts
+        .collateral_accounts
+        .get(&mba_contract.to_str())
+        .unwrap();
     assert_eq!(account_after_burn.share_amount, 100);
     assert_eq!(account_after_burn.collateral_amounts, [((3, 1), 100000)]); // Collateral amount unchanged
     assert_eq!(account_after_burn.ltv, (3, 10)); // Updated LTV from oracle message
@@ -2757,9 +2772,11 @@ async fn test_integration_spec_update() {
         contract_creation: Some(ContractCreation {
             contract_type: ContractType::Spec(SpecContract {
                 spec: SpecContractType::MintBurnAsset(MintBurnAssetSpec {
-                    _mutable_assets: true,
-                    input_assets: vec![InputAsset::Rune].into(),
-                    mint: Some(MintBurnAssetSpecMint::Proportional),
+                    collateralized: Some(MintBurnAssetCollateralizedSpec {
+                        _mutable_assets: true,
+                        input_assets: vec![InputAsset::Rune].into(),
+                        mint: Some(MintBurnAssetSpecMint::Proportional),
+                    }),
                 }),
                 block_tx: None,
                 pointer: Some(1),
@@ -2776,10 +2793,16 @@ async fn test_integration_spec_update() {
         contract_creation: Some(ContractCreation {
             contract_type: ContractType::Spec(SpecContract {
                 spec: SpecContractType::MintBurnAsset(MintBurnAssetSpec {
-                    _mutable_assets: true,
-                    input_assets: vec![InputAsset::Rune, InputAsset::RawBtc, InputAsset::Ordinal]
+                    collateralized: Some(MintBurnAssetCollateralizedSpec {
+                        _mutable_assets: true,
+                        input_assets: vec![
+                            InputAsset::Rune,
+                            InputAsset::RawBtc,
+                            InputAsset::Ordinal,
+                        ]
                         .into(),
-                    mint: None,
+                        mint: None,
+                    }),
                 }),
                 block_tx: Some(block_tx_contract.to_tuple()),
                 pointer: Some(1),
@@ -2814,10 +2837,11 @@ async fn test_integration_spec_update() {
         contract_creation: Some(ContractCreation {
             contract_type: ContractType::Spec(SpecContract {
                 spec: SpecContractType::MintBurnAsset(MintBurnAssetSpec {
-                    _mutable_assets: true,
-                    input_assets: vec![InputAsset::Rune, InputAsset::RawBtc]
-                        .into(),
-                    mint: None,
+                    collateralized: Some(MintBurnAssetCollateralizedSpec {
+                        _mutable_assets: true,
+                        input_assets: vec![InputAsset::Rune, InputAsset::RawBtc].into(),
+                        mint: None,
+                    }),
                 }),
                 block_tx: Some(block_tx_contract.to_tuple()),
                 pointer: Some(1),
@@ -2870,7 +2894,7 @@ async fn test_integration_spec_update() {
         .contract_type
     {
         if let SpecContractType::MintBurnAsset(mba_spec) = spec_contract.spec {
-            let prev_input_assets = mba_spec.input_assets.unwrap();
+            let prev_input_assets = mba_spec.collateralized.unwrap().input_assets.unwrap();
             assert_eq!(prev_input_assets.len(), 2);
             itertools::assert_equal(
                 prev_input_assets.iter(),
@@ -2893,9 +2917,11 @@ async fn test_integration_spec_update_not_allowed() {
         contract_creation: Some(ContractCreation {
             contract_type: ContractType::Spec(SpecContract {
                 spec: SpecContractType::MintBurnAsset(MintBurnAssetSpec {
-                    _mutable_assets: true,
-                    input_assets: vec![InputAsset::Rune].into(),
-                    mint: Some(MintBurnAssetSpecMint::Proportional),
+                    collateralized: Some(MintBurnAssetCollateralizedSpec {
+                        _mutable_assets: true,
+                        input_assets: vec![InputAsset::Rune].into(),
+                        mint: Some(MintBurnAssetSpecMint::Proportional),
+                    }),
                 }),
                 block_tx: None,
                 pointer: Some(1),
@@ -2912,10 +2938,16 @@ async fn test_integration_spec_update_not_allowed() {
         contract_creation: Some(ContractCreation {
             contract_type: ContractType::Spec(SpecContract {
                 spec: SpecContractType::MintBurnAsset(MintBurnAssetSpec {
-                    _mutable_assets: true,
-                    input_assets: vec![InputAsset::Rune, InputAsset::RawBtc, InputAsset::Ordinal]
+                    collateralized: Some(MintBurnAssetCollateralizedSpec {
+                        _mutable_assets: true,
+                        input_assets: vec![
+                            InputAsset::Rune,
+                            InputAsset::RawBtc,
+                            InputAsset::Ordinal,
+                        ]
                         .into(),
-                    mint: None,
+                        mint: None,
+                    }),
                 }),
                 block_tx: Some(block_tx_contract.to_tuple()),
                 pointer: Some(1),
@@ -3108,3 +3140,4 @@ async fn test_integration_spec_moa_peg_in_type_invalid() {
 
     ctx.drop().await;
 }
+
