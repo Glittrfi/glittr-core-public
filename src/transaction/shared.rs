@@ -168,7 +168,7 @@ pub enum InputAsset {
     Ordinal,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum RatioType {
     Fixed {
@@ -199,7 +199,7 @@ impl RatioType {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 pub struct OracleSetting {
     pub pubkey: Pubkey, // compressed public key
     /// set asset_id to null for fully trust the oracle, ordinal_number if ordinal, rune's block_tx if rune, etc

@@ -275,8 +275,12 @@ impl Updater {
 
             for (contract_id, collateral_account) in collateral_accounts {
                 println!("moved {:?}", collateral_account);
-                self.move_collateral_account_allocation(vout, collateral_account, BlockTx::from_str(&contract_id).unwrap().to_string())
-                    .await;
+                self.move_collateral_account_allocation(
+                    vout,
+                    collateral_account,
+                    BlockTx::from_str(&contract_id).unwrap().to_string(),
+                )
+                .await;
             }
         } else {
             log::info!("No non op_return index, unallocated inputs are lost");
@@ -360,12 +364,16 @@ impl Updater {
                 // validate contract creation by spec
                 if let Some(spec_contract_id) = contract_creation.spec {
                     if outcome.flaw.is_none() {
-                        outcome.flaw = self
-                            .validate_contract_by_spec(
-                                &spec_contract_id,
-                                &contract_creation.contract_type,
-                            )
-                            .await;
+                        let spec = self.get_spec(&spec_contract_id).await;
+
+                        if let Ok(spec) = spec {
+                            outcome.flaw = Updater::validate_contract_by_spec(
+                                    spec,
+                                    &contract_creation.contract_type,
+                                );
+                        } else {
+                            outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx);
+                        }
                     }
                 };
 

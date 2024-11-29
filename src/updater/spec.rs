@@ -1,7 +1,9 @@
 use database::SPEC_CONTRACT_OWNED_PREFIX;
 use message::ContractCreation;
 
-use crate::spec::{MintOnlyAssetSpecPegInType, SpecContract, SpecContractType};
+use crate::spec::{
+    MintBurnAssetCollateralizedSpec, MintOnlyAssetSpecPegInType, SpecContract, SpecContractType,
+};
 
 use super::*;
 
@@ -81,24 +83,17 @@ impl Updater {
         }
     }
 
-    pub async fn validate_contract_by_spec(
-        &self,
-        spec_contract_id: &BlockTxTuple,
+    pub fn validate_contract_by_spec(
+        spec_contract: SpecContract,
         contract_type: &ContractType,
     ) -> Option<Flaw> {
-        let spec = match self.get_spec(spec_contract_id).await {
-            Ok(spec) => spec,
-            Err(err) => return Some(err),
-        };
-
-        match spec.spec {
+        match spec_contract.spec {
             SpecContractType::MintOnlyAsset(mint_only_asset_spec) => match contract_type {
                 ContractType::Moa(mint_only_asset) => {
                     if let Some(purchase) = &mint_only_asset.mint_mechanism.purchase {
                         if purchase.input_asset != mint_only_asset_spec.input_asset.unwrap() {
                             return Some(Flaw::SpecCriteriaInvalid);
                         }
-
                         match mint_only_asset_spec.peg_in_type.unwrap() {
                             MintOnlyAssetSpecPegInType::Burn => {
                                 if purchase.pay_to_key.is_some() {
@@ -121,7 +116,29 @@ impl Updater {
                 }
                 _ => return Some(Flaw::SpecCriteriaInvalid),
             },
-            SpecContractType::MintBurnAsset(_) => return Some(Flaw::NotImplemented),
+            SpecContractType::MintBurnAsset(mint_burn_asset_spec) => match contract_type {
+                ContractType::Mba(mint_burn_asset) => {
+                    if let Some(collateralized_spec) = mint_burn_asset_spec.collateralized {
+                        if let Some(collateralized) = &mint_burn_asset.mint_mechanism.collateralized
+                        {
+                            if collateralized.input_assets
+                                != collateralized_spec.input_assets.unwrap()
+                            {
+                                return Some(Flaw::SpecCriteriaInvalid);
+                            }
+
+                            if collateralized.mint_structure
+                                != collateralized_spec.mint_structure.unwrap()
+                            {
+                                return Some(Flaw::SpecCriteriaInvalid);
+                            }
+                        } else {
+                            return Some(Flaw::SpecCriteriaInvalid);
+                        }
+                    }
+                }
+                _ => return Some(Flaw::SpecCriteriaInvalid),
+            },
         };
 
         None
@@ -171,11 +188,15 @@ impl Updater {
                     _ => return Some(Flaw::SpecNotFound),
                 };
 
-                // update assets value
-                if !prev_mba_spec._mutable_assets {
-                    return Some(Flaw::SpecNotMutable);
-                } else {
-                    prev_mba_spec.input_assets = mba_spec.input_assets.clone()
+                if let Some(prev_collateralized) = &prev_mba_spec.collateralized {
+                    if !prev_collateralized._mutable_assets {
+                        return Some(Flaw::SpecNotMutable);
+                    }
+                    let collateralized = mba_spec.clone().collateralized.unwrap();
+                    prev_mba_spec.collateralized = Some(MintBurnAssetCollateralizedSpec {
+                        input_assets: collateralized.input_assets,
+                        ..prev_collateralized.clone()
+                    });
                 }
 
                 prev_spec_contract.spec = SpecContractType::MintBurnAsset(prev_mba_spec)
@@ -202,5 +223,164 @@ impl Updater {
         self.move_spec_allocation(pointer, spec_contract_id).await;
 
         None
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{spec::{
+        MintBurnAssetCollateralizedSpec, MintBurnAssetSpec, SpecContract, SpecContractType,
+    }, Flaw};
+
+    use super::{
+        mint_burn_asset::{
+            BurnMechanisms, Collateralized, MBAMintMechanisms, MintBurnAssetContract,
+            MintStructure, ProportionalType, RatioModel, ReturnCollateral, SwapMechanisms,
+        },
+        ContractType, InputAsset, Updater,
+    };
+
+    #[test]
+    pub fn validate_contract_spec_mba_valid() {
+        let mba_contract = ContractType::Mba(MintBurnAssetContract {
+            ticker: None,
+            supply_cap: None,
+            divisibility: 18,
+            live_time: 0,
+            mint_mechanism: MBAMintMechanisms {
+                preallocated: None,
+                free_mint: None,
+                purchase: None,
+                collateralized: Some(Collateralized {
+                    input_assets: vec![InputAsset::Rune, InputAsset::Ordinal],
+                    _mutable_assets: false,
+                    mint_structure: MintStructure::Proportional(ProportionalType {
+                        ratio_model: RatioModel::ConstantProduct,
+                        inital_mint_pointer_to_key: Some(100),
+                    }),
+                }),
+            },
+            burn_mechanism: BurnMechanisms {
+                return_collateral: Some(ReturnCollateral {
+                    fee: None,
+                    oracle_setting: None,
+                }),
+            },
+            swap_mechanism: SwapMechanisms { fee: None },
+        });
+
+        let spec_mba_contract = SpecContract {
+            spec: SpecContractType::MintBurnAsset(MintBurnAssetSpec {
+                collateralized: Some(MintBurnAssetCollateralizedSpec {
+                    _mutable_assets: true,
+                    input_assets: Some(vec![InputAsset::Rune, InputAsset::Ordinal]),
+                    mint_structure: Some(MintStructure::Proportional(ProportionalType {
+                        ratio_model: RatioModel::ConstantProduct,
+                        inital_mint_pointer_to_key: Some(100),
+                    })),
+                }),
+            }),
+            block_tx: None,
+            pointer: None,
+        };
+
+        let flaw = Updater::validate_contract_by_spec(spec_mba_contract, &mba_contract);
+        assert_eq!(flaw, None)
+    }
+
+    #[test]
+    pub fn validate_contract_spec_mba_input_assets_invalid() {
+        let mba_contract = ContractType::Mba(MintBurnAssetContract {
+            ticker: None,
+            supply_cap: None,
+            divisibility: 18,
+            live_time: 0,
+            mint_mechanism: MBAMintMechanisms {
+                preallocated: None,
+                free_mint: None,
+                purchase: None,
+                collateralized: Some(Collateralized {
+                    input_assets: vec![InputAsset::Rune, InputAsset::RawBtc],
+                    _mutable_assets: false,
+                    mint_structure: MintStructure::Proportional(ProportionalType {
+                        ratio_model: RatioModel::ConstantProduct,
+                        inital_mint_pointer_to_key: None,
+                    }),
+                }),
+            },
+            burn_mechanism: BurnMechanisms {
+                return_collateral: Some(ReturnCollateral {
+                    fee: None,
+                    oracle_setting: None,
+                }),
+            },
+            swap_mechanism: SwapMechanisms { fee: None },
+        });
+
+        let spec_mba_contract = SpecContract {
+            spec: SpecContractType::MintBurnAsset(MintBurnAssetSpec {
+                collateralized: Some(MintBurnAssetCollateralizedSpec {
+                    _mutable_assets: true,
+                    input_assets: Some(vec![InputAsset::Rune]),
+                    mint_structure: Some(MintStructure::Proportional(ProportionalType {
+                        ratio_model: RatioModel::ConstantProduct,
+                        inital_mint_pointer_to_key: None,
+                    })),
+                }),
+            }),
+            block_tx: None,
+            pointer: None,
+        };
+
+        let flaw = Updater::validate_contract_by_spec(spec_mba_contract, &mba_contract);
+        assert_eq!(flaw, Some(Flaw::SpecCriteriaInvalid))
+    }
+
+    #[test]
+    pub fn validate_contract_spec_mba_mint_structure_invalid() {
+        let mba_contract = ContractType::Mba(MintBurnAssetContract {
+            ticker: None,
+            supply_cap: None,
+            divisibility: 18,
+            live_time: 0,
+            mint_mechanism: MBAMintMechanisms {
+                preallocated: None,
+                free_mint: None,
+                purchase: None,
+                collateralized: Some(Collateralized {
+                    input_assets: vec![InputAsset::Rune, InputAsset::RawBtc],
+                    _mutable_assets: false,
+                    mint_structure: MintStructure::Proportional(ProportionalType {
+                        ratio_model: RatioModel::ConstantProduct,
+                        inital_mint_pointer_to_key: None,
+                    }),
+                }),
+            },
+            burn_mechanism: BurnMechanisms {
+                return_collateral: Some(ReturnCollateral {
+                    fee: None,
+                    oracle_setting: None,
+                }),
+            },
+            swap_mechanism: SwapMechanisms { fee: None },
+        });
+
+        let spec_mba_contract = SpecContract {
+            spec: SpecContractType::MintBurnAsset(MintBurnAssetSpec {
+                collateralized: Some(MintBurnAssetCollateralizedSpec {
+                    _mutable_assets: true,
+                    input_assets: Some(vec![InputAsset::Rune]),
+                    mint_structure: Some(MintStructure::Proportional(ProportionalType {
+                        ratio_model: RatioModel::ConstantProduct,
+                        inital_mint_pointer_to_key: Some(100),
+                    })),
+                }),
+            }),
+            block_tx: None,
+            pointer: None,
+        };
+
+        let flaw = Updater::validate_contract_by_spec(spec_mba_contract, &mba_contract);
+        assert_eq!(flaw, Some(Flaw::SpecCriteriaInvalid))
     }
 }
