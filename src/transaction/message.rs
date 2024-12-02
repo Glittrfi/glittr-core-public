@@ -124,8 +124,12 @@ pub struct OpReturnMessage {
     pub contract_call: Option<ContractCall>,
 }
 
-impl CallType {
-    pub fn validate(&self) -> Option<Flaw> {
+pub trait ContractValidator {
+    fn validate(&self) -> Option<Flaw>;
+}
+
+impl ContractValidator for CallType {
+    fn validate(&self) -> Option<Flaw> {
         None
     }
 }

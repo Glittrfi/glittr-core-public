@@ -1,4 +1,5 @@
 use super::*;
+use message::ContractValidator;
 use transaction_shared::{FreeMint, InputAsset, OracleSetting, Preallocated, PurchaseBurnSwap, RatioType};
 
 #[serde_with::skip_serializing_none]
@@ -82,8 +83,8 @@ pub struct ReturnCollateral {
     pub oracle_setting: Option<OracleSetting>,
 }
 
-impl Collateralized {
-    pub fn validate(&self) -> Option<Flaw> {
+impl ContractValidator for Collateralized {
+    fn validate(&self) -> Option<Flaw> {
         for input_asset in &self.input_assets {
             match input_asset {
                 InputAsset::GlittrAsset(_) => {}
@@ -129,8 +130,8 @@ impl ReturnCollateral {
     }
 }
 
-impl MintBurnAssetContract {
-    pub fn validate(&self) -> Option<Flaw> {
+impl ContractValidator for MintBurnAssetContract {
+    fn validate(&self) -> Option<Flaw> {
         if self.mint_mechanism.purchase.is_some() && self.mint_mechanism.free_mint.is_some() {
             return Some(Flaw::NotImplemented);
         }

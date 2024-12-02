@@ -4,6 +4,10 @@ use std::collections::HashMap;
 use bitcoin::{PublicKey, XOnlyPublicKey};
 use message::ContractType;
 
+pub trait ContractValidator {
+    fn validate(&self) -> Option<Flaw>;
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MintMechanisms {
