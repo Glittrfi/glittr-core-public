@@ -3,8 +3,9 @@ use bitcoin::{
     hex::{Case, DisplayHex},
     PublicKey, ScriptBuf,
 };
+use crate::config::get_bitcoin_network;
 use message::MintBurnOption;
-use transaction_shared::{Preallocated};
+use transaction_shared::Preallocated;
 
 impl Updater {
     async fn mint_free_mint(
@@ -28,7 +29,7 @@ impl Updater {
                 free_mint.amount_per_mint.0,
                 true,
                 true,
-                free_mint.supply_cap.clone()
+                free_mint.supply_cap.clone(),
             )
             .await
         {
@@ -103,24 +104,24 @@ impl Updater {
                 InputAsset::Ordinal => {}
             }
         } else if let Some(pubkey) = &purchase.pay_to_key {
+            let bitcoin_network = get_bitcoin_network();
             let pubkey = PublicKey::from_slice(pubkey.as_slice()).unwrap();
             let potential_addresses = vec![
                 Address::from_script(
                     &ScriptBuf::new_p2wpkh(&pubkey.wpubkey_hash().unwrap()),
-                    bitcoin::Network::Regtest,
+                    bitcoin_network,
                 )
                 .unwrap(),
                 Address::from_script(
                     &ScriptBuf::new_p2pkh(&pubkey.pubkey_hash()),
-                    bitcoin::Network::Regtest,
+                    bitcoin_network,
                 )
                 .unwrap(),
             ];
             for (pos, output) in tx.output.iter().enumerate() {
-                // TODO: bitcoin network from CONFIG
                 let address_from_script = Address::from_script(
                     output.script_pubkey.as_script(),
-                    bitcoin::Network::Regtest,
+                    bitcoin_network,
                 );
 
                 if let Ok(address_from_script) = address_from_script {
@@ -179,7 +180,14 @@ impl Updater {
                     .remove(&BlockTx::from_tuple(asset_contract_id).to_str())
                     .unwrap_or(0);
                 if let Some(flaw) = self
-                    .validate_and_update_supply_cap(contract_id, None, burned_amount, false, false, None)
+                    .validate_and_update_supply_cap(
+                        contract_id,
+                        None,
+                        burned_amount,
+                        false,
+                        false,
+                        None,
+                    )
                     .await
                 {
                     return Some(flaw);
@@ -194,7 +202,7 @@ impl Updater {
                 out_value,
                 true,
                 false,
-                None
+                None,
             )
             .await
         {
@@ -320,7 +328,7 @@ impl Updater {
                 out_value,
                 true,
                 false,
-                None
+                None,
             )
             .await
         {

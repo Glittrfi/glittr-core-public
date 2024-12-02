@@ -1,3 +1,4 @@
+use bitcoin::Network;
 use config::Config;
 use lazy_static::lazy_static;
 use serde::Deserialize;
@@ -9,6 +10,16 @@ pub struct Settings {
     pub btc_rpc_password: String,
     pub rocks_db_path: String,
     pub api_url: String,
+    pub bitcoin_network: String, // Add this line
+}
+
+pub fn get_bitcoin_network() -> Network {
+    match CONFIG.bitcoin_network.as_str() {
+        "mainnet" => Network::Bitcoin,
+        "testnet" => Network::Testnet,
+        "regtest" => Network::Regtest,
+        _ => Network::Regtest, // Default to Regtest if not specified
+    }
 }
 
 lazy_static! {

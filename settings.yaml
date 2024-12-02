@@ -3,3 +3,4 @@ btc_rpc_username: user
 btc_rpc_password: password
 rocks_db_path: db_data
 api_url: 127.0.0.1:3001
+bitcoin_network: regtest
