@@ -20,8 +20,7 @@ use bitcoin::{
     Address, OutPoint, Transaction, TxOut, XOnlyPublicKey,
 };
 use database::{
-    DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, MESSAGE_PREFIX, STATE_KEY_PREFIX,
-    TRANSACTION_TO_BLOCK_TX_PREFIX, VESTING_CONTRACT_DATA_PREFIX,
+    DatabaseError, ASSETLIST_PREFIX, ASSET_CONTRACT_DATA_PREFIX, MESSAGE_PREFIX, STATEKEYS_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX, VESTING_CONTRACT_DATA_PREFIX
 };
 use flaw::Flaw;
 use message::{CallType, ContractType, OpReturnMessage, TxTypeTransfer};
@@ -114,6 +113,8 @@ pub struct Updater {
 }
 
 impl Updater {
+    impl_ops_for_outpoint_data!(AssetList);
+
     pub async fn new(database: Arc<Mutex<Database>>, is_read_only: bool) -> Self {
         Updater {
             database,
@@ -147,7 +148,7 @@ impl Updater {
                 }
 
                 // TODO: Implement a backup mechanism to recover when downtime occurs
-                self.delete_asset(outpoint).await;
+                self.delete_asset_list(outpoint).await;
             }
 
             // set specs
@@ -299,8 +300,12 @@ impl Updater {
                 .await;
             self.set_state_keys(outpoint, &allocation.1.state_keys)
                 .await;
+
+            if !&allocation.1.collateral_accounts.collateral_accounts.is_empty() {
             self.set_collateral_accounts(outpoint, &allocation.1.collateral_accounts)
                 .await;
+
+            }
         }
 
         // reset asset list
@@ -542,6 +547,7 @@ impl Updater {
                 tx.compute_txid().to_string().as_str(),
                 block_tx.to_tuple(),
             );
+
         }
 
         Ok(outcome)
@@ -568,38 +574,6 @@ impl Updater {
         }
 
         None
-    }
-
-    async fn delete_asset(&self, outpoint: &OutPoint) {
-        if !self.is_read_only {
-            self.database
-                .lock()
-                .await
-                .delete(ASSET_LIST_PREFIX, &outpoint.to_string());
-        }
-    }
-
-    pub async fn get_asset_list(&self, outpoint: &OutPoint) -> Result<AssetList, Flaw> {
-        let result: Result<AssetList, DatabaseError> = self
-            .database
-            .lock()
-            .await
-            .get(ASSET_LIST_PREFIX, &outpoint.to_string());
-
-        match result {
-            Ok(data) => Ok(data),
-            Err(DatabaseError::NotFound) => Ok(AssetList::default()),
-            Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
-        }
-    }
-
-    async fn set_asset_list(&self, outpoint: &OutPoint, asset_list: &AssetList) {
-        if !self.is_read_only {
-            self.database
-                .lock()
-                .await
-                .put(ASSET_LIST_PREFIX, &outpoint.to_string(), asset_list);
-        }
     }
 
     async fn get_message(&self, contract_id: &BlockTxTuple) -> Result<OpReturnMessage, Flaw> {

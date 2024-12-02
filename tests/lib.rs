@@ -12,8 +12,8 @@ use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
 
 use glittr::{
     database::{
-        Database, DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX,
-        COLLATERAL_ACCOUNT_PREFIX, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX,
+        Database, DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSETLIST_PREFIX,
+        COLLATERALACCOUNTS_PREFIX, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX,
     },
     message::{
         CallType, CloseAccountOption, ContractCall, ContractCreation, ContractType, MintBurnOption,
@@ -151,12 +151,12 @@ impl TestContext {
             .database
             .lock()
             .await
-            .expensive_find_by_prefix(ASSET_LIST_PREFIX)
+            .expensive_find_by_prefix(ASSETLIST_PREFIX)
             .map(|vec| {
                 vec.into_iter()
                     .map(|(k, v)| {
                         (
-                            k.trim_start_matches(&format!("{}:", ASSET_LIST_PREFIX))
+                            k.trim_start_matches(&format!("{}:", ASSETLIST_PREFIX))
                                 .to_string(),
                             v,
                         )
@@ -174,12 +174,12 @@ impl TestContext {
                 .database
                 .lock()
                 .await
-                .expensive_find_by_prefix(COLLATERAL_ACCOUNT_PREFIX)
+                .expensive_find_by_prefix(COLLATERALACCOUNTS_PREFIX)
                 .map(|vec| {
                     vec.into_iter()
                         .map(|(k, v)| {
                             (
-                                k.trim_start_matches(&format!("{}:", COLLATERAL_ACCOUNT_PREFIX))
+                                k.trim_start_matches(&format!("{}:", COLLATERALACCOUNTS_PREFIX))
                                     .to_string(),
                                 v,
                             )
@@ -235,7 +235,7 @@ impl TestContext {
             .database
             .lock()
             .await
-            .expensive_find_by_prefix(ASSET_LIST_PREFIX);
+            .expensive_find_by_prefix(ASSETLIST_PREFIX);
         asset_list.expect("asset list should exist")
     }
 }

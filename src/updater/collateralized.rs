@@ -2,7 +2,7 @@ use num::integer::Roots;
 use std::cmp::min;
 
 use super::*;
-use crate::updater::database::COLLATERAL_ACCOUNT_PREFIX;
+use crate::updater::database::COLLATERALACCOUNTS_PREFIX;
 use bitcoin::{OutPoint, Transaction};
 use database::POOL_DATA_PREFIX;
 use message::{CloseAccountOption, MintBurnOption, OpenAccountOption, SwapOption};
@@ -15,6 +15,9 @@ struct PoolData {
 }
 
 impl Updater {
+    impl_ops_for_outpoint_data!(CollateralAccounts);
+    impl_ops_for_outpoint_data!(StateKeys);
+
     pub async fn allocate_new_collateral_accounts(
         &mut self,
         vout: u32,
@@ -46,48 +49,6 @@ impl Updater {
         };
     }
 
-    pub async fn set_collateral_accounts(
-        &self,
-        outpoint: &OutPoint,
-        collateral_accounts: &CollateralAccounts,
-    ) {
-        if !self.is_read_only {
-            if !collateral_accounts.collateral_accounts.is_empty() {
-                self.database.lock().await.put(
-                    COLLATERAL_ACCOUNT_PREFIX,
-                    &outpoint.to_string(),
-                    collateral_accounts,
-                );
-            }
-        }
-    }
-
-    pub async fn delete_collateral_accounts(&self, outpoint: &OutPoint) {
-        if !self.is_read_only {
-            self.database
-                .lock()
-                .await
-                .delete(COLLATERAL_ACCOUNT_PREFIX, &outpoint.to_string());
-        }
-    }
-
-    pub async fn get_collateral_accounts(
-        &self,
-        outpoint: &OutPoint,
-    ) -> Result<CollateralAccounts, Flaw> {
-        let data: Result<CollateralAccounts, DatabaseError> = self
-            .database
-            .lock()
-            .await
-            .get(COLLATERAL_ACCOUNT_PREFIX, &outpoint.to_string());
-
-        match data {
-            Ok(data) => Ok(data),
-            Err(DatabaseError::NotFound) => Ok(CollateralAccounts::default()),
-            Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
-        }
-    }
-
     pub async fn allocate_new_state_key(&mut self, vout: u32, contract_id: &BlockTxTuple) {
         let allocation: &mut Allocation = self.allocated_outputs.entry(vout).or_default();
         allocation.state_keys.contract_ids.insert(*contract_id);
@@ -102,39 +63,6 @@ impl Updater {
         {
             self.allocate_new_state_key(vout, contract_id).await;
         };
-    }
-
-    // TODO: create derive macros for set_, get_, delete_, get_
-    pub async fn set_state_keys(&self, outpoint: &OutPoint, state_keys: &StateKeys) {
-        if !self.is_read_only {
-            self.database
-                .lock()
-                .await
-                .put(STATE_KEY_PREFIX, &outpoint.to_string(), state_keys);
-        }
-    }
-
-    pub async fn delete_state_keys(&self, outpoint: &OutPoint) {
-        if !self.is_read_only {
-            self.database
-                .lock()
-                .await
-                .delete(STATE_KEY_PREFIX, &outpoint.to_string());
-        }
-    }
-
-    pub async fn get_state_keys(&self, outpoint: &OutPoint) -> Result<StateKeys, Flaw> {
-        let data: Result<StateKeys, DatabaseError> = self
-            .database
-            .lock()
-            .await
-            .get(STATE_KEY_PREFIX, &outpoint.to_string());
-
-        match data {
-            Ok(data) => Ok(data),
-            Err(DatabaseError::NotFound) => Ok(StateKeys::default()),
-            Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
-        }
     }
 
     pub async fn mint_collateralized(
@@ -421,7 +349,14 @@ impl Updater {
 
         // update the mint data
         if let Some(flaw) = self
-            .validate_and_update_supply_cap(contract_id, mba.supply_cap.clone(), out_value, true, false, None)
+            .validate_and_update_supply_cap(
+                contract_id,
+                mba.supply_cap.clone(),
+                out_value,
+                true,
+                false,
+                None,
+            )
             .await
         {
             return Some(flaw);
