@@ -1,5 +1,5 @@
 use flaw::Flaw;
-use shared::{FreeMint, Preallocated, PurchaseBurnSwap};
+use transaction_shared::{FreeMint, Preallocated, PurchaseBurnSwap};
 
 use super::*;
 

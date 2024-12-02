@@ -26,7 +26,7 @@ use database::{
 use flaw::Flaw;
 use message::{CallType, ContractType, OpReturnMessage, TxTypeTransfer};
 use mint_only_asset::MintOnlyAssetContract;
-use shared::{InputAsset, PurchaseBurnSwap, VestingPlan};
+use transaction_shared::{InputAsset, PurchaseBurnSwap, VestingPlan};
 
 use super::*;
 
@@ -701,15 +701,5 @@ impl Updater {
                 vesting_contract_data,
             );
         }
-    }
-
-    fn validate_pointer(&self, pointer: u32, tx: &Transaction) -> Option<Flaw> {
-        if pointer >= tx.output.len() as u32 {
-            return Some(Flaw::PointerOverflow);
-        }
-        if self.is_op_return_index(&tx.output[pointer as usize]) {
-            return Some(Flaw::InvalidPointer);
-        }
-        None
     }
 }

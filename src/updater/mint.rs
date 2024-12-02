@@ -4,7 +4,7 @@ use bitcoin::{
     PublicKey, ScriptBuf,
 };
 use message::MintBurnOption;
-use shared::{Preallocated, RatioType};
+use transaction_shared::{Preallocated, RatioType};
 
 impl Updater {
     async fn mint_free_mint(
@@ -481,7 +481,7 @@ impl Updater {
         mint_option: &MintBurnOption,
         tx: &Transaction,
         block_tx: &BlockTx,
-        is_burn: bool
+        is_burn: bool,
     ) -> Result<u128, Flaw> {
         match ratio {
             RatioType::Fixed { ratio } => {
@@ -494,81 +494,56 @@ impl Updater {
             RatioType::Oracle { setting } => {
                 if let Some(oracle_message_signed) = &mint_option.oracle_message {
                     if setting.asset_id == oracle_message_signed.message.asset_id {
-                        if block_tx.block - oracle_message_signed.message.block_height
-                            > setting.block_height_slippage as u64
-                        {
-                            return Err(Flaw::OracleMintBlockSlippageExceeded);
+                        let oracle_validate =
+                            self.validate_oracle_message(oracle_message_signed, &setting, block_tx);
+
+                        if oracle_validate.is_some() {
+                            return Err(oracle_validate.unwrap());
                         }
 
-                        let pubkey: XOnlyPublicKey =
-                            XOnlyPublicKey::from_slice(&setting.pubkey.as_slice()).unwrap();
-
-                        if let Ok(signature) =
-                            Signature::from_slice(&oracle_message_signed.signature)
-                        {
-                            let secp = Secp256k1::new();
-
-                            let msg = Message::from_digest_slice(
-                                sha256::Hash::hash(
-                                    serde_json::to_string(&oracle_message_signed.message)
-                                        .unwrap()
-                                        .as_bytes(),
-                                )
-                                .as_byte_array(),
-                            )
-                            .unwrap();
-
-                            if pubkey.verify(&secp, &msg, &signature).is_err() {
-                                return Err(Flaw::OracleMintSignatureFailed);
-                            }
-
-                            let mut is_btc = false;
-                            if let Some(asset_id) = &oracle_message_signed.message.asset_id {
-                                if asset_id == "btc" {
-                                    is_btc = true;
-                                    if let Some(ratio) = oracle_message_signed.message.ratio {
-                                        return Ok(total_received_value
-                                            .saturating_mul(ratio.0 as u128)
-                                            .saturating_div(ratio.1 as u128));
-                                    }
+                        let mut is_btc = false;
+                        if let Some(asset_id) = &oracle_message_signed.message.asset_id {
+                            if asset_id == "btc" {
+                                is_btc = true;
+                                if let Some(ratio) = oracle_message_signed.message.ratio {
+                                    return Ok(total_received_value
+                                        .saturating_mul(ratio.0 as u128)
+                                        .saturating_div(ratio.1 as u128));
                                 }
                             }
+                        }
 
-                            // For non-BTC assets or no asset_id specified
-                            if !is_btc {
-                                if let Some(input_outpoint) =
-                                    oracle_message_signed.message.input_outpoint
-                                {
-                                    let mut input_found = false;
-                                    for txin in tx.input.iter() {
-                                        if txin.previous_output == input_outpoint {
-                                            input_found = true;
-                                        }
+                        // For non-BTC assets or no asset_id specified
+                        if !is_btc {
+                            if let Some(input_outpoint) =
+                                oracle_message_signed.message.input_outpoint
+                            {
+                                let mut input_found = false;
+                                for txin in tx.input.iter() {
+                                    if txin.previous_output == input_outpoint {
+                                        input_found = true;
                                     }
-                                    if !input_found {
-                                        return Err(Flaw::OracleMintInputNotFound);
-                                    }
-                                } else {
-                                    return Err(Flaw::OracleMintInfoFailed);
                                 }
-
-                                if let Some(min_in_value) =
-                                    &oracle_message_signed.message.min_in_value
-                                {
-                                    if total_received_value < &min_in_value.0 {
-                                        return Err(Flaw::OracleMintBelowMinValue);
-                                    }
-                                } else {
-                                    return Err(Flaw::OracleMintInfoFailed);
-                                }
-
-                                if let Some(_out_value) = &oracle_message_signed.message.out_value {
-                                    return Ok(_out_value.0);
-                                } else {
-                                    return Err(Flaw::OracleMintInfoFailed);
+                                if !input_found {
+                                    return Err(Flaw::OracleMintInputNotFound);
                                 }
                             } else {
-                                return Err(Flaw::OracleMintFailed);
+                                return Err(Flaw::OracleMintInfoFailed);
+                            }
+
+                            if let Some(min_in_value) = &oracle_message_signed.message.min_in_value
+                            {
+                                if total_received_value < &min_in_value.0 {
+                                    return Err(Flaw::OracleMintBelowMinValue);
+                                }
+                            } else {
+                                return Err(Flaw::OracleMintInfoFailed);
+                            }
+
+                            if let Some(_out_value) = &oracle_message_signed.message.out_value {
+                                return Ok(_out_value.0);
+                            } else {
+                                return Err(Flaw::OracleMintInfoFailed);
                             }
                         } else {
                             return Err(Flaw::OracleMintFailed);
@@ -578,7 +553,7 @@ impl Updater {
                     }
                 } else {
                     return Err(Flaw::OracleMintFailed);
-                };
+                }
             }
         }
     }

@@ -1,6 +1,6 @@
 use bitcoin::PublicKey;
 use mint_burn_asset::MintStructure;
-use shared::InputAsset;
+use transaction_shared::InputAsset;
 
 use super::*;
 
@@ -159,7 +159,7 @@ impl SpecContract {
 mod test {
     use crate::{
         mint_burn_asset::MintStructure,
-        shared::{InputAsset, RatioType},
+        transaction_shared::{InputAsset, RatioType},
         spec::{MintBurnAssetCollateralizedSpec, MintBurnAssetSpec},
         BlockTxTuple, Flaw,
     };

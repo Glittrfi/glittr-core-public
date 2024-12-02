@@ -25,7 +25,7 @@ use glittr::{
         MintStructure, ProportionalType, RatioModel, ReturnCollateral, SwapMechanisms,
     },
     mint_only_asset::{MOAMintMechanisms, MintOnlyAssetContract},
-    shared::{
+    transaction_shared::{
         FreeMint, InputAsset, OracleSetting, Preallocated, PurchaseBurnSwap, RatioType, VestingPlan,
     },
     spec::{
@@ -2005,7 +2005,7 @@ async fn test_integration_collateralized_mba() {
                     return_collateral: Some(ReturnCollateral {
                         oracle_setting: Some(OracleSetting {
                             pubkey: oracle_xonly.0.serialize().to_vec(),
-                            asset_id: Some("collateral".to_string()),
+                            asset_id: None,
                             block_height_slippage: 5,
                         }),
                         fee: None,

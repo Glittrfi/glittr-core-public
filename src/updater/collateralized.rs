@@ -52,7 +52,7 @@ impl Updater {
         collateral_accounts: &CollateralAccounts,
     ) {
         if !self.is_read_only {
-            if !collateral_accounts.collateral_accounts.is_empty(){
+            if !collateral_accounts.collateral_accounts.is_empty() {
                 self.database.lock().await.put(
                     COLLATERAL_ACCOUNT_PREFIX,
                     &outpoint.to_string(),
@@ -207,7 +207,7 @@ impl Updater {
                     .remove(&collateral_account);
 
                 match account_type.ratio {
-                    shared::RatioType::Fixed { ratio } => {
+                    transaction_shared::RatioType::Fixed { ratio } => {
                         // get collateral account
                         let available_amount = collateral_account.total_collateral_amount
                             - (collateral_account
@@ -231,7 +231,7 @@ impl Updater {
                         collateral_account.ltv = account_type.max_ltv;
                         collateral_account.amount_outstanding = out_value;
                     }
-                    shared::RatioType::Oracle { setting } => {
+                    transaction_shared::RatioType::Oracle { setting } => {
                         if let Some(oracle_message_signed) = &mint_option.oracle_message {
                             if let Some(expected_input_outpoint) =
                                 oracle_message_signed.message.input_outpoint
@@ -240,34 +240,15 @@ impl Updater {
                                     return Some(Flaw::OracleMintFailed);
                                 }
 
-                                if block_tx.block - oracle_message_signed.message.block_height
-                                    > setting.block_height_slippage as u64
-                                {
-                                    return Some(Flaw::OracleMintBlockSlippageExceeded);
-                                }
+                                let oracle_validate = self
+                                    .validate_oracle_message(
+                                        oracle_message_signed,
+                                        &setting,
+                                        block_tx,
+                                    );
 
-                                // TODO: create a shared function to validate the oracle message
-                                let pubkey: XOnlyPublicKey =
-                                    XOnlyPublicKey::from_slice(&setting.pubkey.as_slice()).unwrap();
-
-                                if let Ok(signature) =
-                                    Signature::from_slice(&oracle_message_signed.signature)
-                                {
-                                    let secp = Secp256k1::new();
-
-                                    let msg = Message::from_digest_slice(
-                                        sha256::Hash::hash(
-                                            serde_json::to_string(&oracle_message_signed.message)
-                                                .unwrap()
-                                                .as_bytes(),
-                                        )
-                                        .as_byte_array(),
-                                    )
-                                    .unwrap();
-
-                                    if pubkey.verify(&secp, &msg, &signature).is_err() {
-                                        return Some(Flaw::OracleMintSignatureFailed);
-                                    }
+                                if oracle_validate.is_some() {
+                                    return oracle_validate;
                                 }
 
                                 // LTV and outstanding always updated by the oracle
@@ -308,7 +289,7 @@ impl Updater {
 
                     self.allocate_new_collateral_accounts(
                         pointer_to_key,
-                       &collateral_account,
+                        &collateral_account,
                         BlockTx::from_tuple(*contract_id).to_string(),
                     )
                     .await;
@@ -374,7 +355,6 @@ impl Updater {
                                 // Calculate LP tokens to mint
                                 let total_supply = existing_pool.total_supply;
 
-                                // TODO: validate algo with ref-finance / uniswap
                                 let mint_amount = (input_first_asset.saturating_mul(total_supply))
                                     .saturating_div(existing_pool.amounts[0]);
 

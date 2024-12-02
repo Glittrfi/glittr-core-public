@@ -233,7 +233,7 @@ mod test {
     use crate::U128;
 
     use super::mint_only_asset::MOAMintMechanisms;
-    use super::shared::FreeMint;
+    use super::transaction_shared::FreeMint;
     use super::{ContractCreation, OpReturnMessage};
 
     fn create_dummy_tx() -> Transaction {

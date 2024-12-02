@@ -1,5 +1,5 @@
 use super::*;
-use shared::{FreeMint, InputAsset, OracleSetting, Preallocated, PurchaseBurnSwap, RatioType};
+use transaction_shared::{FreeMint, InputAsset, OracleSetting, Preallocated, PurchaseBurnSwap, RatioType};
 
 #[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -50,7 +50,7 @@ pub struct Collateralized {
 #[serde(rename_all = "snake_case")]
 pub enum MintStructure {
     Ratio(RatioType),
-    Proportional(ProportionalType), // TODO: proportional MBA (for AMM)
+    Proportional(ProportionalType),
     Account(AccountType),
 }
 

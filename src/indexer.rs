@@ -92,8 +92,6 @@ impl Indexer {
         }
     }
 
-    // helper
-    // TODO: add separate helper file
     pub async fn get_script_pubkey_from_outpoint(
         &self,
         outpoint: OutPoint,
