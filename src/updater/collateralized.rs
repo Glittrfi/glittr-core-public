@@ -153,11 +153,6 @@ impl Updater {
             return Some(Flaw::LiveTimeNotReached);
         }
 
-        let mut asset_contract_data = match self.get_asset_contract_data(contract_id).await {
-            Ok(data) => data,
-            Err(flaw) => return Some(flaw),
-        };
-
         match collateralized.mint_structure {
             mint_burn_asset::MintStructure::Ratio(ratio_type) => {
                 let available_amount =
@@ -240,12 +235,11 @@ impl Updater {
                                     return Some(Flaw::OracleMintFailed);
                                 }
 
-                                let oracle_validate = self
-                                    .validate_oracle_message(
-                                        oracle_message_signed,
-                                        &setting,
-                                        block_tx,
-                                    );
+                                let oracle_validate = self.validate_oracle_message(
+                                    oracle_message_signed,
+                                    &setting,
+                                    block_tx,
+                                );
 
                                 if oracle_validate.is_some() {
                                     return oracle_validate;
@@ -425,17 +419,13 @@ impl Updater {
             }
         }
 
-        // check the supply
-        if let Some(supply_cap) = &mba.supply_cap {
-            let next_supply = asset_contract_data.minted_supply.saturating_add(out_value);
-
-            if next_supply > supply_cap.0 {
-                return Some(Flaw::SupplyCapExceeded);
-            }
+        // update the mint data
+        if let Some(flaw) = self
+            .validate_and_update_supply_cap(contract_id, mba.supply_cap.clone(), out_value, true, false, None)
+            .await
+        {
+            return Some(flaw);
         }
-
-        asset_contract_data.minted_supply =
-            asset_contract_data.minted_supply.saturating_add(out_value);
 
         // check pointer overflow
         if let Some(pointer) = mint_option.pointer {
@@ -447,10 +437,6 @@ impl Updater {
             self.allocate_new_asset(pointer, contract_id, out_value)
                 .await;
         }
-
-        // update the mint data
-        self.set_asset_contract_data(contract_id, &asset_contract_data)
-            .await;
 
         None
     }

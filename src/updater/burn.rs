@@ -20,11 +20,6 @@ impl Updater {
             return Some(Flaw::LiveTimeNotReached);
         }
 
-        let mut asset_contract_data = match self.get_asset_contract_data(contract_id).await {
-            Ok(data) => data,
-            Err(flaw) => return Some(flaw),
-        };
-
         let burned_amount = self
             .unallocated_inputs
             .asset_list
@@ -142,7 +137,11 @@ impl Updater {
                                     return Some(Flaw::OracleMintFailed);
                                 }
 
-                                let oracle_validate = self.validate_oracle_message(oracle_message_signed, oracle_setting, block_tx);
+                                let oracle_validate = self.validate_oracle_message(
+                                    oracle_message_signed,
+                                    oracle_setting,
+                                    block_tx,
+                                );
 
                                 if oracle_validate.is_some() {
                                     return oracle_validate;
@@ -214,9 +213,14 @@ impl Updater {
                 }
             }
 
-            asset_contract_data.burned_supply = asset_contract_data
-                .burned_supply
-                .saturating_sub(burned_amount);
+            // update the mint data
+
+            if let Some(flaw) = self
+                .validate_and_update_supply_cap(contract_id, None, burned_amount, false, false, None)
+                .await
+            {
+                return Some(flaw);
+            }
 
             if let Some(pointer) = burn_option.pointer {
                 if let Some(flaw) = self.validate_pointer(pointer, tx) {
@@ -231,10 +235,6 @@ impl Updater {
                     }
                 }
             }
-
-            // update the mint data
-            self.set_asset_contract_data(contract_id, &asset_contract_data)
-                .await;
         } else {
             return Some(Flaw::InvalidContractType);
         }

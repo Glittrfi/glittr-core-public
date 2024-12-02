@@ -4,7 +4,7 @@ use bitcoin::{
     PublicKey, ScriptBuf,
 };
 use message::MintBurnOption;
-use transaction_shared::{Preallocated, RatioType};
+use transaction_shared::{Preallocated};
 
 impl Updater {
     async fn mint_free_mint(
@@ -20,25 +20,20 @@ impl Updater {
             return Some(Flaw::LiveTimeNotReached);
         }
 
-        let mut asset_contract_data = match self.get_asset_contract_data(contract_id).await {
-            Ok(data) => data,
-            Err(flaw) => return Some(flaw),
-        };
-
         let free_mint = asset_contract.mint_mechanism.free_mint.as_ref().unwrap();
-        // check the supply
-        if let Some(supply_cap) = &free_mint.supply_cap {
-            let next_supply = asset_contract_data
-                .minted_supply
-                .saturating_add(free_mint.amount_per_mint.0);
-
-            if next_supply > supply_cap.0 {
-                return Some(Flaw::SupplyCapExceeded);
-            }
+        if let Some(flaw) = self
+            .validate_and_update_supply_cap(
+                contract_id,
+                asset_contract.supply_cap.clone(),
+                free_mint.amount_per_mint.0,
+                true,
+                true,
+                free_mint.supply_cap.clone()
+            )
+            .await
+        {
+            return Some(flaw);
         }
-        asset_contract_data.minted_supply = asset_contract_data
-            .minted_supply
-            .saturating_add(free_mint.amount_per_mint.0);
 
         // check pointer overflow
         if let Some(pointer) = mint_option.pointer {
@@ -50,10 +45,6 @@ impl Updater {
             self.allocate_new_asset(pointer, contract_id, free_mint.amount_per_mint.0)
                 .await;
         }
-
-        // update the mint data
-        self.set_asset_contract_data(contract_id, &asset_contract_data)
-            .await;
 
         None
     }
@@ -187,23 +178,24 @@ impl Updater {
                     .list
                     .remove(&BlockTx::from_tuple(asset_contract_id).to_str())
                     .unwrap_or(0);
-
-                let mut asset_contract_data_input =
-                    match self.get_asset_contract_data(&asset_contract_id).await {
-                        Ok(data) => data,
-                        Err(flaw) => return Some(flaw),
-                    };
-
-                asset_contract_data_input.burned_supply = asset_contract_data_input
-                    .burned_supply
-                    .saturating_add(burned_amount);
-                self.set_asset_contract_data(&asset_contract_id, &asset_contract_data_input)
-                    .await;
+                if let Some(flaw) = self
+                    .validate_and_update_supply_cap(contract_id, None, burned_amount, false, false, None)
+                    .await
+                {
+                    return Some(flaw);
+                }
             }
         }
 
         if let Some(flaw) = self
-            .check_and_update_supply_cap(contract_id, asset_contract, out_value)
+            .validate_and_update_supply_cap(
+                contract_id,
+                asset_contract.supply_cap.clone(),
+                out_value,
+                true,
+                false,
+                None
+            )
             .await
         {
             return Some(flaw);
@@ -322,7 +314,14 @@ impl Updater {
         };
 
         if let Some(flaw) = self
-            .check_and_update_supply_cap(contract_id, asset_contract, out_value)
+            .validate_and_update_supply_cap(
+                contract_id,
+                asset_contract.supply_cap.clone(),
+                out_value,
+                true,
+                false,
+                None
+            )
             .await
         {
             return Some(flaw);
@@ -447,114 +446,6 @@ impl Updater {
                 None => Some(Flaw::ContractNotMatch),
             },
             Err(flaw) => Some(flaw),
-        }
-    }
-
-    async fn check_and_update_supply_cap(
-        &mut self,
-        contract_id: &BlockTxTuple,
-        asset_contract: &MintOnlyAssetContract,
-        amount: u128,
-    ) -> Option<Flaw> {
-        if let Some(supply_cap) = &asset_contract.supply_cap {
-            let mut asset_contract_data = match self.get_asset_contract_data(contract_id).await {
-                Ok(data) => data,
-                Err(flaw) => return Some(flaw),
-            };
-
-            let next_supply = asset_contract_data.minted_supply.saturating_add(amount);
-            if next_supply > supply_cap.0 {
-                return Some(Flaw::SupplyCapExceeded);
-            }
-
-            asset_contract_data.minted_supply = next_supply;
-            self.set_asset_contract_data(contract_id, &asset_contract_data)
-                .await;
-        }
-        None
-    }
-
-    pub fn process_ratio_type(
-        &self,
-        ratio: &RatioType,
-        total_received_value: &u128,
-        mint_option: &MintBurnOption,
-        tx: &Transaction,
-        block_tx: &BlockTx,
-        is_burn: bool,
-    ) -> Result<u128, Flaw> {
-        match ratio {
-            RatioType::Fixed { ratio } => {
-                if !is_burn {
-                    Ok((total_received_value * ratio.0 as u128) / ratio.1 as u128)
-                } else {
-                    Ok((total_received_value * ratio.1 as u128) / ratio.0 as u128)
-                }
-            }
-            RatioType::Oracle { setting } => {
-                if let Some(oracle_message_signed) = &mint_option.oracle_message {
-                    if setting.asset_id == oracle_message_signed.message.asset_id {
-                        let oracle_validate =
-                            self.validate_oracle_message(oracle_message_signed, &setting, block_tx);
-
-                        if oracle_validate.is_some() {
-                            return Err(oracle_validate.unwrap());
-                        }
-
-                        let mut is_btc = false;
-                        if let Some(asset_id) = &oracle_message_signed.message.asset_id {
-                            if asset_id == "btc" {
-                                is_btc = true;
-                                if let Some(ratio) = oracle_message_signed.message.ratio {
-                                    return Ok(total_received_value
-                                        .saturating_mul(ratio.0 as u128)
-                                        .saturating_div(ratio.1 as u128));
-                                }
-                            }
-                        }
-
-                        // For non-BTC assets or no asset_id specified
-                        if !is_btc {
-                            if let Some(input_outpoint) =
-                                oracle_message_signed.message.input_outpoint
-                            {
-                                let mut input_found = false;
-                                for txin in tx.input.iter() {
-                                    if txin.previous_output == input_outpoint {
-                                        input_found = true;
-                                    }
-                                }
-                                if !input_found {
-                                    return Err(Flaw::OracleMintInputNotFound);
-                                }
-                            } else {
-                                return Err(Flaw::OracleMintInfoFailed);
-                            }
-
-                            if let Some(min_in_value) = &oracle_message_signed.message.min_in_value
-                            {
-                                if total_received_value < &min_in_value.0 {
-                                    return Err(Flaw::OracleMintBelowMinValue);
-                                }
-                            } else {
-                                return Err(Flaw::OracleMintInfoFailed);
-                            }
-
-                            if let Some(_out_value) = &oracle_message_signed.message.out_value {
-                                return Ok(_out_value.0);
-                            } else {
-                                return Err(Flaw::OracleMintInfoFailed);
-                            }
-                        } else {
-                            return Err(Flaw::OracleMintFailed);
-                        }
-                    } else {
-                        return Err(Flaw::OracleMintFailed);
-                    }
-                } else {
-                    return Err(Flaw::OracleMintFailed);
-                }
-            }
         }
     }
 }

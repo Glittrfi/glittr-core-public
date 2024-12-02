@@ -34,6 +34,7 @@ use super::*;
 #[serde(rename_all = "snake_case")]
 pub struct AssetContractData {
     pub minted_supply: u128,
+    pub minted_supply_by_freemint: u128,
     pub burned_supply: u128,
 }
 
