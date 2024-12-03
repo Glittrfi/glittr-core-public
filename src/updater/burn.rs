@@ -34,7 +34,7 @@ impl Updater {
         if let Some(collateralized) = &mba.mint_mechanism.collateralized {
             match &collateralized.mint_structure {
                 mint_burn_asset::MintStructure::Ratio(ratio_type) => {
-                    let process_ratio_result = self.process_ratio_type(
+                    let process_ratio_result = self.validate_and_calculate_ratio_type(
                         &ratio_type,
                         &burned_amount,
                         burn_option,

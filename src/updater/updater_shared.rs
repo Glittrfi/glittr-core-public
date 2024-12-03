@@ -116,7 +116,7 @@ impl Updater {
         None
     }
 
-    pub fn process_ratio_type(
+    pub fn validate_and_calculate_ratio_type(
         &self,
         ratio: &RatioType,
         total_received_value: &u128,

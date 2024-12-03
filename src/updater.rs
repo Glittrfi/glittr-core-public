@@ -20,7 +20,8 @@ use bitcoin::{
     Address, OutPoint, Transaction, TxOut, XOnlyPublicKey,
 };
 use database::{
-    DatabaseError, ASSETLIST_PREFIX, ASSET_CONTRACT_DATA_PREFIX, MESSAGE_PREFIX, STATEKEYS_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX, VESTING_CONTRACT_DATA_PREFIX
+    DatabaseError, ASSET_LIST_PREFIX, ASSET_CONTRACT_DATA_PREFIX, MESSAGE_PREFIX, STATE_KEYS_PREFIX,
+    TRANSACTION_TO_BLOCK_TX_PREFIX, VESTING_CONTRACT_DATA_PREFIX,
 };
 use flaw::Flaw;
 use message::{CallType, ContractType, OpReturnMessage, TxTypeTransfer};
@@ -301,10 +302,14 @@ impl Updater {
             self.set_state_keys(outpoint, &allocation.1.state_keys)
                 .await;
 
-            if !&allocation.1.collateral_accounts.collateral_accounts.is_empty() {
-            self.set_collateral_accounts(outpoint, &allocation.1.collateral_accounts)
-                .await;
-
+            if !&allocation
+                .1
+                .collateral_accounts
+                .collateral_accounts
+                .is_empty()
+            {
+                self.set_collateral_accounts(outpoint, &allocation.1.collateral_accounts)
+                    .await;
             }
         }
 
@@ -374,9 +379,9 @@ impl Updater {
 
                         if let Ok(spec) = spec {
                             outcome.flaw = Updater::validate_contract_by_spec(
-                                    spec,
-                                    &contract_creation.contract_type,
-                                );
+                                spec,
+                                &contract_creation.contract_type,
+                            );
                         } else {
                             outcome.flaw = Some(Flaw::ReferencingFlawedBlockTx);
                         }
@@ -547,7 +552,6 @@ impl Updater {
                 tx.compute_txid().to_string().as_str(),
                 block_tx.to_tuple(),
             );
-
         }
 
         Ok(outcome)

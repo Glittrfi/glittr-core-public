@@ -1,3 +1,4 @@
+// TODO: paste lib no longer maintained https://github.com/dtolnay/paste. update when found better alternative.
 #[macro_export]
 macro_rules! impl_ops_for_outpoint_data {
     ($prefix:expr) => {
@@ -7,7 +8,7 @@ macro_rules! impl_ops_for_outpoint_data {
                     self.database
                         .lock()
                         .await
-                        .put([<$prefix:upper _PREFIX>], &outpoint.to_string(), data);
+                        .put([<$prefix:snake:upper _PREFIX>], &outpoint.to_string(), data);
                 }
             }
 
@@ -16,7 +17,7 @@ macro_rules! impl_ops_for_outpoint_data {
                     self.database
                         .lock()
                         .await
-                        .delete([<$prefix:upper _PREFIX>], &outpoint.to_string());
+                        .delete([<$prefix:snake:upper _PREFIX>], &outpoint.to_string());
                 }
             }
 
@@ -25,7 +26,7 @@ macro_rules! impl_ops_for_outpoint_data {
                     .database
                     .lock()
                     .await
-                    .get([<$prefix:upper _PREFIX>], &outpoint.to_string());
+                    .get([<$prefix:snake:upper _PREFIX>], &outpoint.to_string());
 
                 match data {
                     Ok(data) => Ok(data),

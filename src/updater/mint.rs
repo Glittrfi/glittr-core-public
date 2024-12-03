@@ -151,7 +151,7 @@ impl Updater {
         }
 
         // VALIDATE OUT_VALUE
-        let ratio_block_result = self.process_ratio_type(
+        let ratio_block_result = self.validate_and_calculate_ratio_type(
             &purchase.ratio,
             &total_received_value,
             &mint_option,

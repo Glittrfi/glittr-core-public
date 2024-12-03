@@ -2,7 +2,7 @@ use num::integer::Roots;
 use std::cmp::min;
 
 use super::*;
-use crate::updater::database::COLLATERALACCOUNTS_PREFIX;
+use crate::updater::database::COLLATERAL_ACCOUNTS_PREFIX;
 use bitcoin::{OutPoint, Transaction};
 use database::POOL_DATA_PREFIX;
 use message::{CloseAccountOption, MintBurnOption, OpenAccountOption, SwapOption};
@@ -97,7 +97,7 @@ impl Updater {
                         0
                     };
 
-                let process_ratio_result = self.process_ratio_type(
+                let process_ratio_result = self.validate_and_calculate_ratio_type(
                     &ratio_type,
                     &available_amount,
                     &mint_option,

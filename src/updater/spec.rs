@@ -1,4 +1,4 @@
-use database::SPECCONTRACTOWNED_PREFIX;
+use database::SPEC_CONTRACT_OWNED_PREFIX;
 use message::ContractCreation;
 
 use crate::spec::{
