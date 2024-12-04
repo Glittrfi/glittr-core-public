@@ -74,6 +74,8 @@ impl Updater {
         contract_id: &BlockTxTuple,
         mint_option: &MintBurnOption,
     ) -> Option<Flaw> {
+        let mut input_values: Vec<u128> = vec![];
+        let mut total_collateralized: Vec<u128> = vec![];
         let mut out_value: u128 = 0;
 
         // check livetime
@@ -96,6 +98,8 @@ impl Updater {
                     } else {
                         0
                     };
+
+                input_values.push(available_amount);
 
                 let process_ratio_result = self.validate_and_calculate_ratio_type(
                     &ratio_type,
@@ -137,6 +141,8 @@ impl Updater {
                                 .total_collateral_amount
                                 .saturating_mul(collateral_account.ltv.0 as u128))
                             .saturating_div(collateral_account.ltv.1 as u128);
+
+                        input_values.push(available_amount);
 
                         // Allowed amount = min(total_amount * max_ltv, available_amount)
                         let allowed_amount = min(
@@ -286,6 +292,9 @@ impl Updater {
                                 existing_pool.total_supply =
                                     total_supply.saturating_add(mint_amount);
 
+                                total_collateralized.push(new_amount0);
+                                total_collateralized.push(new_amount1);
+
                                 if !self.is_read_only {
                                     self.database.lock().await.put(
                                         POOL_DATA_PREFIX,
@@ -330,6 +339,9 @@ impl Updater {
                                     total_supply: initial_supply,
                                 };
 
+                                total_collateralized.push(input_first_asset);
+                                total_collateralized.push(input_second_asset);
+
                                 if !self.is_read_only {
                                     self.database.lock().await.put(
                                         POOL_DATA_PREFIX,
@@ -344,6 +356,17 @@ impl Updater {
                         }
                     }
                 }
+            }
+        }
+
+        if let Some(assert_values) = &mint_option.assert_values {
+            if let Some(flaw) = self.validate_assert_values(
+                &Some(assert_values.clone()),
+                input_values,
+                Some(total_collateralized),
+                out_value,
+            ) {
+                return Some(flaw);
             }
         }
 
@@ -609,6 +632,17 @@ impl Updater {
                                 );
                             if new_k < old_k {
                                 return Some(Flaw::InvalidConstantProduct);
+                            }
+
+                            if let Some(assert_values) = &swap_option.assert_values {
+                                if let Some(flaw) = self.validate_assert_values(
+                                    &Some(assert_values.clone()),
+                                    vec![input_amount],
+                                    Some(vec![pool_data.amounts[0], pool_data.amounts[1]]),
+                                    out_value
+                                ) {
+                                    return Some(flaw);
+                                }
                             }
 
                             // Update pool state

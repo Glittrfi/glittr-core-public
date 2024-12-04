@@ -1,4 +1,4 @@
-use message::{MintBurnOption, OracleMessageSigned};
+use message::{AssertValues, MintBurnOption, OracleMessageSigned};
 use transaction_shared::{OracleSetting, RatioType};
 
 use super::*;
@@ -81,7 +81,7 @@ impl Updater {
         amount: u128,
         is_mint: bool,
         is_free_mint: bool,
-        free_mint_supply: Option<U128>
+        free_mint_supply: Option<U128>,
     ) -> Option<Flaw> {
         let mut data = match self.get_asset_contract_data(contract_id).await {
             Ok(data) => data,
@@ -198,5 +198,54 @@ impl Updater {
                 }
             }
         }
+    }
+
+    pub fn validate_assert_values(
+        &self,
+        assert_values: &Option<AssertValues>,
+        input_values: Vec<u128>,
+        total_collateralized: Option<Vec<u128>>,
+        out_value: u128,
+    ) -> Option<Flaw> {
+        if let Some(assert_values) = assert_values {
+            // Validate input values if specified
+            if let Some(expected_input_values) = &assert_values.input_values {
+                if expected_input_values.len() != input_values.len() {
+                    return Some(Flaw::AssertValuesMismatch);
+                }
+                for (expected, actual) in expected_input_values.iter().zip(input_values.iter()) {
+                    if expected.0 != *actual {
+                        return Some(Flaw::AssertValuesMismatch);
+                    }
+                }
+            }
+
+            // Validate total collateralized if specified
+            if let Some(expected_total_collateralized) = &assert_values.total_collateralized
+            {
+                if let Some(actual_total_collateralized) = total_collateralized {
+                    if expected_total_collateralized.len() != actual_total_collateralized.len() {
+                        return Some(Flaw::AssertValuesMismatch);
+                    }
+                    for (expected, actual) in expected_total_collateralized
+                        .iter()
+                        .zip(actual_total_collateralized.iter())
+                    {
+                        if expected.0 != *actual {
+                            return Some(Flaw::AssertValuesMismatch);
+                        }
+                    }
+                }
+            }
+
+            // Validate output value
+            if let Some(assert_min_out_value) = &assert_values.min_out_value {
+                if assert_min_out_value.0 > out_value {
+                    return Some(Flaw::AssertValuesMismatch);
+                }
+            }
+        }
+
+        None
     }
 }

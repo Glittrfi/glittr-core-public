@@ -22,6 +22,18 @@ impl Updater {
         }
 
         let free_mint = asset_contract.mint_mechanism.free_mint.as_ref().unwrap();
+
+        if let Some(assert_values) = &mint_option.assert_values {
+            if let Some(flaw) = self.validate_assert_values(
+                &Some(assert_values.clone()),
+                vec![],
+                None,
+                free_mint.amount_per_mint.0
+            ) {
+                return Some(flaw);
+            }
+        }
+
         if let Some(flaw) = self
             .validate_and_update_supply_cap(
                 contract_id,
@@ -168,6 +180,18 @@ impl Updater {
 
         if out_value == 0 {
             return Some(Flaw::MintedZero);
+        }
+
+
+        if let Some(assert_values) = &mint_option.assert_values {
+            if let Some(flaw) = self.validate_assert_values(
+                &Some(assert_values.clone()),
+                vec![total_received_value],
+                None,
+                out_value
+            ) {
+                return Some(flaw);
+            }
         }
 
         // If transfer is burn and using glittr asset input, remove it from unallocated and add burned
@@ -320,6 +344,17 @@ impl Updater {
         } else {
             total_allocation.saturating_sub(claimed_allocation)
         };
+
+        if let Some(assert_values) = &mint_option.assert_values {
+            if let Some(flaw) = self.validate_assert_values(
+                &Some(assert_values.clone()),
+                vec![],
+                None,
+                out_value
+            ) {
+                return Some(flaw);
+            }
+        }
 
         if let Some(flaw) = self
             .validate_and_update_supply_cap(
