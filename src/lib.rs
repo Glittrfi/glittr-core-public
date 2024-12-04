@@ -15,6 +15,7 @@ mod store;
 mod transaction;
 mod types;
 mod updater;
+mod macros;
 
 pub use api::*;
 pub use flaw::*;

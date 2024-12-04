@@ -20,11 +20,6 @@ impl Updater {
             return Some(Flaw::LiveTimeNotReached);
         }
 
-        let mut asset_contract_data = match self.get_asset_contract_data(contract_id).await {
-            Ok(data) => data,
-            Err(flaw) => return Some(flaw),
-        };
-
         let burned_amount = self
             .unallocated_inputs
             .asset_list
@@ -39,7 +34,7 @@ impl Updater {
         if let Some(collateralized) = &mba.mint_mechanism.collateralized {
             match &collateralized.mint_structure {
                 mint_burn_asset::MintStructure::Ratio(ratio_type) => {
-                    let process_ratio_result = self.process_ratio_type(
+                    let process_ratio_result = self.validate_and_calculate_ratio_type(
                         &ratio_type,
                         &burned_amount,
                         burn_option,
@@ -142,34 +137,14 @@ impl Updater {
                                     return Some(Flaw::OracleMintFailed);
                                 }
 
-                                if block_tx.block - oracle_message_signed.message.block_height
-                                    > oracle_setting.block_height_slippage as u64
-                                {
-                                    return Some(Flaw::OracleMintBlockSlippageExceeded);
-                                }
+                                let oracle_validate = self.validate_oracle_message(
+                                    oracle_message_signed,
+                                    oracle_setting,
+                                    block_tx,
+                                );
 
-                                let pubkey: XOnlyPublicKey =
-                                    XOnlyPublicKey::from_slice(&oracle_setting.pubkey.as_slice())
-                                        .unwrap();
-
-                                if let Ok(signature) =
-                                    Signature::from_slice(&oracle_message_signed.signature)
-                                {
-                                    let secp = Secp256k1::new();
-
-                                    let msg = Message::from_digest_slice(
-                                        sha256::Hash::hash(
-                                            serde_json::to_string(&oracle_message_signed.message)
-                                                .unwrap()
-                                                .as_bytes(),
-                                        )
-                                        .as_byte_array(),
-                                    )
-                                    .unwrap();
-
-                                    if pubkey.verify(&secp, &msg, &signature).is_err() {
-                                        return Some(Flaw::OracleMintSignatureFailed);
-                                    }
+                                if oracle_validate.is_some() {
+                                    return oracle_validate;
                                 }
                             }
 
@@ -238,9 +213,14 @@ impl Updater {
                 }
             }
 
-            asset_contract_data.burned_supply = asset_contract_data
-                .burned_supply
-                .saturating_sub(burned_amount);
+            // update the mint data
+
+            if let Some(flaw) = self
+                .validate_and_update_supply_cap(contract_id, None, burned_amount, false, false, None)
+                .await
+            {
+                return Some(flaw);
+            }
 
             if let Some(pointer) = burn_option.pointer {
                 if let Some(flaw) = self.validate_pointer(pointer, tx) {
@@ -255,10 +235,6 @@ impl Updater {
                     }
                 }
             }
-
-            // update the mint data
-            self.set_asset_contract_data(contract_id, &asset_contract_data)
-                .await;
         } else {
             return Some(Flaw::InvalidContractType);
         }

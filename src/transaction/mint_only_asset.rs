@@ -1,5 +1,6 @@
 use flaw::Flaw;
-use shared::{FreeMint, Preallocated, PurchaseBurnSwap};
+use message::ContractValidator;
+use transaction_shared::{FreeMint, Preallocated, PurchaseBurnSwap};
 
 use super::*;
 
@@ -23,8 +24,8 @@ pub struct MintOnlyAssetContract {
 }
 
 /// Mix of distribution schemes only applicable for preallocated and free_mint or preallocated and purchase
-impl MintOnlyAssetContract {
-    pub fn validate(&self) -> Option<Flaw> {
+impl ContractValidator for MintOnlyAssetContract {
+    fn validate(&self) -> Option<Flaw> {
         if self.mint_mechanism.purchase.is_some() && self.mint_mechanism.free_mint.is_some() {
             return Some(Flaw::NotImplemented);
         }

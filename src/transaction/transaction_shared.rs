@@ -4,6 +4,10 @@ use std::collections::HashMap;
 use bitcoin::{PublicKey, XOnlyPublicKey};
 use message::ContractType;
 
+pub trait ContractValidator {
+    fn validate(&self) -> Option<Flaw>;
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MintMechanisms {
@@ -21,11 +25,9 @@ pub struct MintMechanisms {
 /// * Vesting schedule
 ///    - List of floats (percentage unlock)
 ///    - List of block heights
-
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct Preallocated {
-    // TODO: optimize for multiple pubkey getting the same allocation
     pub allocations: HashMap<U128, Vec<Pubkey>>,
     pub vesting_plan: Option<VestingPlan>,
 }
@@ -201,7 +203,8 @@ impl RatioType {
 #[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 pub struct OracleSetting {
-    pub pubkey: Pubkey, // compressed public key
+    /// compressed public key
+    pub pubkey: Pubkey, 
     /// set asset_id to null for fully trust the oracle, ordinal_number if ordinal, rune's block_tx if rune, etc
     pub asset_id: Option<String>,
     /// delta block_height in which the oracle message still valid

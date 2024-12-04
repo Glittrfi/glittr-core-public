@@ -13,7 +13,7 @@ use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
 use glittr::{
     database::{
         Database, DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX,
-        COLLATERAL_ACCOUNT_PREFIX, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX,
+        COLLATERAL_ACCOUNTS_PREFIX, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX,
     },
     message::{
         CallType, CloseAccountOption, ContractCall, ContractCreation, ContractType, MintBurnOption,
@@ -25,7 +25,7 @@ use glittr::{
         MintStructure, ProportionalType, RatioModel, ReturnCollateral, SwapMechanisms,
     },
     mint_only_asset::{MOAMintMechanisms, MintOnlyAssetContract},
-    shared::{
+    transaction_shared::{
         FreeMint, InputAsset, OracleSetting, Preallocated, PurchaseBurnSwap, RatioType, VestingPlan,
     },
     spec::{
@@ -174,12 +174,12 @@ impl TestContext {
                 .database
                 .lock()
                 .await
-                .expensive_find_by_prefix(COLLATERAL_ACCOUNT_PREFIX)
+                .expensive_find_by_prefix(COLLATERAL_ACCOUNTS_PREFIX)
                 .map(|vec| {
                     vec.into_iter()
                         .map(|(k, v)| {
                             (
-                                k.trim_start_matches(&format!("{}:", COLLATERAL_ACCOUNT_PREFIX))
+                                k.trim_start_matches(&format!("{}:", COLLATERAL_ACCOUNTS_PREFIX))
                                     .to_string(),
                                 v,
                             )
@@ -2005,7 +2005,7 @@ async fn test_integration_collateralized_mba() {
                     return_collateral: Some(ReturnCollateral {
                         oracle_setting: Some(OracleSetting {
                             pubkey: oracle_xonly.0.serialize().to_vec(),
-                            asset_id: Some("collateral".to_string()),
+                            asset_id: None,
                             block_height_slippage: 5,
                         }),
                         fee: None,

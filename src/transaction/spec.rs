@@ -1,14 +1,14 @@
 use bitcoin::PublicKey;
+use message::ContractValidator;
 use mint_burn_asset::MintStructure;
-use shared::InputAsset;
+use transaction_shared::InputAsset;
 
 use super::*;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MintBurnAssetCollateralizedSpec {
-    // if this is true, the assets are mutable
-    // and can be updated
+    /// if this is true, the assets can be updated
     pub _mutable_assets: bool,
     pub input_assets: Option<Vec<InputAsset>>,
     pub mint_structure: Option<MintStructure>,
@@ -20,8 +20,8 @@ pub struct MintBurnAssetSpec {
     pub collateralized: Option<MintBurnAssetCollateralizedSpec>,
 }
 
-impl MintBurnAssetSpec {
-    pub fn validate(&self) -> Option<Flaw> {
+impl ContractValidator for MintBurnAssetSpec {
+    fn validate(&self) -> Option<Flaw> {
         if let Some(collateralized) = &self.collateralized {
             if collateralized.input_assets.is_none() {
                 return Some(Flaw::SpecFieldRequired("input_assets".to_string()));
@@ -91,8 +91,8 @@ pub struct SpecContract {
     pub block_tx: Option<BlockTxTuple>,
 }
 
-impl SpecContract {
-    pub fn validate(&self) -> Option<Flaw> {
+impl ContractValidator for SpecContract {
+    fn validate(&self) -> Option<Flaw> {
         if self.block_tx.is_some() {
             // when updating the spec
 
@@ -158,10 +158,7 @@ impl SpecContract {
 #[cfg(test)]
 mod test {
     use crate::{
-        mint_burn_asset::MintStructure,
-        shared::{InputAsset, RatioType},
-        spec::{MintBurnAssetCollateralizedSpec, MintBurnAssetSpec},
-        BlockTxTuple, Flaw,
+        message::ContractValidator, mint_burn_asset::MintStructure, spec::{MintBurnAssetCollateralizedSpec, MintBurnAssetSpec}, transaction_shared::{InputAsset, RatioType}, BlockTxTuple, Flaw
     };
 
     use super::{MintOnlyAssetSpec, MintOnlyAssetSpecPegInType, SpecContract, SpecContractType};

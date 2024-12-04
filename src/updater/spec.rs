@@ -8,6 +8,7 @@ use crate::spec::{
 use super::*;
 
 impl Updater {
+    impl_ops_for_outpoint_data!(SpecContractOwned);
     pub async fn create_spec(
         &mut self,
         block_height: u64,
@@ -41,46 +42,6 @@ impl Updater {
         {
             self.allocate_new_spec(vout, spec_contract_id).await;
         };
-    }
-
-    pub async fn set_spec_contract_owned(
-        &self,
-        outpoint: &OutPoint,
-        spec_contract_owned: &SpecContractOwned,
-    ) {
-        if !self.is_read_only {
-            self.database.lock().await.put(
-                SPEC_CONTRACT_OWNED_PREFIX,
-                &outpoint.to_string(),
-                spec_contract_owned,
-            );
-        }
-    }
-
-    pub async fn delete_spec_contract_owned(&self, outpoint: &OutPoint) {
-        if !self.is_read_only {
-            self.database
-                .lock()
-                .await
-                .delete(SPEC_CONTRACT_OWNED_PREFIX, &outpoint.to_string());
-        }
-    }
-
-    pub async fn get_spec_contract_owned(
-        &self,
-        outpoint: &OutPoint,
-    ) -> Result<SpecContractOwned, Flaw> {
-        let data: Result<SpecContractOwned, DatabaseError> = self
-            .database
-            .lock()
-            .await
-            .get(SPEC_CONTRACT_OWNED_PREFIX, &outpoint.to_string());
-
-        match data {
-            Ok(data) => Ok(data),
-            Err(DatabaseError::NotFound) => Ok(SpecContractOwned::default()),
-            Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
-        }
     }
 
     pub fn validate_contract_by_spec(
@@ -228,9 +189,12 @@ impl Updater {
 
 #[cfg(test)]
 mod test {
-    use crate::{spec::{
-        MintBurnAssetCollateralizedSpec, MintBurnAssetSpec, SpecContract, SpecContractType,
-    }, Flaw};
+    use crate::{
+        spec::{
+            MintBurnAssetCollateralizedSpec, MintBurnAssetSpec, SpecContract, SpecContractType,
+        },
+        Flaw,
+    };
 
     use super::{
         mint_burn_asset::{
