@@ -14,6 +14,7 @@ use glittr::{
     database::{
         Database, DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX,
         COLLATERAL_ACCOUNTS_PREFIX, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX,
+        TICKER_TO_BLOCK_TX_PREFIX,
     },
     message::{
         CallType, CloseAccountOption, ContractCall, ContractCreation, ContractType, MintBurnOption,
@@ -25,15 +26,15 @@ use glittr::{
         MintStructure, ProportionalType, RatioModel, ReturnCollateral, SwapMechanisms,
     },
     mint_only_asset::{MOAMintMechanisms, MintOnlyAssetContract},
-    transaction_shared::{
-        FreeMint, InputAsset, OracleSetting, Preallocated, PurchaseBurnSwap, RatioType, VestingPlan,
-    },
     spec::{
         MintBurnAssetCollateralizedSpec, MintBurnAssetSpec, MintOnlyAssetSpec,
         MintOnlyAssetSpecPegInType, SpecContract, SpecContractType,
     },
-    AssetContractData, AssetList, BlockTx, CollateralAccounts, Flaw, Indexer, MessageDataOutcome,
-    Pubkey, U128,
+    transaction_shared::{
+        FreeMint, InputAsset, OracleSetting, Preallocated, PurchaseBurnSwap, RatioType, VestingPlan,
+    },
+    AssetContractData, AssetList, BlockTx, BlockTxTuple, CollateralAccounts, Flaw, Indexer,
+    MessageDataOutcome, Pubkey, U128,
 };
 
 // Test utilities
@@ -3141,6 +3142,82 @@ async fn test_integration_spec_moa_peg_in_type_invalid() {
 
     let message = ctx.get_and_verify_message_outcome(block_tx_contract).await;
     assert_eq!(message.flaw, Some(Flaw::SpecCriteriaInvalid));
+
+    ctx.drop().await;
+}
+
+#[tokio::test]
+async fn test_integration_contract_ticker() {
+    let mut ctx = TestContext::new().await;
+
+    let ticker = "POHON_PISANG".to_string();
+
+    let contract_message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            spec: None,
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
+                ticker: Some(ticker.clone()),
+                supply_cap: None,
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MOAMintMechanisms {
+                    purchase: Some(PurchaseBurnSwap {
+                        input_asset: InputAsset::RawBtc,
+                        pay_to_key: None,
+                        ratio: RatioType::Fixed { ratio: (1, 1) },
+                    }),
+                    preallocated: None,
+                    free_mint: None,
+                },
+            }),
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let block_tx = ctx.build_and_mine_message(&contract_message).await;
+
+    let contract_message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            spec: None,
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
+                ticker: Some(ticker.clone()),
+                supply_cap: None,
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MOAMintMechanisms {
+                    purchase: Some(PurchaseBurnSwap {
+                        input_asset: InputAsset::RawBtc,
+                        pay_to_key: None,
+                        ratio: RatioType::Fixed { ratio: (1, 1) },
+                    }),
+                    preallocated: None,
+                    free_mint: None,
+                },
+            }),
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let block_tx_error = ctx.build_and_mine_message(&contract_message).await;
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+    ctx.get_and_verify_message_outcome(block_tx).await;
+
+    let block_tx_by_ticker: Result<BlockTxTuple, DatabaseError> = ctx
+        .indexer
+        .lock()
+        .await
+        .database
+        .lock()
+        .await
+        .get(TICKER_TO_BLOCK_TX_PREFIX, &ticker);
+
+    assert_eq!(block_tx_by_ticker.unwrap(), block_tx.to_tuple());
+
+    let message_error = ctx.get_and_verify_message_outcome(block_tx_error).await;
+    assert_eq!(message_error.flaw, Some(Flaw::TickerAlreadyExist));
 
     ctx.drop().await;
 }
