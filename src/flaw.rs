@@ -11,6 +11,8 @@ pub enum Flaw {
     InvalidBlockTxPointer,
     ReferencingFlawedBlockTx,
     InvalidBitcoinAddress,
+    TickerAlreadyExist,
+    TickerNotFound,
 
     // transfer
     OutputOverflow(Vec<u32>),

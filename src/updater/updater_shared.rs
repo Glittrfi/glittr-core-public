@@ -15,6 +15,20 @@ pub fn relative_block_height_to_block_height(
 }
 
 impl Updater {
+    pub async fn validate_ticker_not_exist(&self, ticker: String) -> Option<Flaw> {
+        let contract_block_tx = self.get_contract_block_tx_by_ticker(ticker).await;
+
+        match contract_block_tx {
+            Ok(_) => {
+                Some(Flaw::TickerAlreadyExist)
+            }
+            Err(Flaw::FailedDeserialization) => {
+                Some(Flaw::FailedDeserialization)
+            }
+            _ => None,
+        }
+    }
+
     pub fn validate_pointer(&self, pointer: u32, tx: &Transaction) -> Option<Flaw> {
         if pointer >= tx.output.len() as u32 {
             return Some(Flaw::PointerOverflow);
@@ -81,7 +95,7 @@ impl Updater {
         amount: u128,
         is_mint: bool,
         is_free_mint: bool,
-        free_mint_supply: Option<U128>
+        free_mint_supply: Option<U128>,
     ) -> Option<Flaw> {
         let mut data = match self.get_asset_contract_data(contract_id).await {
             Ok(data) => data,

@@ -20,8 +20,9 @@ use bitcoin::{
     Address, OutPoint, Transaction, TxOut, XOnlyPublicKey,
 };
 use database::{
-    DatabaseError, ASSET_LIST_PREFIX, ASSET_CONTRACT_DATA_PREFIX, MESSAGE_PREFIX, STATE_KEYS_PREFIX,
-    TRANSACTION_TO_BLOCK_TX_PREFIX, VESTING_CONTRACT_DATA_PREFIX,
+    DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, MESSAGE_PREFIX,
+    STATE_KEYS_PREFIX, TICKER_TO_BLOCK_TX_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX,
+    VESTING_CONTRACT_DATA_PREFIX,
 };
 use flaw::Flaw;
 use message::{CallType, ContractType, OpReturnMessage, TxTypeTransfer};
@@ -356,6 +357,7 @@ impl Updater {
             block: block_height,
             tx: tx_index,
         };
+        let mut ticker: Option<String> = None;
 
         if let Ok(message) = message_result {
             outcome.message = Some(message.clone());
@@ -390,6 +392,18 @@ impl Updater {
 
                 match contract_creation.contract_type {
                     ContractType::Moa(mint_only_asset_contract) => {
+                        if outcome.flaw.is_none() {
+                            if let Some(_ticker) = mint_only_asset_contract.ticker {
+                                if let Some(ticker_flaw) =
+                                    self.validate_ticker_not_exist(_ticker.clone()).await
+                                {
+                                    outcome.flaw = Some(ticker_flaw);
+                                } else {
+                                    ticker = Some(_ticker);
+                                }
+                            }
+                        }
+
                         if let Some(purchase) = mint_only_asset_contract.mint_mechanism.purchase {
                             if let InputAsset::GlittrAsset(block_tx_tuple) = purchase.input_asset {
                                 let message = self.get_message(&block_tx_tuple).await;
@@ -406,6 +420,18 @@ impl Updater {
                         }
                     }
                     ContractType::Mba(mint_burn_asset_contract) => {
+                        if outcome.flaw.is_none() {
+                            if let Some(_ticker) = mint_burn_asset_contract.ticker {
+                                if let Some(ticker_flaw) =
+                                    self.validate_ticker_not_exist(_ticker.clone()).await
+                                {
+                                    outcome.flaw = Some(ticker_flaw);
+                                } else {
+                                    ticker = Some(_ticker);
+                                }
+                            }
+                        }
+
                         if let Some(purchase) = mint_burn_asset_contract.mint_mechanism.purchase {
                             if let InputAsset::GlittrAsset(block_tx_tuple) = purchase.input_asset {
                                 let message = self.get_message(&block_tx_tuple).await;
@@ -552,6 +578,14 @@ impl Updater {
                 tx.compute_txid().to_string().as_str(),
                 block_tx.to_tuple(),
             );
+
+            if let Some(ticker) = ticker {
+                self.database.lock().await.put(
+                    TICKER_TO_BLOCK_TX_PREFIX,
+                    ticker.as_str(),
+                    block_tx.to_tuple(),
+                );
+            }
         }
 
         Ok(outcome)
@@ -578,6 +612,22 @@ impl Updater {
         }
 
         None
+    }
+
+    pub async fn get_contract_block_tx_by_ticker(&self, ticker: String) -> Result<BlockTxTuple, Flaw> {
+        let block_tx: Result<BlockTxTuple, DatabaseError> = self
+            .database
+            .lock()
+            .await
+            .get(TICKER_TO_BLOCK_TX_PREFIX, &ticker);
+
+        match block_tx {
+            Ok(block_tx) => {
+                return Ok(block_tx);
+            }
+            Err(DatabaseError::NotFound) => Err(Flaw::TickerNotFound),
+            Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
+        }
     }
 
     async fn get_message(&self, contract_id: &BlockTxTuple) -> Result<OpReturnMessage, Flaw> {
