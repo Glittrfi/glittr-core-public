@@ -27,12 +27,22 @@ pub struct MintBurnOption {
     pub pointer: Option<u32>,
     pub oracle_message: Option<OracleMessageSigned>,
     pub pointer_to_key: Option<u32>,
+    pub assert_values: Option<AssertValues>
 }
 
 #[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct SwapOption { // TODO: expected in, expected out, expected pool supply
+pub struct SwapOption { 
     pub pointer: u32,
+    pub assert_values: Option<AssertValues>
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct AssertValues {
+    pub input_values: Option<Vec<U128>>,
+    pub total_collateralized: Option<Vec<U128>>,
+    pub min_out_value: Option<U128>,
 }
 
 #[allow(clippy::large_enum_variant)]
