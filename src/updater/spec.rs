@@ -211,6 +211,7 @@ mod test {
             supply_cap: None,
             divisibility: 18,
             live_time: 0,
+            end_time: None,
             mint_mechanism: MBAMintMechanisms {
                 preallocated: None,
                 free_mint: None,
@@ -259,6 +260,7 @@ mod test {
             supply_cap: None,
             divisibility: 18,
             live_time: 0,
+            end_time: None,
             mint_mechanism: MBAMintMechanisms {
                 preallocated: None,
                 free_mint: None,
@@ -307,6 +309,7 @@ mod test {
             supply_cap: None,
             divisibility: 18,
             live_time: 0,
+            end_time: None,
             mint_mechanism: MBAMintMechanisms {
                 preallocated: None,
                 free_mint: None,

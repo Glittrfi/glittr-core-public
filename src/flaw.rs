@@ -25,7 +25,7 @@ pub enum Flaw {
 
     // call type::mint
     SupplyCapExceeded,
-    LiveTimeNotReached,
+    ContractIsNotLive,
     OracleMintFailed,
     OracleMintInputNotFound,
     OracleMintBelowMinValue,

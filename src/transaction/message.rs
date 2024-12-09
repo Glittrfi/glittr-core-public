@@ -259,6 +259,7 @@ mod test {
                     supply_cap: Some(U128(1000)),
                     divisibility: 18,
                     live_time: 0,
+                    end_time: None,
                     mint_mechanism: MOAMintMechanisms {
                         free_mint: Some(FreeMint {
                             supply_cap: Some(U128(1000)),

@@ -19,7 +19,8 @@ pub struct MintOnlyAssetContract {
     pub ticker: Option<String>,
     pub supply_cap: Option<U128>,
     pub divisibility: u8,
-    pub live_time: BlockHeight,
+    pub live_time: RelativeOrAbsoluteBlockHeight,
+    pub end_time: Option<RelativeOrAbsoluteBlockHeight>,
     pub mint_mechanism: MOAMintMechanisms,
 }
 

@@ -78,11 +78,6 @@ impl Updater {
         let mut total_collateralized: Vec<u128> = vec![];
         let mut out_value: u128 = 0;
 
-        // check livetime
-        if mba.live_time > block_tx.block {
-            return Some(Flaw::LiveTimeNotReached);
-        }
-
         match collateralized.mint_structure {
             mint_burn_asset::MintStructure::Ratio(ratio_type) => {
                 let available_amount =
