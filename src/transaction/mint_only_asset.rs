@@ -1,5 +1,5 @@
 use flaw::Flaw;
-use message::ContractValidator;
+use message::{Commitment, ContractValidator};
 use transaction_shared::{FreeMint, Preallocated, PurchaseBurnSwap};
 
 use super::*;
@@ -22,6 +22,7 @@ pub struct MintOnlyAssetContract {
     pub live_time: RelativeOrAbsoluteBlockHeight,
     pub end_time: Option<RelativeOrAbsoluteBlockHeight>,
     pub mint_mechanism: MOAMintMechanisms,
+    pub commitment: Option<Commitment>
 }
 
 /// Mix of distribution schemes only applicable for preallocated and free_mint or preallocated and purchase

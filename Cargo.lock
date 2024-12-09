@@ -846,6 +846,7 @@ dependencies = [
  "borsh-derive",
  "config",
  "env_logger",
+ "growable-bloom-filter",
  "hex",
  "itertools 0.13.0",
  "lazy_static",
@@ -878,6 +879,18 @@ dependencies = [
  "log",
  "regex-automata",
  "regex-syntax",
+]
+
+[[package]]
+name = "growable-bloom-filter"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d174ccb4ba660d431329e7f0797870d0a4281e36353ec4b4a3c5eab6c2cfb6f1"
+dependencies = [
+ "serde",
+ "serde_bytes",
+ "serde_derive",
+ "xxhash-rust",
 ]
 
 [[package]]
@@ -2215,6 +2228,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_bytes"
+version = "0.11.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "387cc504cb06bb40a96c8e04e951fe01854cf6bc921053c954e4a606d9675c6a"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "serde_derive"
 version = "1.0.210"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3033,6 +3055,12 @@ checksum = "36c1fec1a2bb5866f07c25f68c26e565c4c200aebb96d7e55710c19d3e8ac49b"
 dependencies = [
  "memchr",
 ]
+
+[[package]]
+name = "xxhash-rust"
+version = "0.8.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a5cbf750400958819fb6178eaa83bee5cd9c29a26a40cc241df8c70fdd46984"
 
 [[package]]
 name = "yaml-rust"

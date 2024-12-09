@@ -232,6 +232,7 @@ mod test {
                 }),
             },
             swap_mechanism: SwapMechanisms { fee: None },
+            commitment: None,
         });
 
         let spec_mba_contract = SpecContract {
@@ -281,6 +282,7 @@ mod test {
                 }),
             },
             swap_mechanism: SwapMechanisms { fee: None },
+            commitment: None,
         });
 
         let spec_mba_contract = SpecContract {
@@ -330,6 +332,7 @@ mod test {
                 }),
             },
             swap_mechanism: SwapMechanisms { fee: None },
+            commitment: None,
         });
 
         let spec_mba_contract = SpecContract {

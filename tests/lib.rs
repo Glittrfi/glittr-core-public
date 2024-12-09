@@ -30,7 +30,7 @@ use glittr::{
         MintOnlyAssetSpecPegInType, SpecContract, SpecContractType,
     },
     transaction_shared::{
-        FreeMint, InputAsset, OracleSetting, Preallocated, PurchaseBurnSwap, RatioType, VestingPlan,
+        AllocationType, FreeMint, InputAsset, OracleSetting, Preallocated, PurchaseBurnSwap, RatioType, VestingPlan
     },
     AssetContractData, AssetList, BlockTx, CollateralAccounts, Flaw, Indexer, MessageDataOutcome,
     Pubkey, U128,
@@ -293,6 +293,7 @@ async fn test_integration_broadcast_op_return_message_success() {
                     preallocated: None,
                     purchase: None,
                 },
+                commitment: None,
             }),
         }),
         transfer: None,
@@ -329,6 +330,7 @@ async fn test_integration_purchaseburnswap() {
                     preallocated: None,
                     free_mint: None,
                 },
+                commitment: None,
             }),
         }),
         transfer: None,
@@ -365,6 +367,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
                     preallocated: None,
                     free_mint: None,
                 },
+                commitment: None,
             }),
         }),
         transfer: None,
@@ -383,6 +386,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None,
             }),
         }),
         transfer: None,
@@ -487,6 +491,7 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
                     preallocated: None,
                     free_mint: None,
                 },
+                commitment: None,
             }),
         }),
         transfer: None,
@@ -502,6 +507,7 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None,
             }),
         }),
         transfer: None,
@@ -600,6 +606,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
                     preallocated: None,
                     free_mint: None,
                 },
+                commitment: None,
             }),
         }),
         transfer: None,
@@ -651,6 +658,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
                 }),
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None,
             }),
         }),
         transfer: None,
@@ -766,6 +774,7 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
                     preallocated: None,
                     free_mint: None,
                 },
+                commitment: None,
             }),
         }),
         contract_call: None,
@@ -813,6 +822,7 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
                 }),
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None,
             }),
         }),
         contract_creation: None,
@@ -901,6 +911,7 @@ async fn test_metaprotocol_to_glittr_asset() {
                     preallocated: None,
                     free_mint: None,
                 },
+                commitment: None,
             }),
         }),
         transfer: None,
@@ -955,6 +966,7 @@ async fn test_metaprotocol_to_glittr_asset() {
                 }),
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None,
             }),
         }),
         transfer: None,
@@ -1033,6 +1045,7 @@ async fn test_integration_freemint() {
                     preallocated: None,
                     purchase: None,
                 },
+                commitment: None,
             }),
         }),
         transfer: None,
@@ -1066,6 +1079,7 @@ async fn test_integration_mint_freemint() {
                     preallocated: None,
                     purchase: None,
                 },
+                commitment: None,
             }),
         }),
         transfer: None,
@@ -1085,6 +1099,7 @@ async fn test_integration_mint_freemint() {
                     oracle_message: None,
                     pointer_to_key: None,
                     assert_values: None,
+                    commitment_message: None
                 }),
             }),
             transfer: None,
@@ -1135,6 +1150,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
                     preallocated: None,
                     purchase: None,
                 },
+                commitment: None,
             }),
         }),
         transfer: None,
@@ -1152,6 +1168,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None,
             }),
         }),
         contract_creation: None,
@@ -1169,6 +1186,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None,
             }),
         }),
         contract_creation: None,
@@ -1214,6 +1232,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
                     preallocated: None,
                     purchase: None,
                 },
+                commitment: None,
             }),
         }),
         transfer: None,
@@ -1231,6 +1250,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None,
             }),
         }),
         transfer: None,
@@ -1247,6 +1267,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None
             }),
         }),
         transfer: None,
@@ -1307,17 +1328,17 @@ async fn test_integration_mint_preallocated_freemint() {
 
     println!("pub key {:?}", pubkey_1.to_bytes());
 
-    let mut allocations: HashMap<U128, Vec<Pubkey>> = HashMap::new();
+    let mut allocations: HashMap<U128, AllocationType> = HashMap::new();
     allocations.insert(
         U128(100),
-        vec![
+        AllocationType::VecPubkey(vec![
             pubkey_1.to_bytes(),
             pubkey_2.to_bytes(),
             pubkey_3.to_bytes(),
             pubkey_4.to_bytes(),
-        ],
+        ]),
     );
-    allocations.insert(U128(300), vec![pubkey_reserve.to_bytes()]);
+    allocations.insert(U128(300), AllocationType::VecPubkey(vec![pubkey_reserve.to_bytes()]));
 
     let vesting_plan =
         VestingPlan::Scheduled(vec![((1, 4), -4), ((1, 4), -2), ((1, 4), -3), ((1, 4), -1)]);
@@ -1343,6 +1364,7 @@ async fn test_integration_mint_preallocated_freemint() {
                     }),
                     purchase: None,
                 },
+                commitment: None,
             }),
         }),
         transfer: None,
@@ -1359,6 +1381,7 @@ async fn test_integration_mint_preallocated_freemint() {
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None,
             }),
         }),
         transfer: None,
@@ -1444,6 +1467,7 @@ async fn test_integration_mint_freemint_invalidpointer() {
                     preallocated: None,
                     purchase: None,
                 },
+                commitment: None
             }),
         }),
         contract_call: None,
@@ -1461,6 +1485,7 @@ async fn test_integration_mint_freemint_invalidpointer() {
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None
             }),
         }),
         transfer: None,
@@ -1499,6 +1524,7 @@ async fn test_integration_transfer_normal() {
                     preallocated: None,
                     purchase: None,
                 },
+                commitment: None,
             }),
         }),
         transfer: None,
@@ -1514,6 +1540,7 @@ async fn test_integration_transfer_normal() {
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None,
             }),
         }),
         contract_creation: None,
@@ -1637,6 +1664,7 @@ async fn test_integration_transfer_overflow_output() {
                     preallocated: None,
                     purchase: None,
                 },
+                commitment: None,
             }),
         }),
         transfer: None,
@@ -1652,6 +1680,7 @@ async fn test_integration_transfer_overflow_output() {
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None,
             }),
         }),
         transfer: None,
@@ -1756,6 +1785,7 @@ async fn test_integration_transfer_utxo() {
                     preallocated: None,
                     purchase: None,
                 },
+                commitment: None
             }),
         }),
         contract_call: None,
@@ -1771,6 +1801,7 @@ async fn test_integration_transfer_utxo() {
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None
             }),
         }),
         contract_creation: None,
@@ -1844,6 +1875,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
                     preallocated: None,
                     purchase: None,
                 },
+                commitment: None
             }),
         }),
         transfer: None,
@@ -1861,6 +1893,8 @@ async fn test_integration_glittr_asset_mint_purchase() {
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None
+
             }),
         }),
         contract_creation: None,
@@ -1889,6 +1923,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
                     preallocated: None,
                     free_mint: None,
                 },
+                commitment: None
             }),
         }),
         transfer: None,
@@ -1906,6 +1941,8 @@ async fn test_integration_glittr_asset_mint_purchase() {
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None
+
             }),
         }),
         transfer: Some(Transfer {
@@ -1986,6 +2023,7 @@ async fn test_integration_collateralized_mba() {
                     preallocated: None,
                     purchase: None,
                 },
+                commitment: None
             }),
         }),
         transfer: None,
@@ -2003,6 +2041,8 @@ async fn test_integration_collateralized_mba() {
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None
+
             }),
         }),
         transfer: None,
@@ -2050,6 +2090,7 @@ async fn test_integration_collateralized_mba() {
                     }),
                 },
                 swap_mechanism: SwapMechanisms { fee: None },
+                commitment: None
             }),
         }),
         transfer: None,
@@ -2130,6 +2171,8 @@ async fn test_integration_collateralized_mba() {
                 }),
                 pointer_to_key: Some(1),
                 assert_values: None,
+                commitment_message: None
+
             }),
         }),
         transfer: None,
@@ -2244,6 +2287,8 @@ async fn test_integration_collateralized_mba() {
                 pointer_to_key: Some(1),
                 pointer: None,
                 assert_values: None,
+                commitment_message: None
+
             }),
         }),
         transfer: None,
@@ -2346,6 +2391,8 @@ async fn test_integration_collateralized_mba() {
                 pointer_to_key: Some(1),
                 pointer: None,
                 assert_values: None,
+                commitment_message: None
+
             }),
         }),
         transfer: None,
@@ -2476,6 +2523,7 @@ async fn test_integration_proportional_mba_lp() {
                     preallocated: None,
                     purchase: None,
                 },
+                commitment: None
             }),
         }),
         transfer: None,
@@ -2499,6 +2547,7 @@ async fn test_integration_proportional_mba_lp() {
                     preallocated: None,
                     purchase: None,
                 },
+                commitment: None
             }),
         }),
         transfer: None,
@@ -2517,6 +2566,8 @@ async fn test_integration_proportional_mba_lp() {
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None
+
             }),
         }),
         transfer: None,
@@ -2531,6 +2582,7 @@ async fn test_integration_proportional_mba_lp() {
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None
             }),
         }),
         transfer: None,
@@ -2573,6 +2625,7 @@ async fn test_integration_proportional_mba_lp() {
                     }),
                 },
                 swap_mechanism: SwapMechanisms { fee: None },
+                commitment: None
             }),
         }),
         transfer: None,
@@ -2590,6 +2643,7 @@ async fn test_integration_proportional_mba_lp() {
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None
             }),
         }),
         transfer: None,
@@ -2743,6 +2797,7 @@ async fn test_integration_proportional_mba_lp() {
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None
             }),
         }),
         transfer: None,
@@ -3069,6 +3124,7 @@ async fn test_integration_spec_moa_valid_contract_creation() {
                     preallocated: None,
                     free_mint: None,
                 },
+                commitment: None
             }),
             // use the spec
             spec: Some(block_tx_spec.to_tuple()),
@@ -3125,6 +3181,7 @@ async fn test_integration_spec_moa_input_asset_invalid() {
                     preallocated: None,
                     free_mint: None,
                 },
+                commitment: None
             }),
             // use the spec
             spec: Some(block_tx_spec.to_tuple()),
@@ -3185,6 +3242,7 @@ async fn test_integration_spec_moa_peg_in_type_invalid() {
                     preallocated: None,
                     free_mint: None,
                 },
+                commitment: None
             }),
             // use the spec
             spec: Some(block_tx_spec.to_tuple()),

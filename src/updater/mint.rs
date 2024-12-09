@@ -296,12 +296,18 @@ impl Updater {
                 }
             };
 
-            for (allocation, pubkeys) in preallocated.allocations.iter() {
-                if pubkeys.contains(&pubkey) {
-                    owner_pub_key = pubkey;
-                    total_allocation = allocation.0;
-                    break;
+            for (allocation, alloc_type) in preallocated.allocations.iter() {
+                match alloc_type {
+                    transaction_shared::AllocationType::VecPubkey(pubkeys) => {
+                        if pubkeys.contains(&pubkey) {
+                            owner_pub_key = pubkey;
+                            total_allocation = allocation.0;
+                            break;
+                        }
+                    },
+                    transaction_shared::AllocationType::BloomFilter { filter, arg } => {},
                 }
+
             }
         }
 
