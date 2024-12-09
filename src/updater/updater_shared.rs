@@ -1,4 +1,7 @@
+use base64::{engine::general_purpose, Engine};
+use growable_bloom_filter::GrowableBloom;
 use message::{AssertValues, MintBurnOption, OracleMessageSigned};
+use miniz_oxide::{deflate::compress_to_vec, inflate::decompress_to_vec};
 use transaction_shared::{OracleSetting, RatioType};
 
 use super::*;
@@ -12,6 +15,24 @@ pub fn relative_block_height_to_block_height(
     } else {
         block_height_relative_absolute as u64
     }
+}
+
+pub fn bloom_filter_to_compressed_vec(filter: GrowableBloom) -> Vec<u8> {
+    let serialized = serde_json::to_string(&filter).unwrap();
+    let compressed = compress_to_vec(&serialized.as_bytes(), 6);
+    general_purpose::STANDARD.encode(compressed).as_bytes().to_vec()
+}
+
+
+pub fn compressed_vec_to_bloom_filter(input: Vec<u8>) -> GrowableBloom {
+    let decompressed =
+        decompress_to_vec(general_purpose::STANDARD.decode(input).unwrap().as_slice()).unwrap();
+
+    let str = String::from_utf8(decompressed).unwrap();
+
+    let filter: GrowableBloom = serde_json::from_str(&str).unwrap();
+
+    filter
 }
 
 impl Updater {

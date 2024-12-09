@@ -98,7 +98,9 @@ impl Preallocated {
                         total_allocations = total_allocations
                             .saturating_add(alloc.0 .0.saturating_mul(vec.len() as u128));
                     }
-                    _ => {}
+                    _ => {
+                        total_allocations = total_allocations.saturating_add(alloc.0 .0);
+                    }
                 }
             }
 

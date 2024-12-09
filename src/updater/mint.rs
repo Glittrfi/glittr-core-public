@@ -305,7 +305,24 @@ impl Updater {
                             break;
                         }
                     },
-                    transaction_shared::AllocationType::BloomFilter { filter, arg } => {},
+                    transaction_shared::AllocationType::BloomFilter { filter, arg } => {
+                        match arg {
+                            transaction_shared::BloomFilterArgType::TxId => {
+                                // for each input check if the txid:vout exist on filter
+                                let bloom_filter = compressed_vec_to_bloom_filter(filter.to_vec());
+
+                                let prev_txid = txin.previous_output.txid.to_string();
+                                let prev_vout = txin.previous_output.vout.to_string();
+                                let key = format!("{}:{}", prev_txid, prev_vout);
+
+                                if bloom_filter.contains(key) {
+                                    owner_pub_key = key.as_bytes().to_vec();
+                                    total_allocation = allocation.0;
+                                    break;
+                                }
+                            },
+                        }
+                    },
                 }
 
             }
