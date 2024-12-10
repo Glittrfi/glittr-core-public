@@ -3,6 +3,7 @@ mod collateralized;
 mod mint;
 mod updater_shared;
 
+use collateralized::CollateralizedAssetData;
 pub use updater_shared::*;
 mod spec;
 
@@ -20,9 +21,7 @@ use bitcoin::{
     Address, OutPoint, Transaction, TxOut, XOnlyPublicKey,
 };
 use database::{
-    DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, MESSAGE_PREFIX,
-    STATE_KEYS_PREFIX, TICKER_TO_BLOCK_TX_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX,
-    VESTING_CONTRACT_DATA_PREFIX,
+    DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, MESSAGE_PREFIX, COLLATERALIZED_CONTRACT_DATA, STATE_KEYS_PREFIX, TICKER_TO_BLOCK_TX_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX, VESTING_CONTRACT_DATA_PREFIX
 };
 use flaw::Flaw;
 use message::{CallType, ContractType, OpReturnMessage, TxTypeTransfer};
@@ -674,6 +673,24 @@ impl Updater {
         match data {
             Ok(data) => Ok(data),
             Err(DatabaseError::NotFound) => Ok(AssetContractData::default()),
+            Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
+        }
+    }
+
+    pub async fn get_collateralized_contract_data(
+        &self,
+        contract_id: &BlockTxTuple,
+    ) -> Result<CollateralizedAssetData, Flaw> {
+        let contract_key = BlockTx::from_tuple(*contract_id).to_string();
+        let data: Result<CollateralizedAssetData, DatabaseError> = self
+            .database
+            .lock()
+            .await
+            .get(COLLATERALIZED_CONTRACT_DATA, &contract_key);
+
+        match data {
+            Ok(data) => Ok(data),
+            Err(DatabaseError::NotFound) => Err(Flaw::PoolNotFound),
             Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
         }
     }

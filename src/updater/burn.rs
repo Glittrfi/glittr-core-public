@@ -1,6 +1,6 @@
 use bitcoin::OutPoint;
 use collateralized::CollateralizedAssetData;
-use database::POOL_DATA_PREFIX;
+use database::COLLATERALIZED_CONTRACT_DATA;
 use message::MintBurnOption;
 use mint_burn_asset::{MintBurnAssetContract, RatioModel, ReturnCollateral};
 
@@ -70,7 +70,7 @@ impl Updater {
                         let pool_key = BlockTx::from_tuple(*contract_id).to_string();
 
                         let pool_data: Result<CollateralizedAssetData, DatabaseError> =
-                            self.database.lock().await.get(POOL_DATA_PREFIX, &pool_key);
+                            self.database.lock().await.get(COLLATERALIZED_CONTRACT_DATA, &pool_key);
 
                         if pool_data.is_err() {
                             return Some(Flaw::PoolNotFound);
@@ -125,7 +125,7 @@ impl Updater {
                             self.database
                                 .lock()
                                 .await
-                                .put(POOL_DATA_PREFIX, &pool_key, pool_data);
+                                .put(COLLATERALIZED_CONTRACT_DATA, &pool_key, pool_data);
                         }
 
                         out_values.push(return_amount0);

@@ -1,10 +1,10 @@
 use num::integer::Roots;
-use std::{cmp::min};
+use std::cmp::min;
 
 use super::*;
 use crate::updater::database::COLLATERAL_ACCOUNTS_PREFIX;
 use bitcoin::{OutPoint, Transaction};
-use database::POOL_DATA_PREFIX;
+use database::COLLATERALIZED_CONTRACT_DATA;
 use message::{CloseAccountOption, MintBurnOption, OpenAccountOption, SwapOption};
 use mint_burn_asset::{Collateralized, MintBurnAssetContract, MintStructure, RatioModel};
 
@@ -258,7 +258,7 @@ impl Updater {
 
                         let pool_key = BlockTx::from_tuple(*contract_id).to_string();
                         let pool_data: Result<CollateralizedAssetData, DatabaseError> =
-                            self.database.lock().await.get(POOL_DATA_PREFIX, &pool_key);
+                            self.database.lock().await.get(COLLATERALIZED_CONTRACT_DATA, &pool_key);
 
                         match pool_data {
                             // If pool exists, validate constant product
@@ -317,7 +317,7 @@ impl Updater {
 
                                 if !self.is_read_only {
                                     self.database.lock().await.put(
-                                        POOL_DATA_PREFIX,
+                                        COLLATERALIZED_CONTRACT_DATA,
                                         &pool_key,
                                         existing_pool,
                                     );
@@ -368,7 +368,7 @@ impl Updater {
 
                                 if !self.is_read_only {
                                     self.database.lock().await.put(
-                                        POOL_DATA_PREFIX,
+                                        COLLATERALIZED_CONTRACT_DATA,
                                         &pool_key,
                                         new_pool,
                                     );
@@ -604,13 +604,17 @@ impl Updater {
                             // Get pool data
                             let first_asset_id: BlockTx;
                             let second_asset_id: BlockTx;
-                            if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[0] {
+                            if let InputAsset::GlittrAsset(asset_id) =
+                                collateralized.input_assets[0]
+                            {
                                 first_asset_id = BlockTx::from_tuple(asset_id)
                             } else {
                                 return Some(Flaw::PoolNotFound);
                             }
-    
-                            if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[1] {
+
+                            if let InputAsset::GlittrAsset(asset_id) =
+                                collateralized.input_assets[1]
+                            {
                                 second_asset_id = BlockTx::from_tuple(asset_id)
                             } else {
                                 return Some(Flaw::PoolNotFound);
@@ -621,11 +625,19 @@ impl Updater {
                                 .database
                                 .lock()
                                 .await
-                                .get(POOL_DATA_PREFIX, &pool_key)
+                                .get(COLLATERALIZED_CONTRACT_DATA, &pool_key)
                                 .unwrap();
 
-                            let out_id = if other_asset_id == first_asset_id.to_tuple() { first_asset_id } else { second_asset_id };
-                            let in_id = if input_asset_id == first_asset_id.to_tuple() { first_asset_id } else { second_asset_id };
+                            let out_id = if other_asset_id == first_asset_id.to_tuple() {
+                                first_asset_id
+                            } else {
+                                second_asset_id
+                            };
+                            let in_id = if input_asset_id == first_asset_id.to_tuple() {
+                                first_asset_id
+                            } else {
+                                second_asset_id
+                            };
                             // Calculate output amount using constant product formula
                             // out_amount = y * dx / (x + dx)
 
@@ -640,14 +652,11 @@ impl Updater {
                                 return Some(Flaw::PoolNotFound);
                             }
 
-                            let mut existing_amount_out =
-                                existing_amount_out.unwrap().clone();
-                            let mut existing_amount_in =
-                                existing_amount_in.unwrap().clone();
+                            let mut existing_amount_out = existing_amount_out.unwrap().clone();
+                            let mut existing_amount_in = existing_amount_in.unwrap().clone();
 
                             let numerator = existing_amount_out.saturating_mul(input_amount);
-                            let denominator =
-                                existing_amount_in.saturating_add(input_amount);
+                            let denominator = existing_amount_in.saturating_add(input_amount);
 
                             let out_value = numerator.saturating_div(denominator);
                             if out_value == 0 {
@@ -655,20 +664,20 @@ impl Updater {
                             }
 
                             // Update pool balances
-                            existing_amount_in =
-                                existing_amount_in.saturating_add(input_amount);
-                            existing_amount_out =
-                                existing_amount_out.saturating_sub(out_value);
+                            existing_amount_in = existing_amount_in.saturating_add(input_amount);
+                            existing_amount_out = existing_amount_out.saturating_sub(out_value);
 
-                            pool_data.amounts.insert(in_id.to_string(), existing_amount_in);
-                            pool_data.amounts.insert(out_id.to_string(), existing_amount_out);
+                            pool_data
+                                .amounts
+                                .insert(in_id.to_string(), existing_amount_in);
+                            pool_data
+                                .amounts
+                                .insert(out_id.to_string(), existing_amount_out);
 
                             // Validate minimum k
                             let new_k = existing_amount_in.saturating_mul(existing_amount_out);
                             let old_k = (existing_amount_in.saturating_sub(input_amount))
-                                .saturating_mul(
-                                    existing_amount_out.saturating_add(out_value),
-                                );
+                                .saturating_mul(existing_amount_out.saturating_add(out_value));
                             if new_k < old_k {
                                 return Some(Flaw::InvalidConstantProduct);
                             }
@@ -687,7 +696,7 @@ impl Updater {
                             // Update pool state
                             if !self.is_read_only {
                                 self.database.lock().await.put(
-                                    POOL_DATA_PREFIX,
+                                    COLLATERALIZED_CONTRACT_DATA,
                                     &pool_key,
                                     pool_data,
                                 );

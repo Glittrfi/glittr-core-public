@@ -45,6 +45,7 @@ pub async fn run_api(database: Arc<Mutex<Database>>) -> Result<(), std::io::Erro
         .route("/blocktx/ticker/:ticker", get(get_block_tx_by_ticker))
         .route("/assets/:txid/:vout", get(get_assets))
         .route("/asset-contract/:block/:tx", get(get_asset_contract))
+        .route("/collateralized/:block/:tx", get(get_collateralized_contract))
         .route("/validate-tx", post(validate_tx))
         .with_state(shared_state);
     log::info!("API is listening on {}", CONFIG.api_url);
@@ -155,6 +156,19 @@ async fn get_assets(
 }
 
 async fn get_asset_contract(
+    State(state): State<APIState>,
+    Path((block, tx)): Path<(u64, u32)>,
+) -> Result<Json<Value>, StatusCode> {
+    let updater = Updater::new(state.database, true).await;
+    if let Ok(asset_contract_data) = updater.get_asset_contract_data(&(block, tx)).await {
+        Ok(Json(json!({ "asset": asset_contract_data })))
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
+
+async fn get_collateralized_contract(
     State(state): State<APIState>,
     Path((block, tx)): Path<(u64, u32)>,
 ) -> Result<Json<Value>, StatusCode> {
