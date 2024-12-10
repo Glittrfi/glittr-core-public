@@ -1,5 +1,6 @@
 use bitcoin::OutPoint;
-use database::POOL_DATA_PREFIX;
+use collateralized::CollateralizedAssetData;
+use database::COLLATERALIZED_CONTRACT_DATA;
 use message::MintBurnOption;
 use mint_burn_asset::{MintBurnAssetContract, RatioModel, ReturnCollateral};
 
@@ -24,7 +25,7 @@ impl Updater {
             .unallocated_inputs
             .asset_list
             .list
-            .remove(&BlockTx::from_tuple(*contract_id).to_str())
+            .remove(&BlockTx::from_tuple(*contract_id).to_string())
             .unwrap_or(0);
 
         if burned_amount == 0 {
@@ -52,24 +53,24 @@ impl Updater {
                 mint_burn_asset::MintStructure::Proportional(proportional_type) => {
                     if let RatioModel::ConstantProduct = proportional_type.ratio_model {
                         // Get pool data
-                        let mut first_asset_id: BlockTxTuple = (0, 0);
-                        let mut second_asset_id: BlockTxTuple = (0, 0);
+                        let first_asset_id: BlockTx;
+                        let second_asset_id: BlockTx;
                         if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[0] {
-                            first_asset_id = asset_id
+                            first_asset_id = BlockTx::from_tuple(asset_id)
+                        } else {
+                            return Some(Flaw::PoolNotFound);
                         }
 
                         if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[1] {
-                            second_asset_id = asset_id
+                            second_asset_id = BlockTx::from_tuple(asset_id)
+                        } else {
+                            return Some(Flaw::PoolNotFound);
                         }
 
-                        let pool_key = format!(
-                            "{}:{}",
-                            BlockTx::from_tuple(first_asset_id).to_str(),
-                            BlockTx::from_tuple(second_asset_id).to_str()
-                        );
+                        let pool_key = BlockTx::from_tuple(*contract_id).to_string();
 
-                        let pool_data: Result<PoolData, DatabaseError> =
-                            self.database.lock().await.get(POOL_DATA_PREFIX, &pool_key);
+                        let pool_data: Result<CollateralizedAssetData, DatabaseError> =
+                            self.database.lock().await.get(COLLATERALIZED_CONTRACT_DATA, &pool_key);
 
                         if pool_data.is_err() {
                             return Some(Flaw::PoolNotFound);
@@ -77,16 +78,32 @@ impl Updater {
 
                         let mut pool_data = pool_data.unwrap();
 
+                        let existing_pool_amounts0 =
+                            pool_data.amounts.get(&first_asset_id.to_string());
+                        let existing_pool_amounts1 =
+                            pool_data.amounts.get(&second_asset_id.to_string());
+
+                        if existing_pool_amounts0.is_none() {
+                            return Some(Flaw::PoolNotFound);
+                        }
+
+                        if existing_pool_amounts1.is_none() {
+                            return Some(Flaw::PoolNotFound);
+                        }
+
+                        let existing_pool_amounts0 = existing_pool_amounts0.unwrap().clone();
+                        let existing_pool_amounts1 = existing_pool_amounts1.unwrap().clone();
+
                         // Calculate proportion of pool to return
                         let share = burned_amount
                             .saturating_mul(1_000_000) // Scale for precision
                             .saturating_div(pool_data.total_supply);
 
                         // Calculate return amounts
-                        let return_amount0 = pool_data.amounts[0]
+                        let return_amount0 = existing_pool_amounts0
                             .saturating_mul(share)
                             .saturating_div(1_000_000);
-                        let return_amount1 = pool_data.amounts[1]
+                        let return_amount1 = existing_pool_amounts1
                             .saturating_mul(share)
                             .saturating_div(1_000_000);
 
@@ -95,8 +112,12 @@ impl Updater {
                         }
 
                         // Update pool state
-                        pool_data.amounts[0] = pool_data.amounts[0].saturating_sub(return_amount0);
-                        pool_data.amounts[1] = pool_data.amounts[1].saturating_sub(return_amount1);
+                        pool_data
+                            .amounts
+                            .insert(first_asset_id.to_string(), existing_pool_amounts0.saturating_sub(return_amount0));
+                        pool_data
+                            .amounts
+                            .insert(second_asset_id.to_string(), existing_pool_amounts1.saturating_sub(return_amount1));
                         pool_data.total_supply =
                             pool_data.total_supply.saturating_sub(burned_amount);
 
@@ -104,7 +125,7 @@ impl Updater {
                             self.database
                                 .lock()
                                 .await
-                                .put(POOL_DATA_PREFIX, &pool_key, pool_data);
+                                .put(COLLATERALIZED_CONTRACT_DATA, &pool_key, pool_data);
                         }
 
                         out_values.push(return_amount0);
@@ -185,7 +206,7 @@ impl Updater {
                                         .await;
                                     } else {
                                         self.unallocated_inputs.asset_list.list.insert(
-                                            BlockTx::from_tuple(*contract_id).to_str(),
+                                            BlockTx::from_tuple(*contract_id).to_string(),
                                             burned_remainder,
                                         );
                                     }
@@ -216,7 +237,14 @@ impl Updater {
             // update the mint data
 
             if let Some(flaw) = self
-                .validate_and_update_supply_cap(contract_id, None, burned_amount, false, false, None)
+                .validate_and_update_supply_cap(
+                    contract_id,
+                    None,
+                    burned_amount,
+                    false,
+                    false,
+                    None,
+                )
                 .await
             {
                 return Some(flaw);

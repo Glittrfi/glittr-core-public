@@ -3,6 +3,7 @@ mod collateralized;
 mod mint;
 mod updater_shared;
 
+use collateralized::CollateralizedAssetData;
 pub use updater_shared::*;
 mod spec;
 
@@ -20,9 +21,7 @@ use bitcoin::{
     Address, OutPoint, Transaction, TxOut, XOnlyPublicKey,
 };
 use database::{
-    DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, MESSAGE_PREFIX,
-    STATE_KEYS_PREFIX, TICKER_TO_BLOCK_TX_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX,
-    VESTING_CONTRACT_DATA_PREFIX,
+    DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, MESSAGE_PREFIX, COLLATERALIZED_CONTRACT_DATA, STATE_KEYS_PREFIX, TICKER_TO_BLOCK_TX_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX, VESTING_CONTRACT_DATA_PREFIX
 };
 use flaw::Flaw;
 use message::{CallType, ContractType, OpReturnMessage, TxTypeTransfer};
@@ -82,12 +81,6 @@ pub struct CollateralAccount {
 #[derive(Serialize, Deserialize, Default, Eq, PartialEq, Debug)]
 pub struct StateKeys {
     pub contract_ids: HashSet<BlockTxTuple>,
-}
-
-#[derive(Serialize, Deserialize)]
-struct PoolData {
-    amounts: [u128; 2],
-    total_supply: u128,
 }
 
 #[derive(Deserialize, Serialize, Default)]
@@ -207,7 +200,7 @@ impl Updater {
         let previous_amount = allocation
             .asset_list
             .list
-            .entry(block_tx.to_str())
+            .entry(block_tx.to_string())
             .or_insert(0);
         *previous_amount = previous_amount.saturating_add(amount);
     }
@@ -690,6 +683,24 @@ impl Updater {
         match data {
             Ok(data) => Ok(data),
             Err(DatabaseError::NotFound) => Ok(AssetContractData::default()),
+            Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
+        }
+    }
+
+    pub async fn get_collateralized_contract_data(
+        &self,
+        contract_id: &BlockTxTuple,
+    ) -> Result<CollateralizedAssetData, Flaw> {
+        let contract_key = BlockTx::from_tuple(*contract_id).to_string();
+        let data: Result<CollateralizedAssetData, DatabaseError> = self
+            .database
+            .lock()
+            .await
+            .get(COLLATERALIZED_CONTRACT_DATA, &contract_key);
+
+        match data {
+            Ok(data) => Ok(data),
+            Err(DatabaseError::NotFound) => Ok(CollateralizedAssetData::default()),
             Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
         }
     }
