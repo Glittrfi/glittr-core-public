@@ -84,12 +84,6 @@ pub struct StateKeys {
     pub contract_ids: HashSet<BlockTxTuple>,
 }
 
-#[derive(Serialize, Deserialize)]
-struct PoolData {
-    amounts: [u128; 2],
-    total_supply: u128,
-}
-
 #[derive(Deserialize, Serialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct SpecContractOwned {
@@ -207,7 +201,7 @@ impl Updater {
         let previous_amount = allocation
             .asset_list
             .list
-            .entry(block_tx.to_str())
+            .entry(block_tx.to_string())
             .or_insert(0);
         *previous_amount = previous_amount.saturating_add(amount);
     }

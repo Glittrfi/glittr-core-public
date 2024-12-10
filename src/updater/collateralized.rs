@@ -1,5 +1,5 @@
 use num::integer::Roots;
-use std::cmp::min;
+use std::{cmp::min};
 
 use super::*;
 use crate::updater::database::COLLATERAL_ACCOUNTS_PREFIX;
@@ -9,9 +9,9 @@ use message::{CloseAccountOption, MintBurnOption, OpenAccountOption, SwapOption}
 use mint_burn_asset::{Collateralized, MintBurnAssetContract, MintStructure, RatioModel};
 
 #[derive(Serialize, Deserialize)]
-struct PoolData {
-    amounts: [u128; 2],
-    total_supply: u128,
+pub struct CollateralizedAssetData {
+    pub amounts: HashMap<BlockTxString, u128>,
+    pub total_supply: u128,
 }
 
 impl Updater {
@@ -91,7 +91,7 @@ impl Updater {
                             .unallocated_inputs
                             .asset_list
                             .list
-                            .remove(&BlockTx::from_tuple(asset_id).to_str())
+                            .remove(&BlockTx::from_tuple(asset_id).to_string())
                             .unwrap_or(0);
 
                         burned_amount
@@ -228,51 +228,67 @@ impl Updater {
             mint_burn_asset::MintStructure::Proportional(proportional_type) => {
                 match proportional_type.ratio_model {
                     RatioModel::ConstantProduct => {
-                        let mut first_asset_id: BlockTxTuple = (0, 0);
-                        let mut second_asset_id: BlockTxTuple = (0, 0);
+                        let first_asset_id: BlockTx;
+                        let second_asset_id: BlockTx;
                         if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[0] {
-                            first_asset_id = asset_id
+                            first_asset_id = BlockTx::from_tuple(asset_id)
+                        } else {
+                            return Some(Flaw::PoolNotFound);
                         }
 
                         if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[1] {
-                            second_asset_id = asset_id
+                            second_asset_id = BlockTx::from_tuple(asset_id)
+                        } else {
+                            return Some(Flaw::PoolNotFound);
                         }
 
                         let input_first_asset = self
                             .unallocated_inputs
                             .asset_list
                             .list
-                            .remove(&BlockTx::from_tuple(first_asset_id).to_str())
+                            .remove(&first_asset_id.to_string())
                             .unwrap_or(0);
 
                         let input_second_asset = self
                             .unallocated_inputs
                             .asset_list
                             .list
-                            .remove(&BlockTx::from_tuple(second_asset_id).to_str())
+                            .remove(&second_asset_id.to_string())
                             .unwrap_or(0);
 
-                        let pool_key = format!(
-                            "{}:{}",
-                            BlockTx::from_tuple(first_asset_id).to_str(),
-                            BlockTx::from_tuple(second_asset_id).to_str()
-                        );
-
-                        let pool_data: Result<PoolData, DatabaseError> =
+                        let pool_key = BlockTx::from_tuple(*contract_id).to_string();
+                        let pool_data: Result<CollateralizedAssetData, DatabaseError> =
                             self.database.lock().await.get(POOL_DATA_PREFIX, &pool_key);
 
                         match pool_data {
                             // If pool exists, validate constant product
                             Ok(mut existing_pool) => {
                                 // Calculate k = x * y
-                                let k = existing_pool.amounts[0]
-                                    .saturating_mul(existing_pool.amounts[1]);
+                                let existing_pool_amounts0 =
+                                    existing_pool.amounts.get(&first_asset_id.to_string());
+                                let existing_pool_amounts1 =
+                                    existing_pool.amounts.get(&second_asset_id.to_string());
+                                if existing_pool_amounts0.is_none() {
+                                    return Some(Flaw::PoolNotFound);
+                                }
+
+                                if existing_pool_amounts1.is_none() {
+                                    return Some(Flaw::PoolNotFound);
+                                }
+
+                                let existing_pool_amounts0 =
+                                    existing_pool_amounts0.unwrap().clone();
+                                let existing_pool_amounts1 =
+                                    existing_pool_amounts1.unwrap().clone();
+
+                                let k =
+                                    existing_pool_amounts0.saturating_mul(existing_pool_amounts1);
 
                                 // Add new liquidity
                                 let new_amount0 =
-                                    existing_pool.amounts[0].saturating_add(input_first_asset);
+                                    existing_pool_amounts0.saturating_add(input_first_asset);
                                 let new_amount1 =
-                                    existing_pool.amounts[1].saturating_add(input_second_asset);
+                                    existing_pool_amounts1.saturating_add(input_second_asset);
 
                                 // Validate k increases proportionally
                                 let new_k = new_amount0.saturating_mul(new_amount1);
@@ -284,11 +300,15 @@ impl Updater {
                                 let total_supply = existing_pool.total_supply;
 
                                 let mint_amount = (input_first_asset.saturating_mul(total_supply))
-                                    .saturating_div(existing_pool.amounts[0]);
+                                    .saturating_div(existing_pool_amounts0);
 
                                 // Update pool data
-                                existing_pool.amounts[0] = new_amount0;
-                                existing_pool.amounts[1] = new_amount1;
+                                existing_pool
+                                    .amounts
+                                    .insert(first_asset_id.to_string(), new_amount0);
+                                existing_pool
+                                    .amounts
+                                    .insert(second_asset_id.to_string(), new_amount1);
                                 existing_pool.total_supply =
                                     total_supply.saturating_add(mint_amount);
 
@@ -334,8 +354,12 @@ impl Updater {
                                 let initial_supply =
                                     (input_first_asset.saturating_mul(input_second_asset)).sqrt();
 
-                                let new_pool = PoolData {
-                                    amounts: [input_first_asset, input_second_asset],
+                                let mut amounts = HashMap::new();
+                                amounts.insert(first_asset_id.to_string(), input_first_asset);
+                                amounts.insert(second_asset_id.to_string(), input_second_asset);
+
+                                let new_pool = CollateralizedAssetData {
+                                    amounts,
                                     total_supply: initial_supply,
                                 };
 
@@ -476,7 +500,7 @@ impl Updater {
                                         .unallocated_inputs
                                         .asset_list
                                         .list
-                                        .remove(&BlockTx::from_tuple(asset_id).to_str())
+                                        .remove(&BlockTx::from_tuple(asset_id).to_string())
                                         .unwrap_or(0);
 
                                     if burned_amount > 0 {
@@ -546,7 +570,7 @@ impl Updater {
                                         .unallocated_inputs
                                         .asset_list
                                         .list
-                                        .remove(&BlockTx::from_tuple(asset_id).to_str())
+                                        .remove(&BlockTx::from_tuple(asset_id).to_string())
                                         .unwrap_or(0);
 
                                     if amount > 0 {
@@ -578,40 +602,52 @@ impl Updater {
                                 .unwrap();
 
                             // Get pool data
-                            let mut first_asset: BlockTxTuple = (0, 0);
-                            let mut second_asset: BlockTxTuple = (0, 0);
-                            if let InputAsset::GlittrAsset(asset_id) =
-                                collateralized.input_assets[0]
-                            {
-                                first_asset = asset_id
+                            let first_asset_id: BlockTx;
+                            let second_asset_id: BlockTx;
+                            if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[0] {
+                                first_asset_id = BlockTx::from_tuple(asset_id)
+                            } else {
+                                return Some(Flaw::PoolNotFound);
+                            }
+    
+                            if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[1] {
+                                second_asset_id = BlockTx::from_tuple(asset_id)
+                            } else {
+                                return Some(Flaw::PoolNotFound);
                             }
 
-                            if let InputAsset::GlittrAsset(asset_id) =
-                                collateralized.input_assets[1]
-                            {
-                                second_asset = asset_id
-                            }
-
-                            let pool_key = format!(
-                                "{}:{}",
-                                BlockTx::from_tuple(first_asset).to_str(),
-                                BlockTx::from_tuple(second_asset).to_str()
-                            );
-
-                            let mut pool_data: PoolData = self
+                            let pool_key = BlockTx::from_tuple(*contract_id).to_string();
+                            let mut pool_data: CollateralizedAssetData = self
                                 .database
                                 .lock()
                                 .await
                                 .get(POOL_DATA_PREFIX, &pool_key)
                                 .unwrap();
 
-                            let out_idx = if other_asset_id == first_asset { 0 } else { 1 };
-                            let in_idx = if input_asset_id == first_asset { 0 } else { 1 };
+                            let out_id = if other_asset_id == first_asset_id.to_tuple() { first_asset_id } else { second_asset_id };
+                            let in_id = if input_asset_id == first_asset_id.to_tuple() { first_asset_id } else { second_asset_id };
                             // Calculate output amount using constant product formula
                             // out_amount = y * dx / (x + dx)
-                            let numerator = pool_data.amounts[out_idx].saturating_mul(input_amount);
+
+                            let existing_amount_out = pool_data.amounts.get(&out_id.to_string());
+                            let existing_amount_in = pool_data.amounts.get(&in_id.to_string());
+
+                            if existing_amount_in.is_none() {
+                                return Some(Flaw::PoolNotFound);
+                            }
+
+                            if existing_amount_out.is_none() {
+                                return Some(Flaw::PoolNotFound);
+                            }
+
+                            let mut existing_amount_out =
+                                existing_amount_out.unwrap().clone();
+                            let mut existing_amount_in =
+                                existing_amount_in.unwrap().clone();
+
+                            let numerator = existing_amount_out.saturating_mul(input_amount);
                             let denominator =
-                                pool_data.amounts[in_idx].saturating_add(input_amount);
+                                existing_amount_in.saturating_add(input_amount);
 
                             let out_value = numerator.saturating_div(denominator);
                             if out_value == 0 {
@@ -619,16 +655,19 @@ impl Updater {
                             }
 
                             // Update pool balances
-                            pool_data.amounts[in_idx] =
-                                pool_data.amounts[in_idx].saturating_add(input_amount);
-                            pool_data.amounts[out_idx] =
-                                pool_data.amounts[out_idx].saturating_sub(out_value);
+                            existing_amount_in =
+                                existing_amount_in.saturating_add(input_amount);
+                            existing_amount_out =
+                                existing_amount_out.saturating_sub(out_value);
+
+                            pool_data.amounts.insert(in_id.to_string(), existing_amount_in);
+                            pool_data.amounts.insert(out_id.to_string(), existing_amount_out);
 
                             // Validate minimum k
-                            let new_k = pool_data.amounts[0].saturating_mul(pool_data.amounts[1]);
-                            let old_k = (pool_data.amounts[in_idx].saturating_sub(input_amount))
+                            let new_k = existing_amount_in.saturating_mul(existing_amount_out);
+                            let old_k = (existing_amount_in.saturating_sub(input_amount))
                                 .saturating_mul(
-                                    pool_data.amounts[out_idx].saturating_add(out_value),
+                                    existing_amount_out.saturating_add(out_value),
                                 );
                             if new_k < old_k {
                                 return Some(Flaw::InvalidConstantProduct);
@@ -638,8 +677,8 @@ impl Updater {
                                 if let Some(flaw) = self.validate_assert_values(
                                     &Some(assert_values.clone()),
                                     vec![input_amount],
-                                    Some(vec![pool_data.amounts[0], pool_data.amounts[1]]),
-                                    out_value
+                                    Some(vec![existing_amount_in, existing_amount_out]),
+                                    out_value,
                                 ) {
                                     return Some(flaw);
                                 }

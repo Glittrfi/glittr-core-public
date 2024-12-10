@@ -428,7 +428,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
     }
 
     let outpoint_str = asset_lists[0].0.clone();
-    let out_value = *asset_lists[0].1.list.get(&contract_id.to_str()).unwrap();
+    let out_value = *asset_lists[0].1.list.get(&contract_id.to_string()).unwrap();
 
     assert!(out_value == (bitcoin_value - fee - dust) as u128);
     assert!(
@@ -546,7 +546,7 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
     }
 
     let outpoint_str = asset_lists[0].0.clone();
-    let out_value = *asset_lists[0].1.list.get(&contract_id.to_str()).unwrap();
+    let out_value = *asset_lists[0].1.list.get(&contract_id.to_string()).unwrap();
 
     assert!(out_value == (bitcoin_value - fee) as u128);
     assert!(
@@ -686,7 +686,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
     }
 
     let outpoint_str = asset_lists[0].0.clone();
-    let out_value = *asset_lists[0].1.list.get(&contract_id.to_str()).unwrap();
+    let out_value = *asset_lists[0].1.list.get(&contract_id.to_string()).unwrap();
 
     assert!(out_value == oracle_out_value as u128);
     assert!(
@@ -846,7 +846,7 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
     }
 
     let outpoint_str = asset_lists[0].0.clone();
-    let out_value = *asset_lists[0].1.list.get(&contract_id.to_str()).unwrap();
+    let out_value = *asset_lists[0].1.list.get(&contract_id.to_string()).unwrap();
 
     assert!(out_value == oracle_out_value as u128);
     assert!(
@@ -987,7 +987,7 @@ async fn test_metaprotocol_to_glittr_asset() {
     }
 
     let outpoint_str = asset_lists[0].0.clone();
-    let out_value = *asset_lists[0].1.list.get(&contract_id.to_str()).unwrap();
+    let out_value = *asset_lists[0].1.list.get(&contract_id.to_string()).unwrap();
 
     assert!(out_value == oracle_out_value);
     assert!(
@@ -2166,7 +2166,7 @@ async fn test_integration_collateralized_mba() {
     // Find and verify the minted asset amount
     let minted_amount = asset_lists
         .values()
-        .find_map(|list| list.list.get(&mba_contract.to_str()))
+        .find_map(|list| list.list.get(&mba_contract.to_string()))
         .expect("Minted asset should exist");
 
     assert_eq!(*minted_amount, 50_000); // Amount specified in oracle message
@@ -2269,7 +2269,7 @@ async fn test_integration_collateralized_mba() {
     // Find and verify the remaining asset amount
     let remaining_amount = asset_lists_after_burn
         .values()
-        .find_map(|list| list.list.get(&mba_contract.to_str()))
+        .find_map(|list| list.list.get(&mba_contract.to_string()))
         .expect("Remaining asset should exist");
 
     assert_eq!(*remaining_amount, 25_000); // Original amount (50,000) - burned amount (25,000)
@@ -2281,7 +2281,7 @@ async fn test_integration_collateralized_mba() {
     let accounts = collateral_accounts_after_burn.values().next().unwrap();
     let account_after_burn = accounts
         .collateral_accounts
-        .get(&mba_contract.to_str())
+        .get(&mba_contract.to_string())
         .unwrap();
     assert_eq!(account_after_burn.share_amount, 100);
     assert_eq!(account_after_burn.collateral_amounts, [((3, 1), 100000)]); // Collateral amount unchanged
@@ -2416,7 +2416,7 @@ async fn test_integration_collateralized_mba() {
     let final_asset_lists = ctx.get_asset_map().await;
     let remaining_minted = final_asset_lists
         .values()
-        .find_map(|list| list.list.get(&mba_contract.to_str()))
+        .find_map(|list| list.list.get(&mba_contract.to_string()))
         .unwrap_or(&0);
     assert_eq!(*remaining_minted, 0);
 
@@ -2427,7 +2427,7 @@ async fn test_integration_collateralized_mba() {
     // Verify collateral tokens are returned
     let returned_collateral = final_asset_lists
         .values()
-        .find_map(|list| list.list.get(&collateral_contract.to_str()))
+        .find_map(|list| list.list.get(&collateral_contract.to_string()))
         .expect("Returned collateral should exist");
     assert_eq!(*returned_collateral, 100_000); // Original collateral amount
 
@@ -2607,7 +2607,7 @@ async fn test_integration_proportional_mba_lp() {
 
     let lp_minted_amount = asset_lists
         .values()
-        .find_map(|list| list.list.get(&lp_contract.to_str()))
+        .find_map(|list| list.list.get(&lp_contract.to_string()))
         .expect("Minted asset should exist");
 
     // Minted LP: https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol#L120-L123
@@ -2699,7 +2699,7 @@ async fn test_integration_proportional_mba_lp() {
     let asset_lists = ctx.get_asset_map().await;
     let token_2_swapped = asset_lists
         .values()
-        .find_map(|list| list.list.get(&token2_contract.to_str()))
+        .find_map(|list| list.list.get(&token2_contract.to_string()))
         .expect("Minted asset should exist");
 
     // token_1_input = 100

@@ -81,11 +81,11 @@ async fn tx_result(
     if let Ok(message) = message {
         if message.flaw.is_some() {
             Ok(Json(
-                json!({"is_valid": false, "message": message, "block_tx": blocktx.to_str()}),
+                json!({"is_valid": false, "message": message, "block_tx": blocktx.to_string()}),
             ))
         } else {
             Ok(Json(
-                json!({"is_valid": true, "message": message, "block_tx": blocktx.to_str()}),
+                json!({"is_valid": true, "message": message, "block_tx": blocktx.to_string()}),
             ))
         }
     } else {

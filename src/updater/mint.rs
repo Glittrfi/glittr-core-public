@@ -83,7 +83,7 @@ impl Updater {
                     .unallocated_inputs
                     .asset_list
                     .list
-                    .get(&BlockTx::from_tuple(asset_contract_id).to_str())
+                    .get(&BlockTx::from_tuple(asset_contract_id).to_string())
                 {
                     total_unallocated_glittr_asset = *amount;
                 }
@@ -148,7 +148,7 @@ impl Updater {
                                     if let Some(amount) = allocation
                                         .asset_list
                                         .list
-                                        .get(&BlockTx::from_tuple(asset_contract_id).to_str())
+                                        .get(&BlockTx::from_tuple(asset_contract_id).to_string())
                                     {
                                         total_received_value = *amount;
                                     }
@@ -201,7 +201,7 @@ impl Updater {
                     .unallocated_inputs
                     .asset_list
                     .list
-                    .remove(&BlockTx::from_tuple(asset_contract_id).to_str())
+                    .remove(&BlockTx::from_tuple(asset_contract_id).to_string())
                     .unwrap_or(0);
                 if let Some(flaw) = self
                     .validate_and_update_supply_cap(

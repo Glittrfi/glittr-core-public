@@ -36,7 +36,7 @@ impl BlockTx {
         (self.block, self.tx)
     }
 
-    pub fn to_str(&self) -> String {
+    pub fn to_string(&self) -> String {
         format!("{}:{}", self.block, self.tx)
     }
 }
