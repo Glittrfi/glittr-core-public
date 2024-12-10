@@ -42,6 +42,7 @@ pub async fn run_api(database: Arc<Mutex<Database>>) -> Result<(), std::io::Erro
         .route("/health", get(health))
         .route("/tx/:txid", get(tx_result))
         .route("/blocktx/:block/:tx", get(get_block_tx))
+        .route("/blocktx/ticker/:ticker", get(get_block_tx_by_ticker))
         .route("/assets/:txid/:vout", get(get_assets))
         .route("/asset-contract/:block/:tx", get(get_asset_contract))
         .route("/validate-tx", post(validate_tx))
@@ -109,14 +110,45 @@ async fn get_block_tx(
     }
 }
 
+async fn get_block_tx_by_ticker(
+    State(state): State<APIState>,
+    Path(ticker): Path<String>,
+) -> Result<Json<Value>, StatusCode> {
+    let updater = Updater::new(state.database.clone(), true).await;
+    let block_tx = updater.get_contract_block_tx_by_ticker(ticker).await;
+
+    if let Ok(block_tx) = block_tx {
+        let message: Result<MessageDataOutcome, DatabaseError> = state.database.lock().await.get(
+            MESSAGE_PREFIX,
+            BlockTx {
+                block: block_tx.0,
+                tx: block_tx.1,
+            }
+            .to_string()
+            .as_str(),
+        );
+
+        if let Ok(message) = message {
+            Ok(Json(json!({"is_valid": true, "message": message})))
+        } else {
+            Err(StatusCode::NOT_FOUND)
+        }
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
 async fn get_assets(
     State(state): State<APIState>,
     Path((txid, vout)): Path<(String, u32)>,
 ) -> Result<Json<Value>, StatusCode> {
     let updater = Updater::new(state.database, true).await;
-    let outpoint = OutPoint {     txid: Txid::from_str(txid.as_str()).unwrap()       , vout };
+    let outpoint = OutPoint {
+        txid: Txid::from_str(txid.as_str()).unwrap(),
+        vout,
+    };
     if let Ok(asset_list) = updater.get_asset_list(&outpoint).await {
-        Ok(Json(json!({"assets": asset_list})))
+        Ok(Json(json!({ "assets": asset_list })))
     } else {
         Err(StatusCode::NOT_FOUND)
     }
@@ -128,7 +160,7 @@ async fn get_asset_contract(
 ) -> Result<Json<Value>, StatusCode> {
     let updater = Updater::new(state.database, true).await;
     if let Ok(asset_contract_data) = updater.get_asset_contract_data(&(block, tx)).await {
-        Ok(Json(json!({"asset": asset_contract_data})))
+        Ok(Json(json!({ "asset": asset_contract_data })))
     } else {
         Err(StatusCode::NOT_FOUND)
     }
