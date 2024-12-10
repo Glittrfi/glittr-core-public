@@ -375,7 +375,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
 
     let mint_message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: contract_id.to_tuple(),
+            contract: Some(contract_id.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(1),
                 oracle_message: None,
@@ -493,7 +493,7 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
 
     let mint_message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: contract_id.to_tuple(),
+            contract: Some(contract_id.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(1),
                 oracle_message: None,
@@ -638,7 +638,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
 
     let mint_message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: contract_id.to_tuple(),
+            contract: Some(contract_id.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(1),
                 oracle_message: Some(OracleMessageSigned {
@@ -799,7 +799,7 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
 
     let mint_message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: contract_id.to_tuple(),
+            contract: Some(contract_id.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(1),
                 oracle_message: Some(OracleMessageSigned {
@@ -940,7 +940,7 @@ async fn test_metaprotocol_to_glittr_asset() {
 
     let mint_message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: contract_id.to_tuple(),
+            contract: Some(contract_id.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(1),
                 oracle_message: Some(OracleMessageSigned {
@@ -1071,7 +1071,7 @@ async fn test_integration_mint_freemint() {
     for _ in 0..total_mints {
         let message = OpReturnMessage {
             contract_call: Some(ContractCall {
-                contract: block_tx_contract.to_tuple(),
+                contract: Some(block_tx_contract.to_tuple()),
                 call_type: CallType::Mint(MintBurnOption {
                     pointer: Some(1),
                     oracle_message: None,
@@ -1137,7 +1137,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
     // first mint
     let message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: block_tx_contract.to_tuple(),
+            contract: Some(block_tx_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(1),
                 oracle_message: None,
@@ -1154,7 +1154,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
     // and the total minted should be still 1
     let message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: block_tx_contract.to_tuple(),
+            contract: Some(block_tx_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(0),
                 oracle_message: None,
@@ -1215,7 +1215,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
     // first mint not reach the live time
     let message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: block_tx_contract.to_tuple(),
+            contract: Some(block_tx_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(1),
                 oracle_message: None,
@@ -1231,7 +1231,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
 
     let message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: block_tx_contract.to_tuple(),
+            contract: Some(block_tx_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(1),
                 oracle_message: None,
@@ -1342,7 +1342,7 @@ async fn test_integration_mint_preallocated_freemint() {
 
     let mint_message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: block_tx_contract.to_tuple(),
+            contract: Some(block_tx_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(1),
                 oracle_message: None,
@@ -1443,7 +1443,7 @@ async fn test_integration_mint_freemint_invalidpointer() {
     // set pointer to index 0 (op_return output), it should be error
     let message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: block_tx_contract.to_tuple(),
+            contract: Some(block_tx_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(0),
                 oracle_message: None,
@@ -1495,7 +1495,7 @@ async fn test_integration_transfer_normal() {
 
     let message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: block_tx_contract.to_tuple(),
+            contract: Some(block_tx_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(1),
                 oracle_message: None,
@@ -1632,7 +1632,7 @@ async fn test_integration_transfer_overflow_output() {
 
     let message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: block_tx_contract.to_tuple(),
+            contract: Some(block_tx_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(1),
                 oracle_message: None,
@@ -1750,7 +1750,7 @@ async fn test_integration_transfer_utxo() {
 
     let message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: block_tx_contract.to_tuple(),
+            contract: Some(block_tx_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(1),
                 oracle_message: None,
@@ -1839,7 +1839,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
     // Mint first contract
     let mint_message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: first_contract.to_tuple(),
+            contract: Some(first_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(1),
                 oracle_message: None,
@@ -1883,7 +1883,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
     // Mint second contract using first contract as input
     let second_mint_message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: second_contract.to_tuple(),
+            contract: Some(second_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(1),
                 oracle_message: None,
@@ -1979,7 +1979,7 @@ async fn test_integration_collateralized_mba() {
     // Mint collateral tokens
     let mint_collateral_message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: collateral_contract.to_tuple(),
+            contract: Some(collateral_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(1),
                 oracle_message: None,
@@ -2041,7 +2041,7 @@ async fn test_integration_collateralized_mba() {
 
     let open_account_message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: mba_contract.to_tuple(),
+            contract: Some(mba_contract.to_tuple()),
             call_type: CallType::OpenAccount(OpenAccountOption {
                 pointer_to_key: 1,
                 share_amount: U128(100),
@@ -2102,7 +2102,7 @@ async fn test_integration_collateralized_mba() {
     // Mint using oracle message
     let mint_message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: mba_contract.to_tuple(),
+            contract: Some(mba_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(2),
                 oracle_message: Some(OracleMessageSigned {
@@ -2216,7 +2216,7 @@ async fn test_integration_collateralized_mba() {
     // Create burn message
     let burn_message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: mba_contract.to_tuple(),
+            contract: Some(mba_contract.to_tuple()),
             call_type: CallType::Burn(MintBurnOption {
                 oracle_message: Some(OracleMessageSigned {
                     signature: burn_signature.serialize().to_vec(),
@@ -2318,7 +2318,7 @@ async fn test_integration_collateralized_mba() {
     // Create final burn message
     let final_burn_message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: mba_contract.to_tuple(),
+            contract: Some(mba_contract.to_tuple()),
             call_type: CallType::Burn(MintBurnOption {
                 oracle_message: Some(OracleMessageSigned {
                     signature: final_burn_signature.serialize().to_vec(),
@@ -2359,7 +2359,7 @@ async fn test_integration_collateralized_mba() {
     // Create close account message
     let close_account_message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: mba_contract.to_tuple(),
+            contract: Some(mba_contract.to_tuple()),
             call_type: CallType::CloseAccount(CloseAccountOption {
                 pointer: 1, // Output index for returned collateral
             }),
@@ -2490,7 +2490,7 @@ async fn test_integration_proportional_mba_lp() {
     // Mint both tokens
     let mint_token1_message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: token1_contract.to_tuple(),
+            contract: Some(token1_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(1),
                 oracle_message: None,
@@ -2504,7 +2504,7 @@ async fn test_integration_proportional_mba_lp() {
 
     let mint_token2_message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: token2_contract.to_tuple(),
+            contract: Some(token2_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(1),
                 oracle_message: None,
@@ -2562,7 +2562,7 @@ async fn test_integration_proportional_mba_lp() {
     // Provide liquidity and mint LP tokens
     let mint_lp_message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: lp_contract.to_tuple(),
+            contract: Some(lp_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(1),
                 oracle_message: None,
@@ -2654,7 +2654,7 @@ async fn test_integration_proportional_mba_lp() {
 
     let swap_message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: lp_contract.to_tuple(),
+            contract: Some(lp_contract.to_tuple()),
             call_type: CallType::Swap(SwapOption {
                 pointer: 1,
                 assert_values: Some(AssertValues {
@@ -2715,7 +2715,7 @@ async fn test_integration_proportional_mba_lp() {
     // Burn LP
     let burn_lp_message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: lp_contract.to_tuple(),
+            contract: Some(lp_contract.to_tuple()),
             call_type: CallType::Burn(MintBurnOption {
                 pointer: Some(1),
                 oracle_message: None,
@@ -3250,6 +3250,179 @@ async fn test_integration_contract_ticker() {
 
     let message_error = ctx.get_and_verify_message_outcome(block_tx_error).await;
     assert_eq!(message_error.flaw, Some(Flaw::TickerAlreadyExist));
+
+    ctx.drop().await;
+}
+
+#[tokio::test]
+async fn test_contract_creation_and_mint() {
+    let mut ctx = TestContext::new().await;
+    let (owner_address, _) = get_bitcoin_address();
+
+    // Create two MOA tokens to be used in the liquidity pool
+    let token1_message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            spec: None,
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(1_000_000)),
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MOAMintMechanisms {
+                    free_mint: Some(FreeMint {
+                        supply_cap: Some(U128(1_000_000)),
+                        amount_per_mint: U128(100_000),
+                    }),
+                    preallocated: None,
+                    purchase: None,
+                },
+            }),
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let token2_message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            spec: None,
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(1_000_000)),
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MOAMintMechanisms {
+                    free_mint: Some(FreeMint {
+                        supply_cap: Some(U128(1_000_000)),
+                        amount_per_mint: U128(50_000),
+                    }),
+                    preallocated: None,
+                    purchase: None,
+                },
+            }),
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let token1_contract = ctx.build_and_mine_message(&token1_message).await;
+    let token2_contract = ctx.build_and_mine_message(&token2_message).await;
+
+    // Mint both tokens
+    let mint_token1_message = OpReturnMessage {
+        contract_call: Some(ContractCall {
+            contract: Some(token1_contract.to_tuple()),
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
+                oracle_message: None,
+                pointer_to_key: None,
+                assert_values: None,
+            }),
+        }),
+        transfer: None,
+        contract_creation: None,
+    };
+
+    let mint_token2_message = OpReturnMessage {
+        contract_call: Some(ContractCall {
+            contract: Some(token2_contract.to_tuple()),
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
+                oracle_message: None,
+                pointer_to_key: None,
+                assert_values: None,
+            }),
+        }),
+        transfer: None,
+        contract_creation: None,
+    };
+
+    let token1_mint_tx = ctx.build_and_mine_message(&mint_token1_message).await;
+    let token2_mint_tx = ctx.build_and_mine_message(&mint_token2_message).await;
+
+    // Create LP token contract
+    let lp_message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            spec: None,
+            contract_type: ContractType::Mba(MintBurnAssetContract {
+                ticker: None,
+                supply_cap: None, // No supply cap for LP tokens
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MBAMintMechanisms {
+                    preallocated: None,
+                    free_mint: None,
+                    purchase: None,
+                    collateralized: Some(Collateralized {
+                        input_assets: vec![
+                            InputAsset::GlittrAsset(token1_contract.to_tuple()),
+                            InputAsset::GlittrAsset(token2_contract.to_tuple()),
+                        ],
+                        _mutable_assets: false,
+                        mint_structure: MintStructure::Proportional(ProportionalType {
+                            ratio_model: RatioModel::ConstantProduct,
+                            inital_mint_pointer_to_key: None,
+                        }),
+                    }),
+                },
+                burn_mechanism: BurnMechanisms {
+                    return_collateral: Some(ReturnCollateral {
+                        fee: None,
+                        oracle_setting: None,
+                    }),
+                },
+                swap_mechanism: SwapMechanisms { fee: None },
+            }),
+        }),
+        transfer: None,
+        contract_call: Some(ContractCall {
+            contract: None,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
+                oracle_message: None,
+                pointer_to_key: None,
+                assert_values: None,
+            }),
+        }),
+    };
+
+    // Broadcast lp creation and minting
+    ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[
+            (token1_mint_tx.block as usize, 1, 1, Witness::new()),
+            (token2_mint_tx.block as usize, 1, 1, Witness::new()),
+            (token2_mint_tx.block as usize, 0, 0, Witness::new()),
+        ],
+        op_return: Some(lp_message.into_script()),
+        op_return_index: Some(0),
+        op_return_value: Some(0),
+        output_values: &[1000, 1000],
+        outputs: 2,
+        p2tr: false,
+        recipient: Some(owner_address.clone()),
+    });
+    ctx.core.mine_blocks(1);
+
+    let contract_create_and_mint_lp_block_tx = BlockTx {
+        block: ctx.core.height(),
+        tx: 1,
+    };
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    // Verify initial setup
+    let mint_lp_outcome = ctx.get_and_verify_message_outcome(contract_create_and_mint_lp_block_tx).await;
+    assert!(mint_lp_outcome.flaw.is_none(), "{:?}", mint_lp_outcome.flaw);
+
+    let asset_lists = ctx.get_asset_map().await;
+
+    let lp_minted_amount = asset_lists
+        .values()
+        .find_map(|list| list.list.get(&contract_create_and_mint_lp_block_tx.to_str()))
+        .expect("Minted asset should exist");
+
+    // Minted LP: https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol#L120-L123
+    assert_eq!(*lp_minted_amount, 70710);
 
     ctx.drop().await;
 }

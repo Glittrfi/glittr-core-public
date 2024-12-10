@@ -400,12 +400,12 @@ impl Updater {
         block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
         mint_option: &MintBurnOption,
+        message: Result<OpReturnMessage, Flaw>
     ) -> Option<Flaw> {
         if mint_option.pointer.is_none() {
             return Some(Flaw::InvalidPointer);
         }
 
-        let message = self.get_message(contract_id).await;
         match message {
             Ok(op_return_message) => match op_return_message.contract_creation {
                 Some(contract_creation) => match contract_creation.contract_type {
