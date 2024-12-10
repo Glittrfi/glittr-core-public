@@ -68,17 +68,6 @@ impl Updater {
         contract_id: &BlockTxTuple,
         mint_option: MintBurnOption,
     ) -> Option<Flaw> {
-        // check livetime
-        if relative_block_height_to_block_height(moa.live_time, contract_id.0) > block_tx.block {
-            return Some(Flaw::ContractIsNotLive);
-        }
-
-        if let Some(end_time) = moa.end_time {
-            if relative_block_height_to_block_height(end_time, contract_id.0) < block_tx.block {
-                return Some(Flaw::ContractIsNotLive);
-            }
-        }
-
         let mut total_unallocated_glittr_asset: u128 = 0;
         let mut total_received_value: u128 = 0;
 
@@ -259,17 +248,6 @@ impl Updater {
         contract_id: &BlockTxTuple,
         mint_option: &MintBurnOption,
     ) -> Option<Flaw> {
-        // check livetime
-        if relative_block_height_to_block_height(moa.live_time, contract_id.0) > block_tx.block {
-            return Some(Flaw::ContractIsNotLive);
-        }
-
-        if let Some(end_time) = moa.end_time {
-            if relative_block_height_to_block_height(end_time, contract_id.0) < block_tx.block {
-                return Some(Flaw::ContractIsNotLive);
-            }
-        }
-
         let mut owner_pub_key: Vec<u8> = Vec::new();
         let mut total_allocation: u128 = 0;
 
@@ -315,7 +293,7 @@ impl Updater {
                                 let prev_vout = txin.previous_output.vout.to_string();
                                 let key = format!("{}:{}", prev_txid, prev_vout);
 
-                                if bloom_filter.contains(key) {
+                                if bloom_filter.contains(&key) {
                                     owner_pub_key = key.as_bytes().to_vec();
                                     total_allocation = allocation.0;
                                     break;
@@ -324,7 +302,6 @@ impl Updater {
                         }
                     },
                 }
-
             }
         }
 
@@ -446,20 +423,15 @@ impl Updater {
             Ok(op_return_message) => match op_return_message.contract_creation {
                 Some(contract_creation) => match contract_creation.contract_type {
                     ContractType::Moa(moa) => {
-                        // check livetime
-                        if relative_block_height_to_block_height(moa.live_time, contract_id.0)
-                            > block_tx.block
-                        {
-                            return Some(Flaw::ContractIsNotLive);
+                        if let Some(flaw) = check_live_time(
+                            moa.live_time,
+                            moa.end_time,
+                            contract_id.0,
+                            block_tx.block,
+                        ) {
+                            return Some(flaw);
                         }
 
-                        if let Some(end_time) = moa.end_time {
-                            if relative_block_height_to_block_height(end_time, contract_id.0)
-                                < block_tx.block
-                            {
-                                return Some(Flaw::ContractIsNotLive);
-                            }
-                        }
                         let result_preallocated =
                             if let Some(preallocated) = &moa.mint_mechanism.preallocated {
                                 self.mint_preallocated(
@@ -517,19 +489,13 @@ impl Updater {
                         }
                     }
                     ContractType::Mba(mba) => {
-                        // check livetime
-                        if relative_block_height_to_block_height(mba.live_time, contract_id.0)
-                            > block_tx.block
-                        {
-                            return Some(Flaw::ContractIsNotLive);
-                        }
-
-                        if let Some(end_time) = mba.end_time {
-                            if relative_block_height_to_block_height(end_time, contract_id.0)
-                                < block_tx.block
-                            {
-                                return Some(Flaw::ContractIsNotLive);
-                            }
+                        if let Some(flaw) = check_live_time(
+                            mba.live_time,
+                            mba.end_time,
+                            contract_id.0,
+                            block_tx.block,
+                        ) {
+                            return Some(flaw);
                         }
 
                         // TODO: integrate other mint mechanisms

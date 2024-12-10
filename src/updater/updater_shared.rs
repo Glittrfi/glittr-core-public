@@ -17,12 +17,33 @@ pub fn relative_block_height_to_block_height(
     }
 }
 
+pub fn check_live_time(
+    live_time: RelativeOrAbsoluteBlockHeight,
+    end_time: Option<RelativeOrAbsoluteBlockHeight>,
+    contract_block: u64,
+    current_block: u64
+) -> Option<Flaw> {
+    if relative_block_height_to_block_height(live_time, contract_block) > current_block {
+        return Some(Flaw::ContractIsNotLive);
+    }
+
+    if let Some(end_time) = end_time {
+        if relative_block_height_to_block_height(end_time, contract_block) < current_block {
+            return Some(Flaw::ContractIsNotLive);
+        }
+    }
+
+    return None;
+}
+
 pub fn bloom_filter_to_compressed_vec(filter: GrowableBloom) -> Vec<u8> {
     let serialized = serde_json::to_string(&filter).unwrap();
     let compressed = compress_to_vec(&serialized.as_bytes(), 6);
-    general_purpose::STANDARD.encode(compressed).as_bytes().to_vec()
+    general_purpose::STANDARD
+        .encode(compressed)
+        .as_bytes()
+        .to_vec()
 }
-
 
 pub fn compressed_vec_to_bloom_filter(input: Vec<u8>) -> GrowableBloom {
     let decompressed =
@@ -242,8 +263,7 @@ impl Updater {
             }
 
             // Validate total collateralized if specified
-            if let Some(expected_total_collateralized) = &assert_values.total_collateralized
-            {
+            if let Some(expected_total_collateralized) = &assert_values.total_collateralized {
                 if let Some(actual_total_collateralized) = total_collateralized {
                     if expected_total_collateralized.len() != actual_total_collateralized.len() {
                         return Some(Flaw::AssertValuesMismatch);
