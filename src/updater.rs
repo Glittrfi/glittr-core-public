@@ -512,15 +512,6 @@ impl Updater {
                     Some(contract_id) =>
                         (self.get_message(&contract_id).await, contract_id),
                     None => {
-                        // special case: save the contract creation first
-                        if !self.is_read_only {
-                            self.database.lock().await.put(
-                                MESSAGE_PREFIX,
-                                block_tx.to_string().as_str(),
-                                outcome.clone(),
-                            );
-                        }
-
                         (message_result, block_tx.to_tuple())
                     }
                 };
