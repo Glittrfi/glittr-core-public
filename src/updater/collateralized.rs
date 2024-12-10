@@ -8,7 +8,7 @@ use database::COLLATERALIZED_CONTRACT_DATA;
 use message::{CloseAccountOption, MintBurnOption, OpenAccountOption, SwapOption};
 use mint_burn_asset::{Collateralized, MintBurnAssetContract, MintStructure, RatioModel};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct CollateralizedAssetData {
     pub amounts: HashMap<BlockTxString, u128>,
     pub total_supply: u128,

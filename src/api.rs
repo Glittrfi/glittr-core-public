@@ -173,8 +173,8 @@ async fn get_collateralized_contract(
     Path((block, tx)): Path<(u64, u32)>,
 ) -> Result<Json<Value>, StatusCode> {
     let updater = Updater::new(state.database, true).await;
-    if let Ok(asset_contract_data) = updater.get_asset_contract_data(&(block, tx)).await {
-        Ok(Json(json!({ "asset": asset_contract_data })))
+    if let Ok(collateralized_contract_data) = updater.get_collateralized_contract_data(&(block, tx)).await {
+        Ok(Json(json!({ "assets": collateralized_contract_data })))
     } else {
         Err(StatusCode::NOT_FOUND)
     }

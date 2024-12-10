@@ -690,7 +690,7 @@ impl Updater {
 
         match data {
             Ok(data) => Ok(data),
-            Err(DatabaseError::NotFound) => Err(Flaw::PoolNotFound),
+            Err(DatabaseError::NotFound) => Ok(CollateralizedAssetData::default()),
             Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
         }
     }
