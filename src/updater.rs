@@ -359,7 +359,7 @@ impl Updater {
         };
         let mut ticker: Option<String> = None;
 
-        if let Ok(message) = message_result {
+        if let Ok(message) = message_result.clone() {
             outcome.message = Some(message.clone());
             // NOTE: static validation
             if let Some(flaw) = message.validate() {
@@ -508,8 +508,9 @@ impl Updater {
             }
 
             if let Some(contract_call) = message.contract_call {
-                let contract_id = match contract_call.contract {
-                    Some(contract_id) => contract_id,
+                let (message, contract_id) = match contract_call.contract {
+                    Some(contract_id) =>
+                        (self.get_message(&contract_id).await, contract_id),
                     None => {
                         // special case: save the contract creation first
                         if !self.is_read_only {
@@ -520,7 +521,7 @@ impl Updater {
                             );
                         }
 
-                        block_tx.to_tuple()
+                        (message_result, block_tx.to_tuple())
                     }
                 };
 
@@ -528,19 +529,19 @@ impl Updater {
                     CallType::Mint(mint_option) => {
                         if outcome.flaw.is_none() {
                             outcome.flaw =
-                                self.mint(tx, block_tx, &contract_id, &mint_option).await;
+                                self.mint(tx, block_tx, &contract_id, &mint_option, message).await;
                         }
                     }
                     CallType::Burn(burn_option) => {
                         if outcome.flaw.is_none() {
                             outcome.flaw =
-                                self.burn(tx, block_tx, &contract_id, &burn_option).await;
+                                self.burn(tx, block_tx, &contract_id, &burn_option, message).await;
                         }
                     }
                     CallType::Swap(swap_option) => {
                         if outcome.flaw.is_none() {
                             outcome.flaw = self
-                                .process_swap(tx, block_tx, &contract_id, &swap_option)
+                                .process_swap(tx, block_tx, &contract_id, &swap_option, message)
                                 .await;
                         }
                     }
@@ -552,6 +553,7 @@ impl Updater {
                                     block_tx,
                                     &contract_id,
                                     &open_account_option,
+                                    message,
                                 )
                                 .await;
                         }

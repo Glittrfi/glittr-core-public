@@ -455,9 +455,9 @@ impl Updater {
         _block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
         open_account_option: &OpenAccountOption,
+        message: Result<OpReturnMessage, Flaw>
     ) -> Option<Flaw> {
         // Get the MBA contract
-        let message = self.get_message(contract_id).await;
         let mut collateral_amounts = Vec::new();
         let mut total_collateral_amount: u128 = 0;
 
@@ -520,10 +520,10 @@ impl Updater {
         &mut self,
         tx: &Transaction,
         _block_tx: &BlockTx,
-        contract_id: &BlockTxTuple,
+        _contract_id: &BlockTxTuple,
         swap_option: &SwapOption,
+        message: Result<OpReturnMessage, Flaw>
     ) -> Option<Flaw> {
-        let message = self.get_message(contract_id).await;
         let contract_creation = match message {
             Ok(op_return_message) => op_return_message.contract_creation?,
             Err(flaw) => return Some(flaw),
