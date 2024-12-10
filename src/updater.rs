@@ -508,25 +508,39 @@ impl Updater {
             }
 
             if let Some(contract_call) = message.contract_call {
+                let contract_id = match contract_call.contract {
+                    Some(contract_id) => contract_id,
+                    None => {
+                        // special case: save the contract creation first
+                        if !self.is_read_only {
+                            self.database.lock().await.put(
+                                MESSAGE_PREFIX,
+                                block_tx.to_string().as_str(),
+                                outcome.clone(),
+                            );
+                        }
+
+                        block_tx.to_tuple()
+                    }
+                };
+
                 match contract_call.call_type {
                     CallType::Mint(mint_option) => {
                         if outcome.flaw.is_none() {
-                            outcome.flaw = self
-                                .mint(tx, block_tx, &contract_call.contract, &mint_option)
-                                .await;
+                            outcome.flaw =
+                                self.mint(tx, block_tx, &contract_id, &mint_option).await;
                         }
                     }
                     CallType::Burn(burn_option) => {
                         if outcome.flaw.is_none() {
-                            outcome.flaw = self
-                                .burn(tx, block_tx, &contract_call.contract, &burn_option)
-                                .await;
+                            outcome.flaw =
+                                self.burn(tx, block_tx, &contract_id, &burn_option).await;
                         }
                     }
                     CallType::Swap(swap_option) => {
                         if outcome.flaw.is_none() {
                             outcome.flaw = self
-                                .process_swap(tx, block_tx, &contract_call.contract, &swap_option)
+                                .process_swap(tx, block_tx, &contract_id, &swap_option)
                                 .await;
                         }
                     }
@@ -536,7 +550,7 @@ impl Updater {
                                 .process_open_account(
                                     tx,
                                     block_tx,
-                                    &contract_call.contract,
+                                    &contract_id,
                                     &open_account_option,
                                 )
                                 .await;
@@ -548,7 +562,7 @@ impl Updater {
                                 .process_close_account(
                                     tx,
                                     block_tx,
-                                    &contract_call.contract,
+                                    &contract_id,
                                     &close_account_option,
                                 )
                                 .await;
@@ -614,7 +628,10 @@ impl Updater {
         None
     }
 
-    pub async fn get_contract_block_tx_by_ticker(&self, ticker: String) -> Result<BlockTxTuple, Flaw> {
+    pub async fn get_contract_block_tx_by_ticker(
+        &self,
+        ticker: String,
+    ) -> Result<BlockTxTuple, Flaw> {
         let block_tx: Result<BlockTxTuple, DatabaseError> = self
             .database
             .lock()

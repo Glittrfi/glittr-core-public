@@ -122,7 +122,7 @@ pub struct ContractCreation {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct ContractCall {
-    pub contract: BlockTxTuple,
+    pub contract: Option<BlockTxTuple>,
     pub call_type: CallType,
 }
 
