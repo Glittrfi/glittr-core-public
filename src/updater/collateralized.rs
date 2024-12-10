@@ -544,7 +544,7 @@ impl Updater {
         &mut self,
         tx: &Transaction,
         _block_tx: &BlockTx,
-        _contract_id: &BlockTxTuple,
+        contract_id: &BlockTxTuple,
         swap_option: &SwapOption,
         message: Result<OpReturnMessage, Flaw>
     ) -> Option<Flaw> {

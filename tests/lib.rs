@@ -3418,7 +3418,7 @@ async fn test_contract_creation_and_mint() {
 
     let lp_minted_amount = asset_lists
         .values()
-        .find_map(|list| list.list.get(&contract_create_and_mint_lp_block_tx.to_str()))
+        .find_map(|list| list.list.get(&contract_create_and_mint_lp_block_tx.to_string()))
         .expect("Minted asset should exist");
 
     // Minted LP: https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol#L120-L123
