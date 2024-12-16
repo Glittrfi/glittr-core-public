@@ -774,6 +774,7 @@ impl Updater {
         }
     }
 
+    // TODO: separate the updater helper-api into dedicated file.
     #[cfg(feature = "helper-api")]
     pub async fn get_address_balance(&self, address: String) -> Result<AddressAssetList, Flaw> {
         use database::ADDRESS_ASSET_LIST_PREFIX;

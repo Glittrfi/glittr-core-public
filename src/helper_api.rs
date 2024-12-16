@@ -14,7 +14,7 @@ use crate::{APIState, Updater};
 // TODO: get_token_supply_by_ticker, get_token_holders_by_ticker, get_address_balance_by_ticker
 pub fn helper_routes() -> Router<APIState> {
     Router::new()
-        .route("/helper/balance/:address", get(get_address_balance))
+        .route("/helper/address/:address/balance", get(get_address_balance))
 }
 
 async fn get_address_balance(
