@@ -13,6 +13,8 @@ use mint_burn_asset::MintBurnAssetContract;
 use mint_only_asset::MintOnlyAssetContract;
 use spec::SpecContract;
 
+
+
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum ContractType {
@@ -27,7 +29,8 @@ pub struct MintBurnOption {
     pub pointer: Option<u32>,
     pub oracle_message: Option<OracleMessageSigned>,
     pub pointer_to_key: Option<u32>,
-    pub assert_values: Option<AssertValues>
+    pub assert_values: Option<AssertValues>,
+    pub commitment_message: Option<CommitmentMessage>
 }
 
 #[serde_with::skip_serializing_none]
@@ -91,6 +94,24 @@ pub struct OracleMessage {
     pub outstanding: Option<U128>,
     // the bitcoin block height when the message is signed
     pub block_height: u64,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct Commitment {
+    pub public_key: Pubkey,
+    pub args: ArgsCommitment
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct ArgsCommitment {
+    pub fixed_string: String,
+    pub string: String
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct CommitmentMessage {
+    pub public_key: Pubkey,
+    pub args: Vec<u8>
 }
 
 /// Transfer
@@ -259,6 +280,7 @@ mod test {
                     supply_cap: Some(U128(1000)),
                     divisibility: 18,
                     live_time: 0,
+                    end_time: None,
                     mint_mechanism: MOAMintMechanisms {
                         free_mint: Some(FreeMint {
                             supply_cap: Some(U128(1000)),
@@ -267,6 +289,7 @@ mod test {
                         preallocated: None,
                         purchase: None,
                     },
+                    commitment: None,
                 }),
                 spec: None,
             }),

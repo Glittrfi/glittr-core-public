@@ -28,8 +28,24 @@ pub struct MintMechanisms {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct Preallocated {
-    pub allocations: HashMap<U128, Vec<Pubkey>>,
+    pub allocations: HashMap<U128, AllocationType>,
     pub vesting_plan: Option<VestingPlan>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum AllocationType {
+    VecPubkey(Vec<Pubkey>),
+    BloomFilter {
+        filter: Vec<u8>,
+        arg: BloomFilterArgType,
+    },
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum BloomFilterArgType {
+    TxId,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -71,14 +87,21 @@ impl Preallocated {
             ContractType::Spec(_) => {
                 supply_cap = None;
                 free_mint = None;
-            },
+            }
         }
 
         if let Some(supply_cap) = &supply_cap {
             let mut total_allocations: u128 = 0;
             for alloc in &self.allocations {
-                total_allocations = total_allocations
-                    .saturating_add(alloc.0 .0.saturating_mul(alloc.1.len() as u128));
+                match alloc.1 {
+                    AllocationType::VecPubkey(vec) => {
+                        total_allocations = total_allocations
+                            .saturating_add(alloc.0 .0.saturating_mul(vec.len() as u128));
+                    }
+                    _ => {
+                        total_allocations = total_allocations.saturating_add(alloc.0 .0);
+                    }
+                }
             }
 
             if total_allocations > supply_cap.0 {
@@ -121,9 +144,7 @@ impl FreeMint {
             ContractType::Mba(mint_burn_asset_contract) => {
                 mint_burn_asset_contract.supply_cap.clone()
             }
-            ContractType::Spec(_) => {
-                None
-            },
+            ContractType::Spec(_) => None,
         };
 
         if let Some(supply_cap) = &self.supply_cap {
@@ -204,7 +225,7 @@ impl RatioType {
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 pub struct OracleSetting {
     /// compressed public key
-    pub pubkey: Pubkey, 
+    pub pubkey: Pubkey,
     /// set asset_id to null for fully trust the oracle, ordinal_number if ordinal, rune's block_tx if rune, etc
     pub asset_id: Option<String>,
     /// delta block_height in which the oracle message still valid

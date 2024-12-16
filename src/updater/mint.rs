@@ -1,34 +1,31 @@
 use super::*;
+use crate::config::get_bitcoin_network;
 use bitcoin::{
     hex::{Case, DisplayHex},
     PublicKey, ScriptBuf,
 };
-use crate::config::get_bitcoin_network;
 use message::MintBurnOption;
 use transaction_shared::Preallocated;
 
 impl Updater {
     async fn mint_free_mint(
         &mut self,
-        asset_contract: &MintOnlyAssetContract,
+        moa: &MintOnlyAssetContract,
         tx: &Transaction,
-        block_tx: &BlockTx,
+        _block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
         mint_option: &MintBurnOption,
     ) -> Option<Flaw> {
-        // check livetime
-        if asset_contract.live_time > block_tx.block {
-            return Some(Flaw::LiveTimeNotReached);
-        }
 
-        let free_mint = asset_contract.mint_mechanism.free_mint.as_ref().unwrap();
+
+        let free_mint = moa.mint_mechanism.free_mint.as_ref().unwrap();
 
         if let Some(assert_values) = &mint_option.assert_values {
             if let Some(flaw) = self.validate_assert_values(
                 &Some(assert_values.clone()),
                 vec![],
                 None,
-                free_mint.amount_per_mint.0
+                free_mint.amount_per_mint.0,
             ) {
                 return Some(flaw);
             }
@@ -37,7 +34,7 @@ impl Updater {
         if let Some(flaw) = self
             .validate_and_update_supply_cap(
                 contract_id,
-                asset_contract.supply_cap.clone(),
+                moa.supply_cap.clone(),
                 free_mint.amount_per_mint.0,
                 true,
                 true,
@@ -64,7 +61,7 @@ impl Updater {
 
     pub async fn mint_purchase_burn_swap(
         &mut self,
-        asset_contract: &MintOnlyAssetContract,
+        moa: &MintOnlyAssetContract,
         purchase: &PurchaseBurnSwap,
         tx: &Transaction,
         block_tx: &BlockTx,
@@ -131,10 +128,8 @@ impl Updater {
                 .unwrap(),
             ];
             for (pos, output) in tx.output.iter().enumerate() {
-                let address_from_script = Address::from_script(
-                    output.script_pubkey.as_script(),
-                    bitcoin_network,
-                );
+                let address_from_script =
+                    Address::from_script(output.script_pubkey.as_script(), bitcoin_network);
 
                 if let Ok(address_from_script) = address_from_script {
                     if potential_addresses.contains(&address_from_script) {
@@ -182,13 +177,12 @@ impl Updater {
             return Some(Flaw::MintedZero);
         }
 
-
         if let Some(assert_values) = &mint_option.assert_values {
             if let Some(flaw) = self.validate_assert_values(
                 &Some(assert_values.clone()),
                 vec![total_received_value],
                 None,
-                out_value
+                out_value,
             ) {
                 return Some(flaw);
             }
@@ -222,7 +216,7 @@ impl Updater {
         if let Some(flaw) = self
             .validate_and_update_supply_cap(
                 contract_id,
-                asset_contract.supply_cap.clone(),
+                moa.supply_cap.clone(),
                 out_value,
                 true,
                 false,
@@ -247,7 +241,7 @@ impl Updater {
 
     pub async fn mint_preallocated(
         &mut self,
-        asset_contract: &MintOnlyAssetContract,
+        moa: &MintOnlyAssetContract,
         preallocated: &Preallocated,
         tx: &Transaction,
         block_tx: &BlockTx,
@@ -280,11 +274,33 @@ impl Updater {
                 }
             };
 
-            for (allocation, pubkeys) in preallocated.allocations.iter() {
-                if pubkeys.contains(&pubkey) {
-                    owner_pub_key = pubkey;
-                    total_allocation = allocation.0;
-                    break;
+            for (allocation, alloc_type) in preallocated.allocations.iter() {
+                match alloc_type {
+                    transaction_shared::AllocationType::VecPubkey(pubkeys) => {
+                        if pubkeys.contains(&pubkey) {
+                            owner_pub_key = pubkey;
+                            total_allocation = allocation.0;
+                            break;
+                        }
+                    },
+                    transaction_shared::AllocationType::BloomFilter { filter, arg } => {
+                        match arg {
+                            transaction_shared::BloomFilterArgType::TxId => {
+                                // for each input check if the txid:vout exist on filter
+                                let bloom_filter = compressed_vec_to_bloom_filter(filter.to_vec());
+
+                                let prev_txid = txin.previous_output.txid.to_string();
+                                let prev_vout = txin.previous_output.vout.to_string();
+                                let key = format!("{}:{}", prev_txid, prev_vout);
+
+                                if bloom_filter.contains(&key) {
+                                    owner_pub_key = key.as_bytes().to_vec();
+                                    total_allocation = allocation.0;
+                                    break;
+                                }
+                            },
+                        }
+                    },
                 }
             }
         }
@@ -346,12 +362,9 @@ impl Updater {
         };
 
         if let Some(assert_values) = &mint_option.assert_values {
-            if let Some(flaw) = self.validate_assert_values(
-                &Some(assert_values.clone()),
-                vec![],
-                None,
-                out_value
-            ) {
+            if let Some(flaw) =
+                self.validate_assert_values(&Some(assert_values.clone()), vec![], None, out_value)
+            {
                 return Some(flaw);
             }
         }
@@ -359,7 +372,7 @@ impl Updater {
         if let Some(flaw) = self
             .validate_and_update_supply_cap(
                 contract_id,
-                asset_contract.supply_cap.clone(),
+                moa.supply_cap.clone(),
                 out_value,
                 true,
                 false,
@@ -410,6 +423,15 @@ impl Updater {
             Ok(op_return_message) => match op_return_message.contract_creation {
                 Some(contract_creation) => match contract_creation.contract_type {
                     ContractType::Moa(moa) => {
+                        if let Some(flaw) = check_live_time(
+                            moa.live_time,
+                            moa.end_time,
+                            contract_id.0,
+                            block_tx.block,
+                        ) {
+                            return Some(flaw);
+                        }
+
                         let result_preallocated =
                             if let Some(preallocated) = &moa.mint_mechanism.preallocated {
                                 self.mint_preallocated(
@@ -467,6 +489,15 @@ impl Updater {
                         }
                     }
                     ContractType::Mba(mba) => {
+                        if let Some(flaw) = check_live_time(
+                            mba.live_time,
+                            mba.end_time,
+                            contract_id.0,
+                            block_tx.block,
+                        ) {
+                            return Some(flaw);
+                        }
+
                         // TODO: integrate other mint mechanisms
                         if let Some(collateralized) = &mba.mint_mechanism.collateralized {
                             return self

@@ -17,9 +17,6 @@ impl Updater {
         burn_option: &MintBurnOption,
     ) -> Option<Flaw> {
         let mut out_values: Vec<u128> = vec![];
-        if mba.live_time > block_tx.block {
-            return Some(Flaw::LiveTimeNotReached);
-        }
 
         let burned_amount = self
             .unallocated_inputs
@@ -283,6 +280,11 @@ impl Updater {
                 Some(contract_creation) => match contract_creation.contract_type {
                     ContractType::Moa(_moa) => None,
                     ContractType::Mba(mba) => {
+
+                        if let Some(flaw) = check_live_time(mba.live_time, mba.end_time, contract_id.0, block_tx.block) {
+                            return Some(flaw);
+                        }
+
                         if let Some(return_collateral) = &mba.burn_mechanism.return_collateral {
                             return self
                                 .burn_return_collateral(

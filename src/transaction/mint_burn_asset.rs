@@ -1,5 +1,5 @@
 use super::*;
-use message::ContractValidator;
+use message::{Commitment, ContractValidator};
 use transaction_shared::{FreeMint, InputAsset, OracleSetting, Preallocated, PurchaseBurnSwap, RatioType};
 
 #[serde_with::skip_serializing_none]
@@ -9,10 +9,12 @@ pub struct MintBurnAssetContract {
     pub ticker: Option<String>,
     pub supply_cap: Option<U128>,
     pub divisibility: u8,
-    pub live_time: BlockHeight,
+    pub live_time: RelativeOrAbsoluteBlockHeight,
+    pub end_time: Option<RelativeOrAbsoluteBlockHeight>,
     pub mint_mechanism: MBAMintMechanisms,
     pub burn_mechanism: BurnMechanisms,
     pub swap_mechanism: SwapMechanisms,
+    pub commitment: Option<Commitment>
 }
 
 #[serde_with::skip_serializing_none]

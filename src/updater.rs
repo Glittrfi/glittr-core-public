@@ -271,7 +271,6 @@ impl Updater {
                 .clone();
 
             for (contract_id, collateral_account) in collateral_accounts {
-                println!("moved {:?}", collateral_account);
                 self.move_collateral_account_allocation(
                     vout,
                     collateral_account,

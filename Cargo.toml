@@ -23,6 +23,12 @@ serde_with = "3.11.0"
 tokio = { version = "1.40.0", features = ["full"] }
 itertools = "0.13.0"
 paste = "1.0"
+growable-bloom-filter = "2.1.1"
+miniz_oxide = "0.8.0"
+base64 = "0.22.1"
+aes-gcm = "0.10.3"
+sha2 = "0.10.8"
+rand = "0.8.5"
 
 [[bin]]
 name = "glittr"
