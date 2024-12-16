@@ -83,6 +83,7 @@ impl Indexer {
                 self.last_indexed_block = Some(block_height);
             }
 
+
             self.database
                 .lock()
                 .await

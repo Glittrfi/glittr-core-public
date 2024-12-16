@@ -4,6 +4,9 @@ description = "Glittr protocol implementation"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+helper-api = []
+
 [dependencies]
 axum = "0.7.7"
 bitcoin = "0.32.3"

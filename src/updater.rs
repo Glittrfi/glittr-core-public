@@ -21,7 +21,9 @@ use bitcoin::{
     Address, OutPoint, Transaction, TxOut, XOnlyPublicKey,
 };
 use database::{
-    DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, MESSAGE_PREFIX, COLLATERALIZED_CONTRACT_DATA, STATE_KEYS_PREFIX, TICKER_TO_BLOCK_TX_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX, VESTING_CONTRACT_DATA_PREFIX
+    DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, COLLATERALIZED_CONTRACT_DATA,
+    MESSAGE_PREFIX, STATE_KEYS_PREFIX, TICKER_TO_BLOCK_TX_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX,
+    VESTING_CONTRACT_DATA_PREFIX,
 };
 use flaw::Flaw;
 use message::{CallType, ContractType, OpReturnMessage, TxTypeTransfer};
@@ -87,6 +89,21 @@ pub struct StateKeys {
 #[serde(rename_all = "snake_case")]
 pub struct SpecContractOwned {
     pub specs: HashSet<BlockTxTuple>,
+}
+
+#[cfg(feature = "helper-api")]
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct UTXOBalances {
+    txid: String,
+    vout: u32,
+    assets: HashMap<BlockTxString, U128>,
+}
+
+#[cfg(feature = "helper-api")]
+#[derive(Deserialize, Serialize, Clone, Default, Debug)]
+pub struct AddressAssetList {
+    pub summarized: HashMap<BlockTxString, U128>,
+    pub utxos: Vec<UTXOBalances>,
 }
 
 #[derive(Default)]
@@ -271,7 +288,6 @@ impl Updater {
                 .clone();
 
             for (contract_id, collateral_account) in collateral_accounts {
-                println!("moved {:?}", collateral_account);
                 self.move_collateral_account_allocation(
                     vout,
                     collateral_account,
@@ -306,6 +322,12 @@ impl Updater {
                     .await;
             }
         }
+
+        #[cfg(feature = "helper-api")]
+        self.set_transaction(txid, tx.clone()).await;
+
+        #[cfg(feature = "helper-api")]
+        self.update_address_balance(tx, txid).await?;
 
         // reset asset list
         self.unallocated_inputs = Allocation::default();
@@ -502,24 +524,23 @@ impl Updater {
 
             if let Some(contract_call) = message.contract_call {
                 let (message, contract_id) = match contract_call.contract {
-                    Some(contract_id) =>
-                        (self.get_message(&contract_id).await, contract_id),
-                    None => {
-                        (message_result, block_tx.to_tuple())
-                    }
+                    Some(contract_id) => (self.get_message(&contract_id).await, contract_id),
+                    None => (message_result, block_tx.to_tuple()),
                 };
 
                 match contract_call.call_type {
                     CallType::Mint(mint_option) => {
                         if outcome.flaw.is_none() {
-                            outcome.flaw =
-                                self.mint(tx, block_tx, &contract_id, &mint_option, message).await;
+                            outcome.flaw = self
+                                .mint(tx, block_tx, &contract_id, &mint_option, message)
+                                .await;
                         }
                     }
                     CallType::Burn(burn_option) => {
                         if outcome.flaw.is_none() {
-                            outcome.flaw =
-                                self.burn(tx, block_tx, &contract_id, &burn_option, message).await;
+                            outcome.flaw = self
+                                .burn(tx, block_tx, &contract_id, &burn_option, message)
+                                .await;
                         }
                     }
                     CallType::Swap(swap_option) => {
@@ -751,5 +772,162 @@ impl Updater {
                 vesting_contract_data,
             );
         }
+    }
+
+    #[cfg(feature = "helper-api")]
+    pub async fn get_address_balance(&self, address: String) -> Result<AddressAssetList, Flaw> {
+        use database::ADDRESS_ASSET_LIST_PREFIX;
+
+        let asset_list: Result<AddressAssetList, DatabaseError> = self
+            .database
+            .lock()
+            .await
+            .get(ADDRESS_ASSET_LIST_PREFIX, &address);
+
+        match asset_list {
+            Ok(asset_list) => Ok(asset_list),
+            Err(DatabaseError::NotFound) => Ok(AddressAssetList::default()),
+            Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
+        }
+    }
+
+    #[cfg(feature = "helper-api")]
+    async fn get_transaction(&self, txid: bitcoin::Txid) -> Result<Transaction, Flaw> {
+        use database::TXID_TO_TRANSACTION_PREFIX;
+
+        let tx: Result<Transaction, DatabaseError> = self
+            .database
+            .lock()
+            .await
+            .get(TXID_TO_TRANSACTION_PREFIX, &txid.to_string());
+
+        match tx {
+            Ok(tx) => Ok(tx),
+            Err(DatabaseError::NotFound) => Err(Flaw::NotFound),
+            Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
+        }
+    }
+
+    #[cfg(feature = "helper-api")]
+    async fn set_transaction(&self, txid: bitcoin::Txid, tx: Transaction) {
+        use database::TXID_TO_TRANSACTION_PREFIX;
+
+        if !self.is_read_only {
+            self.database
+                .lock()
+                .await
+                .put(TXID_TO_TRANSACTION_PREFIX, &txid.to_string(), tx);
+        }
+    }
+
+    #[cfg(feature = "helper-api")]
+    async fn update_address_balance(
+        &self,
+        tx: &Transaction,
+        txid: bitcoin::Txid,
+    ) -> Result<(), Box<dyn Error>> {
+        use crate::config::get_bitcoin_network;
+        use database::ADDRESS_ASSET_LIST_PREFIX;
+
+        // Process outputs
+        for (vout, output) in tx.output.iter().enumerate() {
+            if self.is_op_return_index(output) {
+                continue;
+            }
+
+            if let Ok(address) = Address::from_script(&output.script_pubkey, get_bitcoin_network())
+            {
+                let mut address_asset_list = self
+                    .get_address_balance(address.to_string())
+                    .await
+                    .unwrap_or_default();
+
+                // Get the allocation for this output
+                if let Some(allocation) = self.allocated_outputs.get(&(vout as u32)) {
+                    // Update the UTXO list
+                    let outpoint = OutPoint {
+                        txid,
+                        vout: vout as u32,
+                    };
+                    let mut utxo_assets = HashMap::new();
+
+                    for (asset_id, amount) in &allocation.asset_list.list {
+                        utxo_assets.insert(asset_id.clone(), U128(*amount));
+
+                        // Update summarized balances
+                        let current_amount: &mut U128 = address_asset_list
+                            .summarized
+                            .entry(asset_id.clone())
+                            .or_insert(U128(0));
+                        current_amount.0 = current_amount.0.saturating_add(*amount);
+                    }
+
+                    if !utxo_assets.is_empty() {
+                        address_asset_list.utxos.push(UTXOBalances {
+                            txid: outpoint.txid.to_string(),
+                            vout: outpoint.vout,
+                            assets: utxo_assets,
+                        });
+                    }
+
+                    // Save updated address asset list
+                    if !self.is_read_only {
+                        self.database.lock().await.put(
+                            ADDRESS_ASSET_LIST_PREFIX,
+                            &address.to_string(),
+                            &address_asset_list,
+                        );
+                    }
+                }
+            }
+        }
+
+        // Process inputs (subtract from balances)
+        for input in tx.input.iter() {
+            let outpoint = &input.previous_output;
+
+            // Get the previous output's address and asset list
+            if let Ok(prev_tx) = self.get_transaction(outpoint.txid).await {
+                if let Some(prev_output) = prev_tx.output.get(outpoint.vout as usize) {
+                    if let Ok(address) =
+                        Address::from_script(&prev_output.script_pubkey, get_bitcoin_network())
+                    {
+                        let mut address_asset_list = self
+                            .get_address_balance(address.to_string())
+                            .await
+                            .unwrap_or_default();
+
+                        // Remove the spent UTXO
+                        address_asset_list.utxos.retain(|utxo_balances| {
+                            !(utxo_balances.txid == outpoint.txid.to_string()
+                                && utxo_balances.vout == outpoint.vout)
+                        });
+
+                        // Recalculate summarized balances
+                        address_asset_list.summarized.clear();
+                        for utxo_balances in &address_asset_list.utxos {
+                            for (asset_id, amount) in &utxo_balances.assets {
+                                let current_amount = address_asset_list
+                                    .summarized
+                                    .entry(asset_id.clone())
+                                    .or_insert(U128(0));
+                                current_amount.0 = current_amount.0.saturating_add(amount.0);
+                            }
+                        }
+
+                        // Save updated address asset list
+                        if !self.is_read_only {
+                            self.database.lock().await.put(
+                                ADDRESS_ASSET_LIST_PREFIX,
+                                &address.to_string(),
+                                &address_asset_list,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 }

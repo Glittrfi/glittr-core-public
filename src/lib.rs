@@ -17,6 +17,9 @@ mod types;
 mod updater;
 mod macros;
 
+#[cfg(feature = "helper-api")]
+mod helper_api;
+
 pub use api::*;
 pub use flaw::*;
 pub use indexer::*;
