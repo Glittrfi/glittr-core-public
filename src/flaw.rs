@@ -85,4 +85,5 @@ pub enum Flaw {
     NonGlittrMessage,
     PoolNotFound,
     AssertValuesMismatch,
+    NotFound,
 }
