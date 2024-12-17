@@ -653,25 +653,38 @@ impl Updater {
         }
     }
 
-    pub async fn get_ticker_by_contract_block_tx(
+    pub async fn get_contract_info_by_block_tx(
         &self,
         block_tx: BlockTxTuple,
-    ) -> Result<Option<String>, Flaw> {
+    ) -> Result<Option<ContractInfo>, Flaw> {
         let message = self.get_message(&block_tx).await?;
-        
-        match message.contract_creation{
-            Some(contract_creation) => {
-                match contract_creation.contract_type {
-                    ContractType::Moa(mint_only_asset_contract) => Ok(mint_only_asset_contract.ticker),
-                    ContractType::Mba(mint_burn_asset_contract) => Ok(mint_burn_asset_contract.ticker),
-                    ContractType::Spec(_) => Ok(None)
+        let asset_data = self.get_asset_contract_data(&block_tx).await?;
+
+        match message.contract_creation {
+            Some(contract_creation) => match contract_creation.contract_type {
+                ContractType::Moa(moa) => {
+                    return Ok(Some(ContractInfo {
+                        ticker: moa.ticker,
+                        supply_cap: moa.supply_cap,
+                        divisibility: moa.divisibility,
+                        total_supply: U128(asset_data.minted_supply - asset_data.burned_supply),
+                        mint_mechanism: MintMechanism::Moa(moa.mint_mechanism),
+                    }));
                 }
-            }
+                ContractType::Mba(mba) => Ok(Some(ContractInfo {
+                    ticker: mba.ticker,
+                    supply_cap: mba.supply_cap,
+                    divisibility: mba.divisibility,
+                    total_supply: U128(asset_data.minted_supply - asset_data.burned_supply),
+                    mint_mechanism: MintMechanism::Mba(mba.mint_mechanism),
+                })),
+                ContractType::Spec(_) => Ok(None),
+            },
             None => Ok(None),
         }
     }
 
-    async fn get_message(&self, contract_id: &BlockTxTuple) -> Result<OpReturnMessage, Flaw> {
+    pub async fn get_message(&self, contract_id: &BlockTxTuple) -> Result<OpReturnMessage, Flaw> {
         let contract_key = BlockTx::from_tuple(*contract_id).to_string();
         let outcome: Result<MessageDataOutcome, DatabaseError> = self
             .database

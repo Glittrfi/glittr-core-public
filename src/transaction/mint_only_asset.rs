@@ -4,6 +4,7 @@ use transaction_shared::{FreeMint, Preallocated, PurchaseBurnSwap};
 
 use super::*;
 
+#[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MOAMintMechanisms {

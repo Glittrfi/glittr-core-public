@@ -9,6 +9,8 @@ use axum::{
 };
 use bitcoin::{consensus::deserialize, OutPoint, Transaction, Txid};
 use bitcoincore_rpc::{Auth, Client, RpcApi};
+use mint_burn_asset::MBAMintMechanisms;
+use mint_only_asset::MOAMintMechanisms;
 use serde_json::{json, Value};
 use store::database::{DatabaseError, MESSAGE_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX};
 use transaction::message::OpReturnMessage;
@@ -20,9 +22,22 @@ pub struct APIState {
     pub rpc: Arc<Client>,
 }
 
+#[serde_with::skip_serializing_none]
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MintMechanism {
+    Mba(MBAMintMechanisms),
+    Moa(MOAMintMechanisms)
+}
+
+#[serde_with::skip_serializing_none]
 #[derive(Serialize, Deserialize)]
 pub struct ContractInfo {
     pub ticker: Option<String>,
+    pub supply_cap: Option<U128>,
+    pub divisibility: u8,
+    pub total_supply: U128,
+    pub mint_mechanism: MintMechanism
 }
 
 #[derive(Deserialize)]
@@ -173,16 +188,16 @@ async fn get_assets(
     match updater.get_asset_list(&outpoint).await {
         Ok(asset_list) => {
             if options.show_contract_info == Some(true) {
-                let mut info = HashMap::new();
+                let mut contract_infos = HashMap::new();
                 for contract_id in asset_list.list.keys() {
                     let block_tx = BlockTx::from_str(contract_id).unwrap();
-                    let ticker = updater
-                        .get_ticker_by_contract_block_tx(block_tx.to_tuple())
+                    let contract_info = updater
+                        .get_contract_info_by_block_tx(block_tx.to_tuple())
                         .await
                         .unwrap();
-                    info.insert(contract_id.clone(), ContractInfo { ticker });
+                    contract_infos.insert(contract_id.clone(), contract_info);
                 }
-                Ok(Json(json!({ "assets": asset_list, "contract_info": info })))
+                Ok(Json(json!({ "assets": asset_list, "contract_info": contract_infos })))
             } else {
                 Ok(Json(json!({ "assets": asset_list })))
             }
@@ -197,12 +212,12 @@ async fn get_asset_contract(
 ) -> Result<Json<Value>, StatusCode> {
     let updater = Updater::new(state.database, true).await;
     if let Ok(asset_contract_data) = updater.get_asset_contract_data(&(block, tx)).await {
-        let ticker = updater
-            .get_ticker_by_contract_block_tx((block, tx))
+        let contract_info = updater
+            .get_contract_info_by_block_tx((block, tx))
             .await
             .unwrap();
         Ok(Json(
-            json!({ "asset": asset_contract_data, "contract_info": ContractInfo {ticker} }),
+            json!({ "asset": asset_contract_data, "contract_info": contract_info }),
         ))
     } else {
         Err(StatusCode::NOT_FOUND)
@@ -217,13 +232,13 @@ async fn get_collateralized_contract(
     if let Ok(collateralized_contract_data) =
         updater.get_collateralized_contract_data(&(block, tx)).await
     {
-        let ticker = updater
-            .get_ticker_by_contract_block_tx((block, tx))
+        let contract_info = updater
+            .get_contract_info_by_block_tx((block, tx))
             .await
             .unwrap();
 
         Ok(Json(
-            json!({ "assets": collateralized_contract_data, "contract_info": ContractInfo {ticker} }),
+            json!({ "assets": collateralized_contract_data, "contract_info": contract_info }),
         ))
     } else {
         Err(StatusCode::NOT_FOUND)
