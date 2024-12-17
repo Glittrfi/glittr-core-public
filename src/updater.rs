@@ -90,7 +90,6 @@ pub struct StateKeys {
 pub struct SpecContractOwned {
     pub specs: HashSet<BlockTxTuple>,
 }
-
 #[cfg(feature = "helper-api")]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct UTXOBalances {
@@ -654,6 +653,24 @@ impl Updater {
         }
     }
 
+    pub async fn get_ticker_by_contract_block_tx(
+        &self,
+        block_tx: BlockTxTuple,
+    ) -> Result<Option<String>, Flaw> {
+        let message = self.get_message(&block_tx).await?;
+        
+        match message.contract_creation{
+            Some(contract_creation) => {
+                match contract_creation.contract_type {
+                    ContractType::Moa(mint_only_asset_contract) => Ok(mint_only_asset_contract.ticker),
+                    ContractType::Mba(mint_burn_asset_contract) => Ok(mint_burn_asset_contract.ticker),
+                    ContractType::Spec(_) => Ok(None)
+                }
+            }
+            None => Ok(None),
+        }
+    }
+
     async fn get_message(&self, contract_id: &BlockTxTuple) -> Result<OpReturnMessage, Flaw> {
         let contract_key = BlockTx::from_tuple(*contract_id).to_string();
         let outcome: Result<MessageDataOutcome, DatabaseError> = self
@@ -779,15 +796,15 @@ impl Updater {
     pub async fn get_address_balance(&self, address: String) -> Result<AddressAssetList, Flaw> {
         use database::ADDRESS_ASSET_LIST_PREFIX;
 
-        let asset_list: Result<AddressAssetList, DatabaseError> = self
+        let address_asset_list: Result<AddressAssetList, DatabaseError> = self
             .database
             .lock()
             .await
             .get(ADDRESS_ASSET_LIST_PREFIX, &address);
 
-        match asset_list {
+        match address_asset_list {
             Ok(asset_list) => Ok(asset_list),
-            Err(DatabaseError::NotFound) => Ok(AddressAssetList::default()),
+            Err(DatabaseError::NotFound) => Err(Flaw::NotFound),
             Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
         }
     }
