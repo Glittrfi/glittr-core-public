@@ -197,17 +197,12 @@ async fn get_asset_contract(
 ) -> Result<Json<Value>, StatusCode> {
     let updater = Updater::new(state.database, true).await;
     if let Ok(asset_contract_data) = updater.get_asset_contract_data(&(block, tx)).await {
-        let mut info = HashMap::new();
         let ticker = updater
             .get_ticker_by_contract_block_tx((block, tx))
             .await
             .unwrap();
-        info.insert(
-            BlockTx::from_tuple((block, tx)).to_string(),
-            ContractInfo { ticker },
-        );
         Ok(Json(
-            json!({ "asset": asset_contract_data, "contract_info": info }),
+            json!({ "asset": asset_contract_data, "contract_info": ContractInfo {ticker} }),
         ))
     } else {
         Err(StatusCode::NOT_FOUND)
@@ -222,18 +217,13 @@ async fn get_collateralized_contract(
     if let Ok(collateralized_contract_data) =
         updater.get_collateralized_contract_data(&(block, tx)).await
     {
-        let mut info = HashMap::new();
         let ticker = updater
             .get_ticker_by_contract_block_tx((block, tx))
             .await
             .unwrap();
-        info.insert(
-            BlockTx::from_tuple((block, tx)).to_string(),
-            ContractInfo { ticker },
-        );
 
         Ok(Json(
-            json!({ "assets": collateralized_contract_data, "contract_info": info }),
+            json!({ "assets": collateralized_contract_data, "contract_info": ContractInfo {ticker} }),
         ))
     } else {
         Err(StatusCode::NOT_FOUND)
