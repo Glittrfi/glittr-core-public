@@ -3382,7 +3382,7 @@ async fn test_integration_glittr_airdrop() {
 
     let mint_first_moa_message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: first_moa_contract.to_tuple(),
+            contract: Some(first_moa_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(1),
                 oracle_message: None,
@@ -3466,7 +3466,7 @@ async fn test_integration_glittr_airdrop() {
     // 5. User mints second MOA using first MOA as proof
     let mint_second_moa_message = OpReturnMessage {
         contract_call: Some(ContractCall {
-            contract: second_moa_contract.to_tuple(),
+            contract: Some(second_moa_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
                 pointer: Some(1),
                 oracle_message: None,
@@ -3524,14 +3524,14 @@ async fn test_integration_glittr_airdrop() {
     // Verify first MOA allocation
     let first_moa_amount = asset_map
         .values()
-        .find_map(|list| list.list.get(&first_moa_contract.to_str()))
+        .find_map(|list| list.list.get(&first_moa_contract.to_string()))
         .expect("First MOA should exist");
     assert_eq!(*first_moa_amount, 1);
 
     // Verify second MOA allocation
     let second_moa_amount = asset_map
         .values()
-        .find_map(|list| list.list.get(&second_moa_contract.to_str()))
+        .find_map(|list| list.list.get(&second_moa_contract.to_string()))
         .expect("Second MOA should exist");
     assert_eq!(*second_moa_amount, 100);
 
@@ -3640,6 +3640,8 @@ async fn test_contract_creation_and_mint() {
                     preallocated: None,
                     purchase: None,
                 },
+                end_time: None,
+                commitment: None,
             }),
         }),
         transfer: None,
@@ -3662,6 +3664,8 @@ async fn test_contract_creation_and_mint() {
                     preallocated: None,
                     purchase: None,
                 },
+                end_time: None,
+                commitment: None,
             }),
         }),
         transfer: None,
@@ -3680,6 +3684,7 @@ async fn test_contract_creation_and_mint() {
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None,
             }),
         }),
         transfer: None,
@@ -3694,6 +3699,7 @@ async fn test_contract_creation_and_mint() {
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None,
             }),
         }),
         transfer: None,
@@ -3709,7 +3715,7 @@ async fn test_contract_creation_and_mint() {
             spec: None,
             contract_type: ContractType::Mba(MintBurnAssetContract {
                 ticker: None,
-                supply_cap: None, // No supply cap for LP tokens
+                supply_cap: None,
                 divisibility: 18,
                 live_time: 0,
                 mint_mechanism: MBAMintMechanisms {
@@ -3735,6 +3741,8 @@ async fn test_contract_creation_and_mint() {
                     }),
                 },
                 swap_mechanism: SwapMechanisms { fee: None },
+                end_time: None,
+                commitment: None,
             }),
         }),
         transfer: None,
@@ -3745,6 +3753,7 @@ async fn test_contract_creation_and_mint() {
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
+                commitment_message: None,
             }),
         }),
     };
@@ -3775,14 +3784,19 @@ async fn test_contract_creation_and_mint() {
     start_indexer(Arc::clone(&ctx.indexer)).await;
 
     // Verify initial setup
-    let mint_lp_outcome = ctx.get_and_verify_message_outcome(contract_create_and_mint_lp_block_tx).await;
+    let mint_lp_outcome = ctx
+        .get_and_verify_message_outcome(contract_create_and_mint_lp_block_tx)
+        .await;
     assert!(mint_lp_outcome.flaw.is_none(), "{:?}", mint_lp_outcome.flaw);
 
     let asset_lists = ctx.get_asset_map().await;
 
     let lp_minted_amount = asset_lists
         .values()
-        .find_map(|list| list.list.get(&contract_create_and_mint_lp_block_tx.to_string()))
+        .find_map(|list| {
+            list.list
+                .get(&contract_create_and_mint_lp_block_tx.to_string())
+        })
         .expect("Minted asset should exist");
 
     // Minted LP: https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol#L120-L123
