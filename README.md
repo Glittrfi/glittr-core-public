@@ -3,13 +3,13 @@ Native Bitcoin Smart Contracts, Execution, & Settlement
 
 Direct Bitcoin Layer 1 TXN Settlement with Proof-of-Stake Secured Network. No Bridges, No Multisig, just Bitcoin Finality.
 
-# Design Docs
+## Design Docs
 All protocol information is available at https://docs.glittr.fi/
 
 1st version of whitepaper is available at https://github.com/Glittrfi/whitepaper/ (next version on progress)
 
-# Contributing
-## Prerequisites
+## Contributing
+### Prerequisites
 ### Required Tools
 Install system dependencies (Ubuntu/Debian):
 ```bash
