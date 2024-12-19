@@ -9,8 +9,6 @@ use axum::{
 };
 use bitcoin::{consensus::deserialize, OutPoint, Transaction, Txid};
 use bitcoincore_rpc::{Auth, Client, RpcApi};
-use mint_burn_asset::MBAMintMechanisms;
-use mint_only_asset::MOAMintMechanisms;
 use serde_json::{json, Value};
 use store::database::{DatabaseError, MESSAGE_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX};
 use transaction::message::OpReturnMessage;
@@ -24,20 +22,34 @@ pub struct APIState {
 
 #[serde_with::skip_serializing_none]
 #[derive(Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MintMechanism {
-    Mba(MBAMintMechanisms),
-    Moa(MOAMintMechanisms)
-}
-
-#[serde_with::skip_serializing_none]
-#[derive(Serialize, Deserialize)]
 pub struct ContractInfo {
     pub ticker: Option<String>,
     pub supply_cap: Option<U128>,
     pub divisibility: u8,
     pub total_supply: U128,
-    pub mint_mechanism: MintMechanism
+    pub r#type: MintType,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct CollateralizedSimple {
+    pub assets: Vec<InputAssetSimple>,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Serialize, Deserialize)]
+pub struct MintType {
+    pub preallocated: Option<bool>,
+    pub free_mint: Option<bool>,
+    pub purchase_or_burn: Option<bool>,
+    pub collateralized: Option<CollateralizedSimple>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct InputAssetSimple {
+    pub contract_id: BlockTxString,
+    pub ticker: Option<String>,
+    pub divisibility: u8,
 }
 
 #[derive(Deserialize)]
@@ -197,7 +209,9 @@ async fn get_assets(
                         .unwrap();
                     contract_infos.insert(contract_id.clone(), contract_info);
                 }
-                Ok(Json(json!({ "assets": asset_list, "contract_info": contract_infos })))
+                Ok(Json(
+                    json!({ "assets": asset_list, "contract_info": contract_infos }),
+                ))
             } else {
                 Ok(Json(json!({ "assets": asset_list })))
             }
