@@ -1,8 +1,8 @@
-use std::{str::FromStr, sync::Arc};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use super::*;
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     routing::{get, post},
     Json, Router,
@@ -19,6 +19,44 @@ pub struct APIState {
     pub database: Arc<Mutex<Database>>,
     pub rpc: Arc<Client>,
 }
+
+#[serde_with::skip_serializing_none]
+#[derive(Serialize, Deserialize)]
+pub struct ContractInfo {
+    pub ticker: Option<String>,
+    pub supply_cap: Option<U128>,
+    pub divisibility: u8,
+    pub total_supply: U128,
+    pub r#type: MintType,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct CollateralizedSimple {
+    pub assets: Vec<InputAssetSimple>,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Serialize, Deserialize)]
+pub struct MintType {
+    pub preallocated: Option<bool>,
+    pub free_mint: Option<bool>,
+    pub purchase_or_burn: Option<bool>,
+    pub collateralized: Option<CollateralizedSimple>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct InputAssetSimple {
+    pub contract_id: BlockTxString,
+    pub ticker: Option<String>,
+    pub divisibility: u8,
+}
+
+#[derive(Deserialize)]
+struct QueryOptions {
+    show_contract_info: Option<bool>,
+}
+
 pub async fn run_api(database: Arc<Mutex<Database>>) -> Result<(), std::io::Error> {
     let rpc = Client::new(
         CONFIG.btc_rpc_url.as_str(),
@@ -53,7 +91,9 @@ pub async fn run_api(database: Arc<Mutex<Database>>) -> Result<(), std::io::Erro
         .with_state(shared_state.clone());
 
     #[cfg(feature = "helper-api")]
-    let app = app.merge(helper_api::helper_routes()).with_state(shared_state);
+    let app = app
+        .merge(helper_api::helper_routes())
+        .with_state(shared_state);
 
     log::info!("API is listening on {}", CONFIG.api_url);
     let listener = tokio::net::TcpListener::bind(CONFIG.api_url.clone()).await?;
@@ -149,16 +189,34 @@ async fn get_block_tx_by_ticker(
 async fn get_assets(
     State(state): State<APIState>,
     Path((txid, vout)): Path<(String, u32)>,
+    options: Query<QueryOptions>,
 ) -> Result<Json<Value>, StatusCode> {
     let updater = Updater::new(state.database, true).await;
     let outpoint = OutPoint {
         txid: Txid::from_str(txid.as_str()).unwrap(),
         vout,
     };
-    if let Ok(asset_list) = updater.get_asset_list(&outpoint).await {
-        Ok(Json(json!({ "assets": asset_list })))
-    } else {
-        Err(StatusCode::NOT_FOUND)
+
+    match updater.get_asset_list(&outpoint).await {
+        Ok(asset_list) => {
+            if options.show_contract_info == Some(true) {
+                let mut contract_infos = HashMap::new();
+                for contract_id in asset_list.list.keys() {
+                    let block_tx = BlockTx::from_str(contract_id).unwrap();
+                    let contract_info = updater
+                        .get_contract_info_by_block_tx(block_tx.to_tuple())
+                        .await
+                        .unwrap();
+                    contract_infos.insert(contract_id.clone(), contract_info);
+                }
+                Ok(Json(
+                    json!({ "assets": asset_list, "contract_info": contract_infos }),
+                ))
+            } else {
+                Ok(Json(json!({ "assets": asset_list })))
+            }
+        }
+        Err(_) => Err(StatusCode::NOT_FOUND),
     }
 }
 
@@ -168,7 +226,13 @@ async fn get_asset_contract(
 ) -> Result<Json<Value>, StatusCode> {
     let updater = Updater::new(state.database, true).await;
     if let Ok(asset_contract_data) = updater.get_asset_contract_data(&(block, tx)).await {
-        Ok(Json(json!({ "asset": asset_contract_data })))
+        let contract_info = updater
+            .get_contract_info_by_block_tx((block, tx))
+            .await
+            .unwrap();
+        Ok(Json(
+            json!({ "asset": asset_contract_data, "contract_info": contract_info }),
+        ))
     } else {
         Err(StatusCode::NOT_FOUND)
     }
@@ -182,7 +246,14 @@ async fn get_collateralized_contract(
     if let Ok(collateralized_contract_data) =
         updater.get_collateralized_contract_data(&(block, tx)).await
     {
-        Ok(Json(json!({ "assets": collateralized_contract_data })))
+        let contract_info = updater
+            .get_contract_info_by_block_tx((block, tx))
+            .await
+            .unwrap();
+
+        Ok(Json(
+            json!({ "assets": collateralized_contract_data, "contract_info": contract_info }),
+        ))
     } else {
         Err(StatusCode::NOT_FOUND)
     }

@@ -190,10 +190,9 @@ impl Updater {
 #[cfg(test)]
 mod test {
     use crate::{
-        spec::{
+        message::ContractType, spec::{
             MintBurnAssetCollateralizedSpec, MintBurnAssetSpec, SpecContract, SpecContractType,
-        },
-        Flaw,
+        }, Flaw
     };
 
     use super::{
@@ -201,7 +200,7 @@ mod test {
             BurnMechanisms, Collateralized, MBAMintMechanisms, MintBurnAssetContract,
             MintStructure, ProportionalType, RatioModel, ReturnCollateral, SwapMechanisms,
         },
-        ContractType, InputAsset, Updater,
+        InputAsset, Updater,
     };
 
     #[test]
