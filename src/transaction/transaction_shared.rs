@@ -4,11 +4,13 @@ use std::collections::HashMap;
 use bitcoin::{PublicKey, XOnlyPublicKey};
 use message::ContractType;
 
+use borsh::{BorshDeserialize, BorshSerialize};
+
 pub trait ContractValidator {
     fn validate(&self) -> Option<Flaw>;
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MintMechanisms {
     pub preallocated: Option<Preallocated>,
@@ -25,14 +27,14 @@ pub struct MintMechanisms {
 /// * Vesting schedule
 ///    - List of floats (percentage unlock)
 ///    - List of block heights
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct Preallocated {
     pub allocations: HashMap<U128, AllocationType>,
     pub vesting_plan: Option<VestingPlan>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum AllocationType {
     VecPubkey(Vec<Pubkey>),
@@ -42,13 +44,13 @@ pub enum AllocationType {
     },
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum BloomFilterArgType {
     TxId,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum VestingPlan {
     Timelock(RelativeOrAbsoluteBlockHeight),
@@ -56,14 +58,14 @@ pub enum VestingPlan {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct FreeMint {
     pub supply_cap: Option<U128>,
     pub amount_per_mint: U128,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct PurchaseBurnSwap {
     pub input_asset: InputAsset,
@@ -182,7 +184,7 @@ impl PurchaseBurnSwap {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Copy, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum InputAsset {
     RawBtc,
@@ -191,7 +193,7 @@ pub enum InputAsset {
     Ordinal,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum RatioType {
     Fixed {
@@ -222,7 +224,7 @@ impl RatioType {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 pub struct OracleSetting {
     /// compressed public key
     pub pubkey: Pubkey,

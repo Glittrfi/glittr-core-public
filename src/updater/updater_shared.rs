@@ -218,7 +218,7 @@ impl Updater {
                             {
                                 let mut input_found = false;
                                 for txin in tx.input.iter() {
-                                    if txin.previous_output == input_outpoint {
+                                    if txin.previous_output == input_outpoint.into() {
                                         input_found = true;
                                     }
                                 }

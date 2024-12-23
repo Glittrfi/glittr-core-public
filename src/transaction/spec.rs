@@ -3,9 +3,11 @@ use message::ContractValidator;
 use mint_burn_asset::MintStructure;
 use transaction_shared::InputAsset;
 
+use borsh::{BorshDeserialize, BorshSerialize};
+
 use super::*;
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MintBurnAssetCollateralizedSpec {
     /// if this is true, the assets can be updated
@@ -14,7 +16,7 @@ pub struct MintBurnAssetCollateralizedSpec {
     pub mint_structure: Option<MintStructure>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MintBurnAssetSpec {
     pub collateralized: Option<MintBurnAssetCollateralizedSpec>,
@@ -38,14 +40,14 @@ impl ContractValidator for MintBurnAssetSpec {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum MintOnlyAssetSpecPegInType {
     Pubkey(Pubkey),
     Burn,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MintOnlyAssetSpec {
     pub input_asset: Option<InputAsset>,
@@ -72,14 +74,14 @@ impl MintOnlyAssetSpec {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum SpecContractType {
     MintOnlyAsset(MintOnlyAssetSpec),
     MintBurnAsset(MintBurnAssetSpec),
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct SpecContract {
     pub spec: SpecContractType,

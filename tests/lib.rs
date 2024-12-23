@@ -1004,10 +1004,13 @@ async fn test_metaprotocol_to_glittr_asset() {
 
     let input_txid = ctx.core.tx((height - 1) as usize, 0).compute_txid();
     let oracle_message = OracleMessage {
-        input_outpoint: Some(OutPoint {
-            txid: input_txid,
-            vout: 0,
-        }),
+        input_outpoint: Some(
+            OutPoint {
+                txid: input_txid,
+                vout: 0,
+            }
+            .into(),
+        ),
         min_in_value: Some(U128(0)),
         out_value: Some(U128(oracle_out_value)),
         asset_id: Some("rune:840000:3".to_string()),
@@ -2207,13 +2210,16 @@ async fn test_integration_collateralized_mba() {
     let oracle_message = OracleMessage {
         asset_id: None,
         block_height: ctx.core.height(),
-        input_outpoint: Some(OutPoint {
-            txid: ctx
-                .core
-                .tx(account_block_tx.block as usize, 1)
-                .compute_txid(),
-            vout: 1,
-        }),
+        input_outpoint: Some(
+            OutPoint {
+                txid: ctx
+                    .core
+                    .tx(account_block_tx.block as usize, 1)
+                    .compute_txid(),
+                vout: 1,
+            }
+            .into(),
+        ),
         min_in_value: None,
         out_value: Some(U128(50_000)), // Amount to mint
         ratio: None,
@@ -2322,10 +2328,13 @@ async fn test_integration_collateralized_mba() {
     let burn_oracle_message = OracleMessage {
         asset_id: None,
         block_height: ctx.core.height(),
-        input_outpoint: Some(OutPoint {
-            txid: ctx.core.tx(mint_block_tx.block as usize, 1).compute_txid(),
-            vout: 1,
-        }),
+        input_outpoint: Some(
+            OutPoint {
+                txid: ctx.core.tx(mint_block_tx.block as usize, 1).compute_txid(),
+                vout: 1,
+            }
+            .into(),
+        ),
         min_in_value: None,
         out_value: Some(U128(25_000)), // Amount to burn
         ratio: None,
@@ -2425,10 +2434,13 @@ async fn test_integration_collateralized_mba() {
     let final_burn_oracle_message = OracleMessage {
         asset_id: None,
         block_height: ctx.core.height(),
-        input_outpoint: Some(OutPoint {
-            txid: ctx.core.tx(burn_block_tx.block as usize, 1).compute_txid(),
-            vout: 1,
-        }),
+        input_outpoint: Some(
+            OutPoint {
+                txid: ctx.core.tx(burn_block_tx.block as usize, 1).compute_txid(),
+                vout: 1,
+            }
+            .into(),
+        ),
         min_in_value: None,
         out_value: Some(U128(25_000)), // Burn remaining amount
         ratio: None,
@@ -3775,14 +3787,19 @@ async fn test_contract_creation_and_mint() {
     start_indexer(Arc::clone(&ctx.indexer)).await;
 
     // Verify initial setup
-    let mint_lp_outcome = ctx.get_and_verify_message_outcome(contract_create_and_mint_lp_block_tx).await;
+    let mint_lp_outcome = ctx
+        .get_and_verify_message_outcome(contract_create_and_mint_lp_block_tx)
+        .await;
     assert!(mint_lp_outcome.flaw.is_none(), "{:?}", mint_lp_outcome.flaw);
 
     let asset_lists = ctx.get_asset_map().await;
 
     let lp_minted_amount = asset_lists
         .values()
-        .find_map(|list| list.list.get(&contract_create_and_mint_lp_block_tx.to_string()))
+        .find_map(|list| {
+            list.list
+                .get(&contract_create_and_mint_lp_block_tx.to_string())
+        })
         .expect("Minted asset should exist");
 
     // Minted LP: https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol#L120-L123
@@ -3790,3 +3807,4 @@ async fn test_contract_creation_and_mint() {
 
     ctx.drop().await;
 }
+

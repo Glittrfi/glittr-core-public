@@ -4,18 +4,18 @@ use super::*;
 use bitcoin::{
     opcodes,
     script::{self, Instruction, PushBytes},
-    OutPoint, ScriptBuf, Transaction,
+    ScriptBuf, Transaction,
 };
-use bitcoincore_rpc::jsonrpc::serde_json::{self, Deserializer};
+use bitcoincore_rpc::jsonrpc::serde_json::{self};
 use constants::OP_RETURN_MAGIC_PREFIX;
 use flaw::Flaw;
 use mint_burn_asset::MintBurnAssetContract;
 use mint_only_asset::MintOnlyAssetContract;
 use spec::SpecContract;
 
+use borsh::{BorshDeserialize, BorshSerialize};
 
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum ContractType {
     Moa(MintOnlyAssetContract),
@@ -24,24 +24,24 @@ pub enum ContractType {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 pub struct MintBurnOption {
     pub pointer: Option<u32>,
     pub oracle_message: Option<OracleMessageSigned>,
     pub pointer_to_key: Option<u32>,
     pub assert_values: Option<AssertValues>,
-    pub commitment_message: Option<CommitmentMessage>
+    pub commitment_message: Option<CommitmentMessage>,
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct SwapOption { 
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
+pub struct SwapOption {
     pub pointer: u32,
-    pub assert_values: Option<AssertValues>
+    pub assert_values: Option<AssertValues>,
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 pub struct AssertValues {
     pub input_values: Option<Vec<U128>>,
     pub total_collateralized: Option<Vec<U128>>,
@@ -49,7 +49,7 @@ pub struct AssertValues {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum CallType {
     Mint(MintBurnOption),
@@ -60,28 +60,28 @@ pub enum CallType {
     CloseAccount(CloseAccountOption), // TODO: partial return & fee
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 pub struct OpenAccountOption {
     pub pointer_to_key: u32,
     pub share_amount: U128, // representation of total value of the inputs
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 pub struct CloseAccountOption {
     pub pointer: u32,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 pub struct OracleMessageSigned {
     pub signature: Vec<u8>,
     pub message: OracleMessage,
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 pub struct OracleMessage {
     /// the input_outpoint dictates which UTXO is being evaluated by the Oracle
-    pub input_outpoint: Option<OutPoint>,
+    pub input_outpoint: Option<BitcoinOutpoint>,
     /// min_in_value represents what the input valued at (minimum because btc value could differ (-fee))
     pub min_in_value: Option<U128>,
     /// out_value represents the oracle's valuation of the input e.g. for 1 btc == 72000 wusd, 72000 is the out_value
@@ -96,29 +96,29 @@ pub struct OracleMessage {
     pub block_height: u64,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 pub struct Commitment {
     pub public_key: Pubkey,
-    pub args: ArgsCommitment
+    pub args: ArgsCommitment,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 pub struct ArgsCommitment {
     pub fixed_string: String,
-    pub string: String
+    pub string: String,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 pub struct CommitmentMessage {
     pub public_key: Pubkey,
-    pub args: Vec<u8>
+    pub args: Vec<u8>,
 }
 
 /// Transfer
 /// Asset: This is a block:tx reference to the contract where the asset was created
 /// Output index of output to receive asset
 /// Amount: value assigning shares of the transfer to the appropriate UTXO output
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct TxTypeTransfer {
     pub asset: BlockTxTuple,
@@ -127,20 +127,20 @@ pub struct TxTypeTransfer {
 }
 
 // TxTypes: Transfer, ContractCreation, ContractCall
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct Transfer {
     pub transfers: Vec<TxTypeTransfer>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct ContractCreation {
     pub contract_type: ContractType,
     pub spec: Option<BlockTxTuple>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct ContractCall {
     pub contract: Option<BlockTxTuple>,
@@ -148,7 +148,7 @@ pub struct ContractCall {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 pub struct OpReturnMessage {
     pub transfer: Option<Transfer>,
     pub contract_creation: Option<ContractCreation>,
@@ -205,8 +205,7 @@ impl OpReturnMessage {
             return Err(Flaw::NonGlittrMessage);
         }
 
-        let message =
-            OpReturnMessage::deserialize(&mut Deserializer::from_slice(payload.as_slice()));
+        let message = borsh::from_slice::<OpReturnMessage>(&payload);
 
         match message {
             Ok(message) => {

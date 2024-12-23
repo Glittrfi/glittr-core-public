@@ -7,15 +7,16 @@ use store::database::Database;
 use tokio::sync::Mutex;
 
 mod api;
+mod borsh_serde;
 mod config;
 mod constants;
 mod flaw;
 mod indexer;
+mod macros;
 mod store;
 mod transaction;
 mod types;
 mod updater;
-mod macros;
 
 #[cfg(feature = "helper-api")]
 mod helper_api;

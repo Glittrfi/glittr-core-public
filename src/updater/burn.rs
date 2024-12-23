@@ -151,7 +151,7 @@ impl Updater {
                             oracle_message_signed.message.input_outpoint
                         {
                             if let Some(oracle_setting) = &return_collateral.oracle_setting {
-                                if expected_input_outpoint != collateral_account_outpoint.unwrap() {
+                                if expected_input_outpoint != collateral_account_outpoint.unwrap().into() {
                                     return Some(Flaw::OracleMintFailed);
                                 }
 

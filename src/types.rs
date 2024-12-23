@@ -2,6 +2,8 @@ use std::{error::Error, fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
+use bitcoin::OutPoint;
+
 #[derive(Clone, Copy, Debug)]
 pub struct BlockTx {
     pub block: u64,
@@ -54,10 +56,9 @@ impl FromStr for BlockTx {
     }
 }
 
-
 /// U128 is wrapped u128, represented as string when serialized
 /// This is because JSON only supports up to u32 as integer representation
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct U128(pub u128);
 
 impl Serialize for U128 {
@@ -78,5 +79,21 @@ impl<'de> Deserialize<'de> for U128 {
         Ok(Self(str::parse::<u128>(&s).map_err(|err| {
             serde::de::Error::custom(err.to_string())
         })?))
+    }
+}
+
+// internal wrapper for bitcoin outpoint
+#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq)]
+pub struct BitcoinOutpoint(pub OutPoint);
+
+impl From<OutPoint> for BitcoinOutpoint {
+    fn from(outpoint: OutPoint) -> Self {
+        BitcoinOutpoint(outpoint)
+    }
+}
+
+impl Into<OutPoint> for BitcoinOutpoint {
+    fn into(self) -> OutPoint {
+        self.0
     }
 }

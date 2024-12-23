@@ -2,8 +2,10 @@ use super::*;
 use message::{Commitment, ContractValidator};
 use transaction_shared::{FreeMint, InputAsset, OracleSetting, Preallocated, PurchaseBurnSwap, RatioType};
 
+use borsh::{BorshDeserialize, BorshSerialize};
+
 #[serde_with::skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MintBurnAssetContract {
     pub ticker: Option<String>,
@@ -18,7 +20,7 @@ pub struct MintBurnAssetContract {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MBAMintMechanisms {
     pub preallocated: Option<Preallocated>,
@@ -28,20 +30,20 @@ pub struct MBAMintMechanisms {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct BurnMechanisms {
     pub return_collateral: Option<ReturnCollateral>,
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct SwapMechanisms {
     pub fee: Option<U128>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct Collateralized {
     pub input_assets: Vec<InputAsset>,
@@ -49,7 +51,7 @@ pub struct Collateralized {
     pub mint_structure: MintStructure,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum MintStructure {
     Ratio(RatioType),
@@ -57,14 +59,14 @@ pub enum MintStructure {
     Account(AccountType),
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct AccountType {
     pub max_ltv: Fraction,
     pub ratio: RatioType,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct ProportionalType {
     pub ratio_model: RatioModel,
@@ -72,13 +74,13 @@ pub struct ProportionalType {
     pub inital_mint_pointer_to_key: Option<u32>, 
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum RatioModel {
     ConstantProduct
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct ReturnCollateral {
     pub fee: Option<Fraction>, // TODO: fee

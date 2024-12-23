@@ -1,10 +1,11 @@
 use flaw::Flaw;
 use message::{Commitment, ContractValidator};
 use transaction_shared::{FreeMint, Preallocated, PurchaseBurnSwap};
+use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::*;
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MOAMintMechanisms {
     pub preallocated: Option<Preallocated>,
@@ -13,7 +14,7 @@ pub struct MOAMintMechanisms {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MintOnlyAssetContract {
     pub ticker: Option<String>,
