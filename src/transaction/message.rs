@@ -240,8 +240,9 @@ impl OpReturnMessage {
     pub fn into_script(&self) -> ScriptBuf {
         let mut builder = script::Builder::new().push_opcode(opcodes::all::OP_RETURN);
         let magic_prefix: &PushBytes = OP_RETURN_MAGIC_PREFIX.as_bytes().try_into().unwrap();
-        let binding = self.to_string();
-        let script_bytes: &PushBytes = binding.as_bytes().try_into().unwrap();
+
+        let binding = borsh::to_vec(self).unwrap();
+        let script_bytes: &PushBytes = binding.as_slice().try_into().unwrap();
 
         builder = builder.push_slice(magic_prefix);
         builder = builder.push_slice(script_bytes);
@@ -260,7 +261,9 @@ impl fmt::Display for OpReturnMessage {
 mod test {
     use bitcoin::consensus::deserialize;
     use bitcoin::{locktime, transaction::Version, Amount, Transaction, TxOut};
+    use bitcoin::{OutPoint, Txid};
     use bitcoincore_rpc::RawTx;
+    use std::str::FromStr;
 
     use crate::transaction::message::ContractType;
     use crate::transaction::mint_only_asset::MintOnlyAssetContract;
@@ -292,7 +295,31 @@ mod test {
                 }),
                 spec: None,
             }),
-            contract_call: None,
+            contract_call: Some(super::ContractCall {
+                contract: None,
+                call_type: super::CallType::Mint(super::MintBurnOption {
+                    pointer: Some(2),
+                    oracle_message: Some(super::OracleMessageSigned {
+                        signature: [].to_vec(),
+                        message: super::OracleMessage {
+                            input_outpoint: Some(OutPoint {
+                                txid: Txid::from_str("2fec618aad64988b5369873a4c44e7be7f32437518b60d29b30be6325d36b33d").unwrap(),
+                                vout: 99,
+                            }.into()),
+                            min_in_value: None,
+                            out_value: None,
+                            asset_id: None,
+                            block_height: 0,
+                            ratio: None,
+                            ltv: None,
+                            outstanding: None,
+                        },
+                    }),
+                    pointer_to_key: Some(1),
+                    assert_values: None,
+                    commitment_message: None,
+                }),
+            }),
         };
 
         Transaction {
@@ -311,6 +338,7 @@ mod test {
         let tx = create_dummy_tx();
 
         let parsed = OpReturnMessage::parse_tx(&tx);
+        print!("{:?}", parsed.clone().unwrap());
 
         if let Some(contract_creation) = parsed.unwrap().contract_creation {
             match contract_creation.contract_type {

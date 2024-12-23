@@ -1,7 +1,7 @@
 use std::io::Read;
 
-use bitcoin::{OutPoint, Txid};
 use bitcoin::hashes::Hash;
+use bitcoin::{OutPoint, Txid};
 use borsh::io::{Error, ErrorKind};
 use borsh::{BorshDeserialize, BorshSerialize};
 

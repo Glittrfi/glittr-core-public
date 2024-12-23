@@ -3,6 +3,7 @@ mod collateralized;
 mod mint;
 mod updater_shared;
 
+use api::MintType;
 use collateralized::CollateralizedAssetData;
 pub use updater_shared::*;
 mod spec;
@@ -22,8 +23,8 @@ use bitcoin::{
 };
 use database::{
     DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX, COLLATERALIZED_CONTRACT_DATA,
-    MESSAGE_PREFIX, STATE_KEYS_PREFIX, TICKER_TO_BLOCK_TX_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX,
-    VESTING_CONTRACT_DATA_PREFIX,
+    INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX, STATE_KEYS_PREFIX, TICKER_TO_BLOCK_TX_PREFIX,
+    TRANSACTION_TO_BLOCK_TX_PREFIX, VESTING_CONTRACT_DATA_PREFIX,
 };
 use flaw::Flaw;
 use message::{CallType, ContractType, OpReturnMessage, TxTypeTransfer};
@@ -90,13 +91,12 @@ pub struct StateKeys {
 pub struct SpecContractOwned {
     pub specs: HashSet<BlockTxTuple>,
 }
-
 #[cfg(feature = "helper-api")]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct UTXOBalances {
-    txid: String,
-    vout: u32,
-    assets: HashMap<BlockTxString, U128>,
+    pub txid: String,
+    pub vout: u32,
+    pub assets: HashMap<BlockTxString, U128>,
 }
 
 #[cfg(feature = "helper-api")]
@@ -654,7 +654,106 @@ impl Updater {
         }
     }
 
-    async fn get_message(&self, contract_id: &BlockTxTuple) -> Result<OpReturnMessage, Flaw> {
+    pub async fn get_contract_info_by_block_tx(
+        &self,
+        block_tx: BlockTxTuple,
+    ) -> Result<Option<ContractInfo>, Flaw> {
+        let message = self.get_message(&block_tx).await?;
+        let asset_data = self.get_asset_contract_data(&block_tx).await?;
+
+        match message.contract_creation {
+            Some(contract_creation) => match contract_creation.contract_type {
+                ContractType::Moa(moa) => {
+                    return Ok(Some(ContractInfo {
+                        ticker: moa.ticker,
+                        supply_cap: moa.supply_cap,
+                        divisibility: moa.divisibility,
+                        total_supply: U128(asset_data.minted_supply - asset_data.burned_supply),
+                        r#type: MintType {
+                            preallocated: if moa.mint_mechanism.preallocated.is_some() {
+                                Some(true)
+                            } else {
+                                None
+                            },
+                            free_mint: if moa.mint_mechanism.free_mint.is_some() {
+                                Some(true)
+                            } else {
+                                None
+                            },
+                            purchase_or_burn: if moa.mint_mechanism.purchase.is_some() {
+                                Some(true)
+                            } else {
+                                None
+                            },
+                            collateralized: None,
+                        },
+                    }));
+                }
+                ContractType::Mba(mba) => Ok(Some(ContractInfo {
+                    ticker: mba.ticker,
+                    supply_cap: mba.supply_cap,
+                    divisibility: mba.divisibility,
+                    total_supply: U128(asset_data.minted_supply - asset_data.burned_supply),
+                    r#type: MintType {
+                        preallocated: if mba.mint_mechanism.preallocated.is_some() {
+                            Some(true)
+                        } else {
+                            None
+                        },
+                        free_mint: if mba.mint_mechanism.free_mint.is_some() {
+                            Some(true)
+                        } else {
+                            None
+                        },
+                        purchase_or_burn: if mba.mint_mechanism.purchase.is_some() {
+                            Some(true)
+                        } else {
+                            None
+                        },
+                        collateralized: if let Some(collateralized) =
+                            mba.mint_mechanism.collateralized
+                        {
+                            let mut simple_assets: Vec<InputAssetSimple> = Vec::new();
+
+                            for asset in collateralized.input_assets {
+                                match asset {
+                                    InputAsset::GlittrAsset(glittr_asset) => {
+                                        let block_tx = BlockTx::from_tuple(glittr_asset);
+
+                                        let future = Box::pin(
+                                            self.get_contract_info_by_block_tx(block_tx.to_tuple()),
+                                        );
+                                        let asset_contract_info = future.await?.unwrap();
+
+                                        simple_assets.push(InputAssetSimple {
+                                            contract_id: block_tx.to_string(),
+                                            ticker: asset_contract_info.ticker,
+                                            divisibility: asset_contract_info.divisibility,
+                                        })
+                                    }
+                                    _ => {}
+                                }
+                            }
+
+                            if simple_assets.is_empty() {
+                                None
+                            } else {
+                                Some(CollateralizedSimple {
+                                    assets: simple_assets,
+                                })
+                            }
+                        } else {
+                            None
+                        },
+                    },
+                })),
+                ContractType::Spec(_) => Ok(None),
+            },
+            None => Ok(None),
+        }
+    }
+
+    pub async fn get_message(&self, contract_id: &BlockTxTuple) -> Result<OpReturnMessage, Flaw> {
         let contract_key = BlockTx::from_tuple(*contract_id).to_string();
         let outcome: Result<MessageDataOutcome, DatabaseError> = self
             .database
@@ -779,15 +878,15 @@ impl Updater {
     pub async fn get_address_balance(&self, address: String) -> Result<AddressAssetList, Flaw> {
         use database::ADDRESS_ASSET_LIST_PREFIX;
 
-        let asset_list: Result<AddressAssetList, DatabaseError> = self
+        let address_asset_list: Result<AddressAssetList, DatabaseError> = self
             .database
             .lock()
             .await
             .get(ADDRESS_ASSET_LIST_PREFIX, &address);
 
-        match asset_list {
+        match address_asset_list {
             Ok(asset_list) => Ok(asset_list),
-            Err(DatabaseError::NotFound) => Ok(AddressAssetList::default()),
+            Err(DatabaseError::NotFound) => Err(Flaw::NotFound),
             Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
         }
     }
@@ -930,5 +1029,16 @@ impl Updater {
         }
 
         Ok(())
+    }
+
+    pub async fn get_last_indexed_block(&self) -> Option<u64> {
+        let last_indexed_block: Option<u64> = self
+            .database
+            .lock()
+            .await
+            .get(INDEXER_LAST_BLOCK_PREFIX, "")
+            .ok();
+
+        return last_indexed_block;
     }
 }
