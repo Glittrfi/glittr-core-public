@@ -3,13 +3,14 @@ use message::{Commitment, ContractValidator};
 use transaction_shared::{FreeMint, InputAsset, OracleSetting, Preallocated, PurchaseBurnSwap, RatioType};
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use varuint::Varuint;
 
 #[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MintBurnAssetContract {
     pub ticker: Option<String>,
-    pub supply_cap: Option<U128>,
+    pub supply_cap: Option<Varuint>,
     pub divisibility: u8,
     pub live_time: RelativeOrAbsoluteBlockHeight,
     pub end_time: Option<RelativeOrAbsoluteBlockHeight>,

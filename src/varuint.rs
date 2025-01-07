@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-
-// Varuint is only worth using if the uint value is larger than 8 bytes
-#[derive(PartialEq, Debug)]
+// Varuint is only worth using if the uint value is larger than 2 bit
+#[derive(PartialEq, Debug, Clone)]
 pub struct Varuint(pub u128);
 
+#[derive(PartialEq, Debug)]
 pub enum VaruintFlaw {
     Overlong,
     Overflow,
@@ -36,14 +36,16 @@ impl Varuint {
         Err(VaruintFlaw::Unterminated)
     }
 
-    pub fn encode_to_vec(&mut self) -> Vec<u8> {
+    pub fn encode_to_vec(&self) -> Vec<u8> {
         let mut results: Vec<u8> = Vec::new();
-        while self.0 >> 7 > 0 {
-            results.push(self.0.to_le_bytes()[0] | 0b1000_0000);
-            self.0 >>= 7;
+        let mut value = self.0.clone();
+
+        while value >> 7 > 0 {
+            results.push(value.to_le_bytes()[0] | 0b1000_0000);
+            value >>= 7;
         }
 
-        results.push(self.0.to_le_bytes()[0]);
+        results.push(value.to_le_bytes()[0]);
 
         return results;
     }

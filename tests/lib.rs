@@ -32,6 +32,7 @@ use glittr::{
         AllocationType, BloomFilterArgType, FreeMint, InputAsset, OracleSetting, Preallocated,
         PurchaseBurnSwap, RatioType, VestingPlan,
     },
+    varuint::Varuint,
     AssetContractData, AssetList, BlockTx, BlockTxTuple, CollateralAccounts, Flaw, Indexer,
     MessageDataOutcome, U128,
 };
@@ -352,7 +353,7 @@ async fn test_integration_broadcast_op_return_message_success() {
             spec: None,
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(1000)),
+                supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
                 live_time: 0,
                 end_time: None,
@@ -388,7 +389,7 @@ async fn test_integration_purchaseburnswap() {
             spec: None,
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(1000)),
+                supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
                 live_time: 0,
                 end_time: None,
@@ -549,7 +550,7 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
             spec: None,
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(21_000_000 * 10u128.pow(8))),
+                supply_cap: Some(Varuint(21_000_000 * 10u128.pow(8))),
                 divisibility: 8,
                 live_time: 0,
                 end_time: None,
@@ -826,7 +827,7 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
             spec: None,
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(21_000_000 * 10u128.pow(8))),
+                supply_cap: Some(Varuint(21_000_000 * 10u128.pow(8))),
                 divisibility: 8,
                 live_time: 0,
                 end_time: None,
@@ -1107,7 +1108,7 @@ async fn test_integration_freemint() {
             spec: None,
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(1000)),
+                supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
                 live_time: 0,
                 end_time: None,
@@ -1141,7 +1142,7 @@ async fn test_integration_mint_freemint() {
             spec: None,
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(1000)),
+                supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
                 live_time: 0,
                 end_time: None,
@@ -1212,7 +1213,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
             spec: None,
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(50)),
+                supply_cap: Some(Varuint(50)),
                 divisibility: 18,
                 live_time: 0,
                 end_time: None,
@@ -1294,7 +1295,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
             spec: None,
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(1000)),
+                supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
                 live_time: 5,
                 end_time: None,
@@ -1425,7 +1426,7 @@ async fn test_integration_mint_preallocated_freemint() {
             spec: None,
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(1000)),
+                supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
                 live_time: 0,
                 end_time: None,
@@ -1532,7 +1533,7 @@ async fn test_integration_mint_freemint_invalidpointer() {
             spec: None,
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(1000)),
+                supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
                 live_time: 0,
                 end_time: None,
@@ -1589,7 +1590,7 @@ async fn test_integration_transfer_normal() {
             spec: None,
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(100_000)),
+                supply_cap: Some(Varuint(100_000)),
                 divisibility: 18,
                 live_time: 0,
                 end_time: None,
@@ -1729,7 +1730,7 @@ async fn test_integration_transfer_overflow_output() {
             spec: None,
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(100_000)),
+                supply_cap: Some(Varuint(100_000)),
                 divisibility: 18,
                 live_time: 0,
                 end_time: None,
@@ -1850,7 +1851,7 @@ async fn test_integration_transfer_utxo() {
             spec: None,
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(100_000)),
+                supply_cap: Some(Varuint(100_000)),
                 divisibility: 18,
                 live_time: 0,
                 end_time: None,
@@ -1940,7 +1941,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
             spec: None,
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(1000)),
+                supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
                 live_time: 0,
                 end_time: None,
@@ -1986,7 +1987,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
             spec: None,
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(500)),
+                supply_cap: Some(Varuint(500)),
                 divisibility: 18,
                 live_time: 0,
                 end_time: None,
@@ -2086,7 +2087,7 @@ async fn test_integration_collateralized_mba() {
             spec: None,
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(1_000_000)),
+                supply_cap: Some(Varuint(1_000_000)),
                 divisibility: 18,
                 live_time: 0,
                 end_time: None,
@@ -2130,7 +2131,7 @@ async fn test_integration_collateralized_mba() {
             spec: None,
             contract_type: ContractType::Mba(MintBurnAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(500_000)),
+                supply_cap: Some(Varuint(500_000)),
                 divisibility: 18,
                 live_time: 0,
                 end_time: None,
@@ -2591,7 +2592,7 @@ async fn test_integration_proportional_mba_lp() {
             spec: None,
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(1_000_000)),
+                supply_cap: Some(Varuint(1_000_000)),
                 divisibility: 18,
                 live_time: 0,
                 end_time: None,
@@ -2615,7 +2616,7 @@ async fn test_integration_proportional_mba_lp() {
             spec: None,
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(1_000_000)),
+                supply_cap: Some(Varuint(1_000_000)),
                 divisibility: 18,
                 live_time: 0,
                 end_time: None,
@@ -3190,7 +3191,7 @@ async fn test_integration_spec_moa_valid_contract_creation() {
         contract_creation: Some(ContractCreation {
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(1000)),
+                supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
                 live_time: 0,
                 end_time: None,
@@ -3247,7 +3248,7 @@ async fn test_integration_spec_moa_input_asset_invalid() {
         contract_creation: Some(ContractCreation {
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(1000)),
+                supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
                 live_time: 0,
                 end_time: None,
@@ -3308,7 +3309,7 @@ async fn test_integration_spec_moa_peg_in_type_invalid() {
         contract_creation: Some(ContractCreation {
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(1000)),
+                supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
                 live_time: 0,
                 end_time: None,
@@ -3454,7 +3455,7 @@ async fn test_integration_glittr_airdrop() {
             spec: None,
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(100)),
+                supply_cap: Some(Varuint(100)),
                 divisibility: 18,
                 live_time: 0,
                 end_time: None,
@@ -3641,7 +3642,7 @@ async fn test_contract_creation_and_mint() {
             spec: None,
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(1_000_000)),
+                supply_cap: Some(Varuint(1_000_000)),
                 divisibility: 18,
                 live_time: 0,
                 mint_mechanism: MOAMintMechanisms {
@@ -3665,7 +3666,7 @@ async fn test_contract_creation_and_mint() {
             spec: None,
             contract_type: ContractType::Moa(MintOnlyAssetContract {
                 ticker: None,
-                supply_cap: Some(U128(1_000_000)),
+                supply_cap: Some(Varuint(1_000_000)),
                 divisibility: 18,
                 live_time: 0,
                 mint_mechanism: MOAMintMechanisms {

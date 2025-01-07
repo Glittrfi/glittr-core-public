@@ -3,6 +3,7 @@ use growable_bloom_filter::GrowableBloom;
 use message::{AssertValues, MintBurnOption, OracleMessageSigned};
 use miniz_oxide::{deflate::compress_to_vec, inflate::decompress_to_vec};
 use transaction_shared::{OracleSetting, RatioType};
+use varuint::Varuint;
 
 use super::*;
 
@@ -133,7 +134,7 @@ impl Updater {
     pub async fn validate_and_update_supply_cap(
         &mut self,
         contract_id: &BlockTxTuple,
-        supply_cap: Option<U128>,
+        supply_cap: Option<Varuint>,
         amount: u128,
         is_mint: bool,
         is_free_mint: bool,

@@ -271,6 +271,7 @@ mod test {
 
     use super::mint_only_asset::MOAMintMechanisms;
     use super::transaction_shared::FreeMint;
+    use super::varuint::Varuint;
     use super::{ContractCreation, OpReturnMessage};
 
     fn create_dummy_tx() -> Transaction {
@@ -279,7 +280,7 @@ mod test {
             contract_creation: Some(ContractCreation {
                 contract_type: ContractType::Moa(MintOnlyAssetContract {
                     ticker: None,
-                    supply_cap: Some(U128(1000)),
+                    supply_cap: Some(Varuint(1000_000_000)),
                     divisibility: 18,
                     live_time: 0,
                     end_time: None,
@@ -344,7 +345,7 @@ mod test {
             match contract_creation.contract_type {
                 ContractType::Moa(mint_only_asset_contract) => {
                     let free_mint = mint_only_asset_contract.mint_mechanism.free_mint.unwrap();
-                    assert_eq!(mint_only_asset_contract.supply_cap, Some(U128(1000)));
+                    assert_eq!(mint_only_asset_contract.supply_cap, Some(Varuint(1000_000_000)));
                     assert_eq!(mint_only_asset_contract.divisibility, 18);
                     assert_eq!(mint_only_asset_contract.live_time, 0);
                     assert_eq!(free_mint.supply_cap, Some(U128(1000)));

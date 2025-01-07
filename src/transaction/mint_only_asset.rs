@@ -1,7 +1,8 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 use flaw::Flaw;
 use message::{Commitment, ContractValidator};
 use transaction_shared::{FreeMint, Preallocated, PurchaseBurnSwap};
-use borsh::{BorshDeserialize, BorshSerialize};
+use varuint::Varuint;
 
 use super::*;
 
@@ -18,12 +19,12 @@ pub struct MOAMintMechanisms {
 #[serde(rename_all = "snake_case")]
 pub struct MintOnlyAssetContract {
     pub ticker: Option<String>,
-    pub supply_cap: Option<U128>,
+    pub supply_cap: Option<Varuint>,
     pub divisibility: u8,
     pub live_time: RelativeOrAbsoluteBlockHeight,
     pub end_time: Option<RelativeOrAbsoluteBlockHeight>,
     pub mint_mechanism: MOAMintMechanisms,
-    pub commitment: Option<Commitment>
+    pub commitment: Option<Commitment>,
 }
 
 /// Mix of distribution schemes only applicable for preallocated and free_mint or preallocated and purchase
