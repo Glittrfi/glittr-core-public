@@ -18,6 +18,7 @@ mod transaction;
 mod types;
 mod updater;
 pub mod varuint;
+mod compression;
 
 #[cfg(feature = "helper-api")]
 mod helper_api;

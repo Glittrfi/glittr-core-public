@@ -7,6 +7,7 @@ use bitcoin::{
     ScriptBuf, Transaction,
 };
 use bitcoincore_rpc::jsonrpc::serde_json::{self};
+use compression::{Brotli, Compression};
 use constants::OP_RETURN_MAGIC_PREFIX;
 use flaw::Flaw;
 use mint_burn_asset::MintBurnAssetContract;
@@ -205,7 +206,10 @@ impl OpReturnMessage {
             return Err(Flaw::NonGlittrMessage);
         }
 
-        let message = borsh::from_slice::<OpReturnMessage>(&payload);
+        // TODO: singleton for brotli
+        let mut brotli = Brotli::new(11, 22, 4096);
+        let decompress = brotli.decompress(&payload).unwrap();
+        let message = borsh::from_slice::<OpReturnMessage>(&decompress);
 
         match message {
             Ok(message) => {
@@ -242,7 +246,11 @@ impl OpReturnMessage {
         let magic_prefix: &PushBytes = OP_RETURN_MAGIC_PREFIX.as_bytes().try_into().unwrap();
 
         let binding = borsh::to_vec(self).unwrap();
-        let script_bytes: &PushBytes = binding.as_slice().try_into().unwrap();
+        // TODO: singleton for brotli
+        let mut brotli = Brotli::new(11, 22, 4096);
+        let binding_compressed = brotli.compress(&binding).unwrap();
+
+        let script_bytes: &PushBytes = binding_compressed.as_slice().try_into().unwrap();
 
         builder = builder.push_slice(magic_prefix);
         builder = builder.push_slice(script_bytes);
@@ -345,7 +353,10 @@ mod test {
             match contract_creation.contract_type {
                 ContractType::Moa(mint_only_asset_contract) => {
                     let free_mint = mint_only_asset_contract.mint_mechanism.free_mint.unwrap();
-                    assert_eq!(mint_only_asset_contract.supply_cap, Some(Varuint(1000_000_000)));
+                    assert_eq!(
+                        mint_only_asset_contract.supply_cap,
+                        Some(Varuint(1000_000_000))
+                    );
                     assert_eq!(mint_only_asset_contract.divisibility, 18);
                     assert_eq!(mint_only_asset_contract.live_time, 0);
                     assert_eq!(free_mint.supply_cap, Some(U128(1000)));
