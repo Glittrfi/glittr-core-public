@@ -17,6 +17,7 @@ mod store;
 mod transaction;
 mod types;
 mod updater;
+mod varuint;
 
 #[cfg(feature = "helper-api")]
 mod helper_api;

@@ -61,6 +61,7 @@ impl FromStr for BlockTx {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct U128(pub u128);
 
+// for now, the serde parser is only used for JSON.
 impl Serialize for U128 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -70,6 +71,7 @@ impl Serialize for U128 {
     }
 }
 
+// for now, the serde parser is only used for JSON.
 impl<'de> Deserialize<'de> for U128 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
