@@ -18,12 +18,12 @@ impl Updater {
         spec_contract: &SpecContract,
     ) -> Option<Flaw> {
         if let Some(pointer) = spec_contract.pointer {
-            if let Some(flaw) = self.validate_pointer(pointer, tx) {
+            if let Some(flaw) = self.validate_pointer(pointer.0, tx) {
                 return Some(flaw);
             }
 
             let spec_contract_id = BlockTxTuple::from((Varuint(block_height), Varuint(tx_index)));
-            self.allocate_new_spec(pointer, &spec_contract_id).await;
+            self.allocate_new_spec(pointer.0, &spec_contract_id).await;
         }
 
         None
@@ -179,10 +179,10 @@ impl Updater {
             .expect("Error mismatch, this should never happen");
 
         self.set_message(&spec_contract_id, &message).await;
-        if let Some(flaw) = self.validate_pointer(pointer, tx) {
+        if let Some(flaw) = self.validate_pointer(pointer.0, tx) {
             return Some(flaw);
         }
-        self.move_spec_allocation(pointer, spec_contract_id).await;
+        self.move_spec_allocation(pointer.0, spec_contract_id).await;
 
         None
     }

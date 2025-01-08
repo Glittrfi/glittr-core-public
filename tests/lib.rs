@@ -34,7 +34,7 @@ use glittr::{
     },
     varuint_dyn::Varuint,
     AssetContractData, AssetList, BlockTx, BlockTxTuple, CollateralAccounts, Flaw, Indexer,
-    MessageDataOutcome, U128,
+    MessageDataOutcome,
 };
 use growable_bloom_filter::GrowableBloom;
 use mockcore::{Handle, TransactionTemplate};
@@ -167,11 +167,11 @@ impl TestContext {
         )
         .unwrap();
 
-        let block_hash = rpc.get_block_hash(block_tx.block).unwrap();
+        let block_hash = rpc.get_block_hash(block_tx.block.0).unwrap();
         let block = rpc.get_block(&block_hash).unwrap();
 
         for (pos, tx) in block.txdata.iter().enumerate() {
-            if pos == block_tx.tx as usize {
+            if pos == block_tx.tx.0 as usize {
                 return Ok(tx.clone());
             }
         }
@@ -197,8 +197,8 @@ impl TestContext {
         self.core.mine_blocks(1);
 
         BlockTx {
-            block: height + 1,
-            tx: 1,
+            block: Varuint(height + 1),
+            tx: Varuint(1),
         }
     }
 
@@ -359,8 +359,8 @@ async fn test_integration_broadcast_op_return_message_success() {
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
-                        supply_cap: Some(U128(1000)),
-                        amount_per_mint: U128(10),
+                        supply_cap: Some(Varuint(1000)),
+                        amount_per_mint: Varuint(10),
                     }),
                     preallocated: None,
                     purchase: None,
@@ -375,7 +375,7 @@ async fn test_integration_broadcast_op_return_message_success() {
 
     let block_tx = ctx.build_and_mine_message(&message).await;
     start_indexer(Arc::clone(&ctx.indexer)).await;
-    ctx.verify_last_block(block_tx.block).await;
+    ctx.verify_last_block(block_tx.block.0).await;
     ctx.get_and_verify_message_outcome(block_tx).await;
     ctx.drop().await;
 }
@@ -397,7 +397,9 @@ async fn test_integration_purchaseburnswap() {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
                         pay_to_key: None,
-                        ratio: RatioType::Fixed { ratio: (1, 1) },
+                        ratio: RatioType::Fixed {
+                            ratio: (Varuint(1), Varuint(1)),
+                        },
                     }),
                     preallocated: None,
                     free_mint: None,
@@ -411,7 +413,7 @@ async fn test_integration_purchaseburnswap() {
 
     let block_tx = ctx.build_and_mine_message(&message).await;
     start_indexer(Arc::clone(&ctx.indexer)).await;
-    ctx.verify_last_block(block_tx.block).await;
+    ctx.verify_last_block(block_tx.block.0).await;
     ctx.get_and_verify_message_outcome(block_tx).await;
     ctx.drop().await;
 }
@@ -434,7 +436,9 @@ async fn test_raw_btc_to_glittr_asset_burn() {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
                         pay_to_key: None,
-                        ratio: RatioType::Fixed { ratio: (1, 1) },
+                        ratio: RatioType::Fixed {
+                            ratio: (Varuint(1), Varuint(1)),
+                        },
                     }),
                     preallocated: None,
                     free_mint: None,
@@ -454,7 +458,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
         contract_call: Some(ContractCall {
             contract: Some(contract_id.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -488,8 +492,8 @@ async fn test_raw_btc_to_glittr_asset_burn() {
     ctx.core.mine_blocks(1);
 
     let mint_block_tx = BlockTx {
-        block: height + 1,
-        tx: 1,
+        block: Varuint(height + 1),
+        tx: Varuint(1),
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
@@ -558,7 +562,9 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
                         pay_to_key: Some(contract_treasury_pub_key.to_bytes()),
-                        ratio: RatioType::Fixed { ratio: (1, 1) },
+                        ratio: RatioType::Fixed {
+                            ratio: (Varuint(1), Varuint(1)),
+                        },
                     }),
                     preallocated: None,
                     free_mint: None,
@@ -575,7 +581,7 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
         contract_call: Some(ContractCall {
             contract: Some(contract_id.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -609,8 +615,8 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
     ctx.core.mine_blocks(1);
 
     let mint_block_tx = BlockTx {
-        block: height + 1,
-        tx: 1,
+        block: Varuint(height + 1),
+        tx: Varuint(1),
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
@@ -701,11 +707,11 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
 
     let oracle_message = OracleMessage {
         asset_id: Some("btc".to_string()),
-        block_height: height,
+        block_height: Varuint(height),
         input_outpoint: None,
         min_in_value: None,
         out_value: None,
-        ratio: Some((1000, 1)), // 1 sat = 1000 usd,
+        ratio: Some((Varuint(1000), Varuint(1))), // 1 sat = 1000 usd,
         ltv: None,
         outstanding: None,
     };
@@ -723,7 +729,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
         contract_call: Some(ContractCall {
             contract: Some(contract_id.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: Some(OracleMessageSigned {
                     signature: signature.serialize().to_vec(),
                     message: oracle_message.clone(),
@@ -752,8 +758,8 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
     ctx.core.mine_blocks(1);
 
     let mint_block_tx = BlockTx {
-        block: height + 1,
-        tx: 1,
+        block: Varuint(height + 1),
+        tx: Varuint(1),
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
@@ -868,8 +874,8 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
         min_in_value: None,
         out_value: None,
         asset_id: Some("btc".to_string()),
-        block_height: height,
-        ratio: Some((1000, 1)), // 1 sats = 1000 glittr asset
+        block_height: Varuint(height),
+        ratio: Some((Varuint(1000), Varuint(1))), // 1 sats = 1000 glittr asset
         ltv: None,
         outstanding: None,
     };
@@ -887,7 +893,7 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
         contract_call: Some(ContractCall {
             contract: Some(contract_id.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: Some(OracleMessageSigned {
                     signature: signature.serialize().to_vec(),
                     message: oracle_message.clone(),
@@ -915,8 +921,8 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
     ctx.core.mine_blocks(1);
 
     let mint_block_tx = BlockTx {
-        block: height + 1,
-        tx: 1,
+        block: Varuint(height + 1),
+        tx: Varuint(1),
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
@@ -1012,10 +1018,10 @@ async fn test_metaprotocol_to_glittr_asset() {
             }
             .into(),
         ),
-        min_in_value: Some(U128(0)),
-        out_value: Some(U128(oracle_out_value)),
+        min_in_value: Some(Varuint(0)),
+        out_value: Some(Varuint(oracle_out_value)),
         asset_id: Some("rune:840000:3".to_string()),
-        block_height: height,
+        block_height: Varuint(height),
         ratio: None,
         ltv: None,
         outstanding: None,
@@ -1034,7 +1040,7 @@ async fn test_metaprotocol_to_glittr_asset() {
         contract_call: Some(ContractCall {
             contract: Some(contract_id.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: Some(OracleMessageSigned {
                     signature: signature.serialize().to_vec(),
                     message: oracle_message.clone(),
@@ -1062,8 +1068,8 @@ async fn test_metaprotocol_to_glittr_asset() {
     ctx.core.mine_blocks(1);
 
     let mint_block_tx = BlockTx {
-        block: height + 1,
-        tx: 1,
+        block: Varuint(height + 1),
+        tx: Varuint(1),
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
@@ -1114,8 +1120,8 @@ async fn test_integration_freemint() {
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
-                        supply_cap: Some(U128(1000)),
-                        amount_per_mint: U128(10),
+                        supply_cap: Some(Varuint(1000)),
+                        amount_per_mint: Varuint(10),
                     }),
                     preallocated: None,
                     purchase: None,
@@ -1129,7 +1135,7 @@ async fn test_integration_freemint() {
 
     let block_tx = ctx.build_and_mine_message(&message).await;
     start_indexer(Arc::clone(&ctx.indexer)).await;
-    ctx.verify_last_block(block_tx.block).await;
+    ctx.verify_last_block(block_tx.block.0).await;
     ctx.get_and_verify_message_outcome(block_tx).await;
     ctx.drop().await;
 }
@@ -1148,8 +1154,8 @@ async fn test_integration_mint_freemint() {
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
-                        supply_cap: Some(U128(1000)),
-                        amount_per_mint: U128(10),
+                        supply_cap: Some(Varuint(1000)),
+                        amount_per_mint: Varuint(10),
                     }),
                     preallocated: None,
                     purchase: None,
@@ -1170,7 +1176,7 @@ async fn test_integration_mint_freemint() {
             contract_call: Some(ContractCall {
                 contract: Some(block_tx_contract.to_tuple()),
                 call_type: CallType::Mint(MintBurnOption {
-                    pointer: Some(1),
+                    pointer: Some(Varuint(1)),
                     oracle_message: None,
                     pointer_to_key: None,
                     assert_values: None,
@@ -1219,8 +1225,8 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
-                        supply_cap: Some(U128(50)),
-                        amount_per_mint: U128(50),
+                        supply_cap: Some(Varuint(50)),
+                        amount_per_mint: Varuint(50),
                     }),
                     preallocated: None,
                     purchase: None,
@@ -1239,7 +1245,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
         contract_call: Some(ContractCall {
             contract: Some(block_tx_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -1257,7 +1263,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
         contract_call: Some(ContractCall {
             contract: Some(block_tx_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(0),
+                pointer: Some(Varuint(0)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -1301,8 +1307,8 @@ async fn test_integration_mint_freemint_livetime_notreached() {
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
-                        supply_cap: Some(U128(1000)),
-                        amount_per_mint: U128(50),
+                        supply_cap: Some(Varuint(1000)),
+                        amount_per_mint: Varuint(50),
                     }),
                     preallocated: None,
                     purchase: None,
@@ -1321,7 +1327,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
         contract_call: Some(ContractCall {
             contract: Some(block_tx_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -1338,7 +1344,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
         contract_call: Some(ContractCall {
             contract: Some(block_tx_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -1403,9 +1409,9 @@ async fn test_integration_mint_preallocated_freemint() {
 
     println!("pub key {:?}", pubkey_1.to_bytes());
 
-    let mut allocations: HashMap<U128, AllocationType> = HashMap::new();
+    let mut allocations: HashMap<Varuint<u128>, AllocationType> = HashMap::new();
     allocations.insert(
-        U128(100),
+        Varuint(100),
         AllocationType::VecPubkey(vec![
             pubkey_1.to_bytes(),
             pubkey_2.to_bytes(),
@@ -1414,12 +1420,16 @@ async fn test_integration_mint_preallocated_freemint() {
         ]),
     );
     allocations.insert(
-        U128(300),
+        Varuint(300),
         AllocationType::VecPubkey(vec![pubkey_reserve.to_bytes()]),
     );
 
-    let vesting_plan =
-        VestingPlan::Scheduled(vec![((1, 4), -4), ((1, 4), -2), ((1, 4), -3), ((1, 4), -1)]);
+    let vesting_plan = VestingPlan::Scheduled(vec![
+        ((Varuint(1), Varuint(4)), -4),
+        ((Varuint(1), Varuint(4)), -2),
+        ((Varuint(1), Varuint(4)), -3),
+        ((Varuint(1), Varuint(4)), -1),
+    ]);
 
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
@@ -1437,8 +1447,8 @@ async fn test_integration_mint_preallocated_freemint() {
                         vesting_plan: Some(vesting_plan),
                     }),
                     free_mint: Some(FreeMint {
-                        supply_cap: Some(U128(300)),
-                        amount_per_mint: U128(1),
+                        supply_cap: Some(Varuint(300)),
+                        amount_per_mint: Varuint(1),
                     }),
                     purchase: None,
                 },
@@ -1455,7 +1465,7 @@ async fn test_integration_mint_preallocated_freemint() {
         contract_call: Some(ContractCall {
             contract: Some(block_tx_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -1539,8 +1549,8 @@ async fn test_integration_mint_freemint_invalidpointer() {
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
-                        supply_cap: Some(U128(1000)),
-                        amount_per_mint: U128(50),
+                        supply_cap: Some(Varuint(1000)),
+                        amount_per_mint: Varuint(50),
                     }),
                     preallocated: None,
                     purchase: None,
@@ -1559,7 +1569,7 @@ async fn test_integration_mint_freemint_invalidpointer() {
         contract_call: Some(ContractCall {
             contract: Some(block_tx_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(0),
+                pointer: Some(Varuint(0)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -1596,8 +1606,8 @@ async fn test_integration_transfer_normal() {
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
-                        supply_cap: Some(U128(100_000)),
-                        amount_per_mint: U128(20_000),
+                        supply_cap: Some(Varuint(100_000)),
+                        amount_per_mint: Varuint(20_000),
                     }),
                     preallocated: None,
                     purchase: None,
@@ -1614,7 +1624,7 @@ async fn test_integration_transfer_normal() {
         contract_call: Some(ContractCall {
             contract: Some(block_tx_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -1630,23 +1640,23 @@ async fn test_integration_transfer_normal() {
             transfers: [
                 TxTypeTransfer {
                     asset: block_tx_contract.to_tuple(),
-                    output: 1,
-                    amount: U128(10_000),
+                    output: Varuint(1),
+                    amount: Varuint(10_000),
                 },
                 TxTypeTransfer {
                     asset: block_tx_contract.to_tuple(),
-                    output: 2,
-                    amount: U128(2_000),
+                    output: Varuint(2),
+                    amount: Varuint(2_000),
                 },
                 TxTypeTransfer {
                     asset: block_tx_contract.to_tuple(),
-                    output: 2,
-                    amount: U128(500),
+                    output: Varuint(2),
+                    amount: Varuint(500),
                 },
                 TxTypeTransfer {
                     asset: block_tx_contract.to_tuple(),
-                    output: 3,
-                    amount: U128(8_000),
+                    output: Varuint(3),
+                    amount: Varuint(8_000),
                 },
             ]
             .to_vec(),
@@ -1661,8 +1671,8 @@ async fn test_integration_transfer_normal() {
     let new_output_txid = ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
         inputs: &[
-            (mint_block_tx.block as usize, 1, 1, Witness::new()), // UTXO contain assets
-            (mint_block_tx.block as usize, 0, 0, Witness::new()),
+            (mint_block_tx.block.0 as usize, 1, 1, Witness::new()), // UTXO contain assets
+            (mint_block_tx.block.0 as usize, 0, 0, Witness::new()),
         ],
         op_return: Some(message.into_script()),
         op_return_index: Some(0),
@@ -1736,8 +1746,8 @@ async fn test_integration_transfer_overflow_output() {
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
-                        supply_cap: Some(U128(100_000)),
-                        amount_per_mint: U128(20_000),
+                        supply_cap: Some(Varuint(100_000)),
+                        amount_per_mint: Varuint(20_000),
                     }),
                     preallocated: None,
                     purchase: None,
@@ -1754,7 +1764,7 @@ async fn test_integration_transfer_overflow_output() {
         contract_call: Some(ContractCall {
             contract: Some(block_tx_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -1771,13 +1781,13 @@ async fn test_integration_transfer_overflow_output() {
             transfers: [
                 TxTypeTransfer {
                     asset: block_tx_contract.to_tuple(),
-                    output: 1,
-                    amount: U128(10_000),
+                    output: Varuint(1),
+                    amount: Varuint(10_000),
                 },
                 TxTypeTransfer {
                     asset: block_tx_contract.to_tuple(),
-                    output: 2,
-                    amount: U128(2_000),
+                    output: Varuint(2),
+                    amount: Varuint(2_000),
                 },
             ]
             .to_vec(),
@@ -1792,8 +1802,8 @@ async fn test_integration_transfer_overflow_output() {
     let new_output_txid = ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
         inputs: &[
-            (mint_block_tx.block as usize, 1, 1, Witness::new()), // UTXO contain assets
-            (mint_block_tx.block as usize, 0, 0, Witness::new()),
+            (mint_block_tx.block.0 as usize, 1, 1, Witness::new()), // UTXO contain assets
+            (mint_block_tx.block.0 as usize, 0, 0, Witness::new()),
         ],
         op_return: Some(message.into_script()),
         op_return_index: Some(0),
@@ -1810,8 +1820,8 @@ async fn test_integration_transfer_overflow_output() {
 
     let outcome = ctx
         .get_and_verify_message_outcome(BlockTx {
-            block: height,
-            tx: 1,
+            block: Varuint(height),
+            tx: Varuint(1),
         })
         .await;
     assert_eq!(outcome.flaw.unwrap(), Flaw::OutputOverflow([1].to_vec()));
@@ -1857,8 +1867,8 @@ async fn test_integration_transfer_utxo() {
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
-                        supply_cap: Some(U128(100_000)),
-                        amount_per_mint: U128(20_000),
+                        supply_cap: Some(Varuint(100_000)),
+                        amount_per_mint: Varuint(20_000),
                     }),
                     preallocated: None,
                     purchase: None,
@@ -1875,7 +1885,7 @@ async fn test_integration_transfer_utxo() {
         contract_call: Some(ContractCall {
             contract: Some(block_tx_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -1893,8 +1903,8 @@ async fn test_integration_transfer_utxo() {
     let new_output_txid = ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
         inputs: &[
-            (mint_block_tx.block as usize, 1, 1, Witness::new()), // UTXO contain assets
-            (mint_block_tx.block as usize, 0, 0, Witness::new()),
+            (mint_block_tx.block.0 as usize, 1, 1, Witness::new()), // UTXO contain assets
+            (mint_block_tx.block.0 as usize, 0, 0, Witness::new()),
         ],
         op_return: None,
         op_return_index: None,
@@ -1947,8 +1957,8 @@ async fn test_integration_glittr_asset_mint_purchase() {
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
-                        supply_cap: Some(U128(1000)),
-                        amount_per_mint: U128(100),
+                        supply_cap: Some(Varuint(1000)),
+                        amount_per_mint: Varuint(100),
                     }),
                     preallocated: None,
                     purchase: None,
@@ -1967,7 +1977,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
         contract_call: Some(ContractCall {
             contract: Some(first_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -1995,7 +2005,9 @@ async fn test_integration_glittr_asset_mint_purchase() {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::GlittrAsset(first_contract.to_tuple()),
                         pay_to_key: Some(treasury_pub_key.to_bytes()),
-                        ratio: RatioType::Fixed { ratio: (2, 1) },
+                        ratio: RatioType::Fixed {
+                            ratio: (Varuint(2), Varuint(1)),
+                        },
                     }),
                     preallocated: None,
                     free_mint: None,
@@ -2014,7 +2026,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
         contract_call: Some(ContractCall {
             contract: Some(second_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -2024,8 +2036,8 @@ async fn test_integration_glittr_asset_mint_purchase() {
         transfer: Some(Transfer {
             transfers: [TxTypeTransfer {
                 asset: first_contract.to_tuple(),
-                output: 1,
-                amount: U128(100),
+                output: Varuint(1),
+                amount: Varuint(100),
             }]
             .to_vec(),
         }),
@@ -2035,8 +2047,8 @@ async fn test_integration_glittr_asset_mint_purchase() {
     ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
         inputs: &[
-            (first_mint_tx.block as usize, 1, 1, Witness::new()), // UTXO contain assets
-            (first_mint_tx.block as usize, 0, 0, Witness::new()),
+            (first_mint_tx.block.0 as usize, 1, 1, Witness::new()), // UTXO contain assets
+            (first_mint_tx.block.0 as usize, 0, 0, Witness::new()),
         ],
         op_return: Some(second_mint_message.into_script()),
         op_return_index: Some(0),
@@ -2093,8 +2105,8 @@ async fn test_integration_collateralized_mba() {
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
-                        supply_cap: Some(U128(1_000_000)),
-                        amount_per_mint: U128(100_000),
+                        supply_cap: Some(Varuint(1_000_000)),
+                        amount_per_mint: Varuint(100_000),
                     }),
                     preallocated: None,
                     purchase: None,
@@ -2113,7 +2125,7 @@ async fn test_integration_collateralized_mba() {
         contract_call: Some(ContractCall {
             contract: Some(collateral_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -2143,7 +2155,7 @@ async fn test_integration_collateralized_mba() {
                         input_assets: vec![InputAsset::GlittrAsset(collateral_contract.to_tuple())],
                         _mutable_assets: false,
                         mint_structure: MintStructure::Account(AccountType {
-                            max_ltv: (7, 10),
+                            max_ltv: (Varuint(7), Varuint(10)),
                             ratio: RatioType::Oracle {
                                 setting: OracleSetting {
                                     pubkey: oracle_xonly.0.serialize().to_vec(),
@@ -2178,8 +2190,8 @@ async fn test_integration_collateralized_mba() {
         contract_call: Some(ContractCall {
             contract: Some(mba_contract.to_tuple()),
             call_type: CallType::OpenAccount(OpenAccountOption {
-                pointer_to_key: 1,
-                share_amount: U128(100),
+                pointer_to_key: Varuint(1),
+                share_amount: Varuint(100),
             }),
         }),
         transfer: None,
@@ -2189,8 +2201,8 @@ async fn test_integration_collateralized_mba() {
     ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
         inputs: &[
-            (collateral_mint_tx.block as usize, 1, 1, Witness::new()), // UTXO containing collateral
-            (collateral_mint_tx.block as usize, 0, 0, Witness::new()),
+            (collateral_mint_tx.block.0 as usize, 1, 1, Witness::new()), // UTXO containing collateral
+            (collateral_mint_tx.block.0 as usize, 0, 0, Witness::new()),
         ],
         op_return: Some(open_account_message.into_script()),
         op_return_index: Some(0),
@@ -2203,29 +2215,29 @@ async fn test_integration_collateralized_mba() {
     ctx.core.mine_blocks(1);
 
     let account_block_tx = BlockTx {
-        block: ctx.core.height(),
-        tx: 1,
+        block: Varuint(ctx.core.height()),
+        tx: Varuint(1),
     };
 
     // Create oracle message for mint
     let oracle_message = OracleMessage {
         asset_id: None,
-        block_height: ctx.core.height(),
+        block_height: Varuint(ctx.core.height()),
         input_outpoint: Some(
             OutPoint {
                 txid: ctx
                     .core
-                    .tx(account_block_tx.block as usize, 1)
+                    .tx(account_block_tx.block.0 as usize, 1)
                     .compute_txid(),
                 vout: 1,
             }
             .into(),
         ),
         min_in_value: None,
-        out_value: Some(U128(50_000)), // Amount to mint
+        out_value: Some(Varuint(50_000)), // Amount to mint
         ratio: None,
-        ltv: Some((5, 10)), // 50% LTV
-        outstanding: Some(U128(50_000)),
+        ltv: Some((Varuint(5), Varuint(10))), // 50% LTV
+        outstanding: Some(Varuint(50_000)),
     };
 
     let secp: Secp256k1<secp256k1::All> = Secp256k1::new();
@@ -2242,12 +2254,12 @@ async fn test_integration_collateralized_mba() {
         contract_call: Some(ContractCall {
             contract: Some(mba_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(2),
+                pointer: Some(Varuint(2)),
                 oracle_message: Some(OracleMessageSigned {
                     signature: signature.serialize().to_vec(),
                     message: oracle_message.clone(),
                 }),
-                pointer_to_key: Some(1),
+                pointer_to_key: Some(Varuint(1)),
                 assert_values: None,
                 commitment_message: None,
             }),
@@ -2260,8 +2272,8 @@ async fn test_integration_collateralized_mba() {
     ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
         inputs: &[
-            (account_block_tx.block as usize, 1, 1, Witness::new()), // UTXO containing collateral account
-            (account_block_tx.block as usize, 0, 0, Witness::new()),
+            (account_block_tx.block.0 as usize, 1, 1, Witness::new()), // UTXO containing collateral account
+            (account_block_tx.block.0 as usize, 0, 0, Witness::new()),
         ],
         op_return: Some(mint_message.into_script()),
         op_return_index: Some(0),
@@ -2275,8 +2287,8 @@ async fn test_integration_collateralized_mba() {
     ctx.core.mine_blocks(1);
 
     let mint_block_tx = BlockTx {
-        block: ctx.core.height(),
-        tx: 1,
+        block: Varuint(ctx.core.height()),
+        tx: Varuint(1),
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
@@ -2321,26 +2333,32 @@ async fn test_integration_collateralized_mba() {
         .get(&mba_contract.to_string())
         .unwrap();
     assert_eq!(collateral_account.share_amount, 100);
-    assert_eq!(collateral_account.collateral_amounts, [((3, 1), 100000)]);
-    assert_eq!(collateral_account.ltv, (5, 10)); // LTV from oracle message
+    assert_eq!(
+        collateral_account.collateral_amounts,
+        [((Varuint(3), Varuint(1)), 100000)]
+    );
+    assert_eq!(collateral_account.ltv, (Varuint(5), Varuint(10))); // LTV from oracle message
     assert_eq!(collateral_account.amount_outstanding, 50_000); // Outstanding amount from oracle message
 
     // Create oracle message for burn
     let burn_oracle_message = OracleMessage {
         asset_id: None,
-        block_height: ctx.core.height(),
+        block_height: Varuint(ctx.core.height()),
         input_outpoint: Some(
             OutPoint {
-                txid: ctx.core.tx(mint_block_tx.block as usize, 1).compute_txid(),
+                txid: ctx
+                    .core
+                    .tx(mint_block_tx.block.0 as usize, 1)
+                    .compute_txid(),
                 vout: 1,
             }
             .into(),
         ),
         min_in_value: None,
-        out_value: Some(U128(25_000)), // Amount to burn
+        out_value: Some(Varuint(25_000)), // Amount to burn
         ratio: None,
-        ltv: Some((3, 10)),              // Updated LTV after partial repayment
-        outstanding: Some(U128(25_000)), // Remaining outstanding amount
+        ltv: Some((Varuint(3), Varuint(10))), // Updated LTV after partial repayment
+        outstanding: Some(Varuint(25_000)),   // Remaining outstanding amount
     };
 
     let burn_msg = Message::from_digest_slice(
@@ -2364,7 +2382,7 @@ async fn test_integration_collateralized_mba() {
                     signature: burn_signature.serialize().to_vec(),
                     message: burn_oracle_message.clone(),
                 }),
-                pointer_to_key: Some(1),
+                pointer_to_key: Some(Varuint(1)),
                 pointer: None,
                 assert_values: None,
                 commitment_message: None,
@@ -2378,9 +2396,9 @@ async fn test_integration_collateralized_mba() {
     ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
         inputs: &[
-            (mint_block_tx.block as usize, 1, 1, Witness::new()), // UTXO containing collateral account
-            (mint_block_tx.block as usize, 1, 2, Witness::new()), // UTXO containing mint
-            (mint_block_tx.block as usize, 0, 0, Witness::new()),
+            (mint_block_tx.block.0 as usize, 1, 1, Witness::new()), // UTXO containing collateral account
+            (mint_block_tx.block.0 as usize, 1, 2, Witness::new()), // UTXO containing mint
+            (mint_block_tx.block.0 as usize, 0, 0, Witness::new()),
         ],
         op_return: Some(burn_message.into_script()),
         op_return_index: Some(0),
@@ -2393,8 +2411,8 @@ async fn test_integration_collateralized_mba() {
     ctx.core.mine_blocks(1);
 
     let burn_block_tx = BlockTx {
-        block: ctx.core.height(),
-        tx: 1,
+        block: Varuint(ctx.core.height()),
+        tx: Varuint(1),
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
@@ -2427,26 +2445,32 @@ async fn test_integration_collateralized_mba() {
         .get(&mba_contract.to_string())
         .unwrap();
     assert_eq!(account_after_burn.share_amount, 100);
-    assert_eq!(account_after_burn.collateral_amounts, [((3, 1), 100000)]); // Collateral amount unchanged
-    assert_eq!(account_after_burn.ltv, (3, 10)); // Updated LTV from oracle message
+    assert_eq!(
+        account_after_burn.collateral_amounts,
+        [((Varuint(3), Varuint(1)), 100000)]
+    ); // Collateral amount unchanged
+    assert_eq!(account_after_burn.ltv, (Varuint(3), Varuint(10))); // Updated LTV from oracle message
     assert_eq!(account_after_burn.amount_outstanding, 25_000); // Updated outstanding amount from oracle message
 
     // Create final burn message to clear outstanding amount
     let final_burn_oracle_message = OracleMessage {
         asset_id: None,
-        block_height: ctx.core.height(),
+        block_height: Varuint(ctx.core.height()),
         input_outpoint: Some(
             OutPoint {
-                txid: ctx.core.tx(burn_block_tx.block as usize, 1).compute_txid(),
+                txid: ctx
+                    .core
+                    .tx(burn_block_tx.block.0 as usize, 1)
+                    .compute_txid(),
                 vout: 1,
             }
             .into(),
         ),
         min_in_value: None,
-        out_value: Some(U128(25_000)), // Burn remaining amount
+        out_value: Some(Varuint(25_000)), // Burn remaining amount
         ratio: None,
-        ltv: Some((0, 10)),         // Set LTV to 0
-        outstanding: Some(U128(0)), // Set outstanding to 0
+        ltv: Some((Varuint(0), Varuint(10))), // Set LTV to 0
+        outstanding: Some(Varuint(0)),        // Set outstanding to 0
     };
 
     let final_burn_msg = Message::from_digest_slice(
@@ -2470,7 +2494,7 @@ async fn test_integration_collateralized_mba() {
                     signature: final_burn_signature.serialize().to_vec(),
                     message: final_burn_oracle_message.clone(),
                 }),
-                pointer_to_key: Some(1),
+                pointer_to_key: Some(Varuint(1)),
                 pointer: None,
                 assert_values: None,
                 commitment_message: None,
@@ -2484,9 +2508,9 @@ async fn test_integration_collateralized_mba() {
     ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
         inputs: &[
-            (burn_block_tx.block as usize, 1, 1, Witness::new()), // UTXO containing collateral account
-            (burn_block_tx.block as usize, 1, 2, Witness::new()), // UTXO containing remaining minted tokens
-            (burn_block_tx.block as usize, 0, 0, Witness::new()),
+            (burn_block_tx.block.0 as usize, 1, 1, Witness::new()), // UTXO containing collateral account
+            (burn_block_tx.block.0 as usize, 1, 2, Witness::new()), // UTXO containing remaining minted tokens
+            (burn_block_tx.block.0 as usize, 0, 0, Witness::new()),
         ],
         op_return: Some(final_burn_message.into_script()),
         op_return_index: Some(0),
@@ -2499,8 +2523,8 @@ async fn test_integration_collateralized_mba() {
     ctx.core.mine_blocks(1);
 
     let final_burn_block_tx = BlockTx {
-        block: ctx.core.height(),
-        tx: 1,
+        block: Varuint(ctx.core.height()),
+        tx: Varuint(1),
     };
 
     // Create close account message
@@ -2508,7 +2532,7 @@ async fn test_integration_collateralized_mba() {
         contract_call: Some(ContractCall {
             contract: Some(mba_contract.to_tuple()),
             call_type: CallType::CloseAccount(CloseAccountOption {
-                pointer: 1, // Output index for returned collateral
+                pointer: Varuint(1), // Output index for returned collateral
             }),
         }),
         transfer: None,
@@ -2519,8 +2543,8 @@ async fn test_integration_collateralized_mba() {
     ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
         inputs: &[
-            (final_burn_block_tx.block as usize, 1, 1, Witness::new()), // UTXO containing collateral account
-            (final_burn_block_tx.block as usize, 0, 0, Witness::new()),
+            (final_burn_block_tx.block.0 as usize, 1, 1, Witness::new()), // UTXO containing collateral account
+            (final_burn_block_tx.block.0 as usize, 0, 0, Witness::new()),
         ],
         op_return: Some(close_account_message.into_script()),
         op_return_index: Some(0),
@@ -2533,8 +2557,8 @@ async fn test_integration_collateralized_mba() {
     ctx.core.mine_blocks(1);
 
     let close_account_block_tx = BlockTx {
-        block: ctx.core.height(),
-        tx: 1,
+        block: Varuint(ctx.core.height()),
+        tx: Varuint(1),
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
@@ -2598,8 +2622,8 @@ async fn test_integration_proportional_mba_lp() {
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
-                        supply_cap: Some(U128(1_000_000)),
-                        amount_per_mint: U128(100_000),
+                        supply_cap: Some(Varuint(1_000_000)),
+                        amount_per_mint: Varuint(100_000),
                     }),
                     preallocated: None,
                     purchase: None,
@@ -2622,8 +2646,8 @@ async fn test_integration_proportional_mba_lp() {
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
-                        supply_cap: Some(U128(1_000_000)),
-                        amount_per_mint: U128(50_000),
+                        supply_cap: Some(Varuint(1_000_000)),
+                        amount_per_mint: Varuint(50_000),
                     }),
                     preallocated: None,
                     purchase: None,
@@ -2643,7 +2667,7 @@ async fn test_integration_proportional_mba_lp() {
         contract_call: Some(ContractCall {
             contract: Some(token1_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -2658,7 +2682,7 @@ async fn test_integration_proportional_mba_lp() {
         contract_call: Some(ContractCall {
             contract: Some(token2_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -2719,7 +2743,7 @@ async fn test_integration_proportional_mba_lp() {
         contract_call: Some(ContractCall {
             contract: Some(lp_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -2734,9 +2758,9 @@ async fn test_integration_proportional_mba_lp() {
     ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
         inputs: &[
-            (token1_mint_tx.block as usize, 1, 1, Witness::new()),
-            (token2_mint_tx.block as usize, 1, 1, Witness::new()),
-            (token2_mint_tx.block as usize, 0, 0, Witness::new()),
+            (token1_mint_tx.block.0 as usize, 1, 1, Witness::new()),
+            (token2_mint_tx.block.0 as usize, 1, 1, Witness::new()),
+            (token2_mint_tx.block.0 as usize, 0, 0, Witness::new()),
         ],
         op_return: Some(mint_lp_message.into_script()),
         op_return_index: Some(0),
@@ -2749,8 +2773,8 @@ async fn test_integration_proportional_mba_lp() {
     ctx.core.mine_blocks(1);
 
     let mint_lp_block_tx = BlockTx {
-        block: ctx.core.height(),
-        tx: 1,
+        block: Varuint(ctx.core.height()),
+        tx: Varuint(1),
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
@@ -2777,8 +2801,8 @@ async fn test_integration_proportional_mba_lp() {
         transfer: Some(Transfer {
             transfers: vec![TxTypeTransfer {
                 asset: token1_contract.to_tuple(),
-                output: 2,
-                amount: U128(100),
+                output: Varuint(2),
+                amount: Varuint(100),
             }],
         }),
         contract_creation: None,
@@ -2788,8 +2812,8 @@ async fn test_integration_proportional_mba_lp() {
     ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
         inputs: &[
-            (token1_mint_tx.block as usize, 1, 1, Witness::new()),
-            (token1_mint_tx.block as usize, 0, 0, Witness::new()),
+            (token1_mint_tx.block.0 as usize, 1, 1, Witness::new()),
+            (token1_mint_tx.block.0 as usize, 0, 0, Witness::new()),
         ],
         op_return: Some(rebase_token1_message.into_script()),
         op_return_index: Some(0),
@@ -2802,8 +2826,8 @@ async fn test_integration_proportional_mba_lp() {
     ctx.core.mine_blocks(1);
 
     let rebase_block_tx = BlockTx {
-        block: ctx.core.height(),
-        tx: 1,
+        block: Varuint(ctx.core.height()),
+        tx: Varuint(1),
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
@@ -2812,11 +2836,11 @@ async fn test_integration_proportional_mba_lp() {
         contract_call: Some(ContractCall {
             contract: Some(lp_contract.to_tuple()),
             call_type: CallType::Swap(SwapOption {
-                pointer: 1,
+                pointer: Varuint(1),
                 assert_values: Some(AssertValues {
-                    input_values: Some(vec![U128(100)]),
+                    input_values: Some(vec![Varuint(100)]),
                     total_collateralized: None,
-                    min_out_value: Some(U128(49)),
+                    min_out_value: Some(Varuint(49)),
                 }),
             }),
         }),
@@ -2828,8 +2852,8 @@ async fn test_integration_proportional_mba_lp() {
     ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
         inputs: &[
-            (rebase_block_tx.block as usize, 1, 2, Witness::new()),
-            (rebase_block_tx.block as usize, 0, 0, Witness::new()),
+            (rebase_block_tx.block.0 as usize, 1, 2, Witness::new()),
+            (rebase_block_tx.block.0 as usize, 0, 0, Witness::new()),
         ],
         op_return: Some(swap_message.into_script()),
         op_return_index: Some(0),
@@ -2842,8 +2866,8 @@ async fn test_integration_proportional_mba_lp() {
     ctx.core.mine_blocks(1);
 
     let swap_block_tx = BlockTx {
-        block: ctx.core.height(),
-        tx: 1,
+        block: Varuint(ctx.core.height()),
+        tx: Varuint(1),
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
@@ -2873,7 +2897,7 @@ async fn test_integration_proportional_mba_lp() {
         contract_call: Some(ContractCall {
             contract: Some(lp_contract.to_tuple()),
             call_type: CallType::Burn(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -2888,8 +2912,8 @@ async fn test_integration_proportional_mba_lp() {
     ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
         inputs: &[
-            (mint_lp_block_tx.block as usize, 1, 1, Witness::new()),
-            (mint_lp_block_tx.block as usize, 0, 0, Witness::new()),
+            (mint_lp_block_tx.block.0 as usize, 1, 1, Witness::new()),
+            (mint_lp_block_tx.block.0 as usize, 0, 0, Witness::new()),
         ],
         op_return: Some(burn_lp_message.into_script()),
         op_return_index: Some(0),
@@ -2902,8 +2926,8 @@ async fn test_integration_proportional_mba_lp() {
     ctx.core.mine_blocks(1);
 
     let burn_block_tx = BlockTx {
-        block: ctx.core.height(),
-        tx: 1,
+        block: Varuint(ctx.core.height()),
+        tx: Varuint(1),
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
@@ -2948,7 +2972,7 @@ async fn test_integration_spec() {
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
 
-    ctx.verify_last_block(block_tx_contract.block).await;
+    ctx.verify_last_block(block_tx_contract.block.0).await;
     let message = ctx.get_and_verify_message_outcome(block_tx_contract).await;
     assert_eq!(message.flaw, None);
 
@@ -2966,12 +2990,12 @@ async fn test_integration_spec_update() {
                         _mutable_assets: true,
                         input_assets: vec![InputAsset::Rune].into(),
                         mint_structure: Some(MintStructure::Ratio(RatioType::Fixed {
-                            ratio: (10, 10),
+                            ratio: (Varuint(10), Varuint(10)),
                         })),
                     }),
                 }),
                 block_tx: None,
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
             }),
             spec: None,
         }),
@@ -2997,7 +3021,7 @@ async fn test_integration_spec_update() {
                     }),
                 }),
                 block_tx: Some(block_tx_contract.to_tuple()),
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
             }),
             spec: None,
         }),
@@ -3008,8 +3032,8 @@ async fn test_integration_spec_update() {
     ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
         inputs: &[
-            (block_tx_contract.block as usize, 1, 1, Witness::new()), // spec owner
-            (block_tx_contract.block as usize, 0, 0, Witness::new()),
+            (block_tx_contract.block.0 as usize, 1, 1, Witness::new()), // spec owner
+            (block_tx_contract.block.0 as usize, 0, 0, Witness::new()),
         ],
         op_return: Some(message.into_script()),
         op_return_index: Some(0),
@@ -3021,8 +3045,8 @@ async fn test_integration_spec_update() {
     });
     ctx.core.mine_blocks(1);
     let block_tx_first_update = BlockTx {
-        block: ctx.core.height(),
-        tx: 1,
+        block: Varuint(ctx.core.height()),
+        tx: Varuint(1),
     };
 
     let message = OpReturnMessage {
@@ -3036,7 +3060,7 @@ async fn test_integration_spec_update() {
                     }),
                 }),
                 block_tx: Some(block_tx_contract.to_tuple()),
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
             }),
             spec: None,
         }),
@@ -3047,8 +3071,8 @@ async fn test_integration_spec_update() {
     ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
         inputs: &[
-            (block_tx_first_update.block as usize, 1, 1, Witness::new()), // spec owner
-            (block_tx_first_update.block as usize, 0, 0, Witness::new()),
+            (block_tx_first_update.block.0 as usize, 1, 1, Witness::new()), // spec owner
+            (block_tx_first_update.block.0 as usize, 0, 0, Witness::new()),
         ],
         op_return: Some(message.into_script()),
         op_return_index: Some(0),
@@ -3060,8 +3084,8 @@ async fn test_integration_spec_update() {
     });
     ctx.core.mine_blocks(1);
     let block_tx_second_update = BlockTx {
-        block: ctx.core.height(),
-        tx: 1,
+        block: Varuint(ctx.core.height()),
+        tx: Varuint(1),
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
@@ -3113,12 +3137,12 @@ async fn test_integration_spec_update_not_allowed() {
                         _mutable_assets: true,
                         input_assets: vec![InputAsset::Rune].into(),
                         mint_structure: Some(MintStructure::Ratio(RatioType::Fixed {
-                            ratio: (10, 10),
+                            ratio: (Varuint(10), Varuint(10)),
                         })),
                     }),
                 }),
                 block_tx: None,
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
             }),
             spec: None,
         }),
@@ -3144,7 +3168,7 @@ async fn test_integration_spec_update_not_allowed() {
                     }),
                 }),
                 block_tx: Some(block_tx_contract.to_tuple()),
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
             }),
             spec: None,
         }),
@@ -3199,7 +3223,9 @@ async fn test_integration_spec_moa_valid_contract_creation() {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::Rune,
                         pay_to_key: Some(address_pubkey.to_bytes()),
-                        ratio: RatioType::Fixed { ratio: (1, 1) },
+                        ratio: RatioType::Fixed {
+                            ratio: (Varuint(1), Varuint(1)),
+                        },
                     }),
                     preallocated: None,
                     free_mint: None,
@@ -3256,7 +3282,9 @@ async fn test_integration_spec_moa_input_asset_invalid() {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
                         pay_to_key: None,
-                        ratio: RatioType::Fixed { ratio: (1, 1) },
+                        ratio: RatioType::Fixed {
+                            ratio: (Varuint(1), Varuint(1)),
+                        },
                     }),
                     preallocated: None,
                     free_mint: None,
@@ -3317,7 +3345,9 @@ async fn test_integration_spec_moa_peg_in_type_invalid() {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::Rune,
                         pay_to_key: None,
-                        ratio: RatioType::Fixed { ratio: (1, 1) },
+                        ratio: RatioType::Fixed {
+                            ratio: (Varuint(1), Varuint(1)),
+                        },
                     }),
                     preallocated: None,
                     free_mint: None,
@@ -3366,7 +3396,7 @@ async fn test_integration_glittr_airdrop() {
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: None,
-                        amount_per_mint: U128(1),
+                        amount_per_mint: Varuint(1),
                     }),
                     preallocated: None,
                     purchase: None,
@@ -3397,7 +3427,7 @@ async fn test_integration_glittr_airdrop() {
         contract_call: Some(ContractCall {
             contract: Some(first_moa_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -3428,8 +3458,8 @@ async fn test_integration_glittr_airdrop() {
     ctx.core.mine_blocks(1);
 
     let first_mint_tx = BlockTx {
-        block: height + 1,
-        tx: 1,
+        block: Varuint(height + 1),
+        tx: Varuint(1),
     };
 
     // 3. Admin creates bloom filter with user's txid:vout
@@ -3442,7 +3472,7 @@ async fn test_integration_glittr_airdrop() {
     let mut allocations = HashMap::new();
 
     allocations.insert(
-        U128(100),
+        Varuint(100),
         AllocationType::BloomFilter {
             filter: compressed_filter,
             arg: BloomFilterArgType::TxId,
@@ -3481,7 +3511,7 @@ async fn test_integration_glittr_airdrop() {
         contract_call: Some(ContractCall {
             contract: Some(second_moa_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -3495,8 +3525,8 @@ async fn test_integration_glittr_airdrop() {
     ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
         inputs: &[
-            (first_mint_tx.block as usize, 1, 1, Witness::new()), // UTXO containing first MOA
-            (first_mint_tx.block as usize, 0, 0, Witness::new()),
+            (first_mint_tx.block.0 as usize, 1, 1, Witness::new()), // UTXO containing first MOA
+            (first_mint_tx.block.0 as usize, 0, 0, Witness::new()),
         ],
         op_return: Some(mint_second_moa_message.into_script()),
         op_return_index: Some(0),
@@ -3509,8 +3539,8 @@ async fn test_integration_glittr_airdrop() {
     ctx.core.mine_blocks(1);
 
     let second_mint_tx = BlockTx {
-        block: ctx.core.height(),
-        tx: 1,
+        block: Varuint(ctx.core.height()),
+        tx: Varuint(1),
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;
@@ -3569,7 +3599,9 @@ async fn test_integration_contract_ticker() {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
                         pay_to_key: None,
-                        ratio: RatioType::Fixed { ratio: (1, 1) },
+                        ratio: RatioType::Fixed {
+                            ratio: (Varuint(1), Varuint(1)),
+                        },
                     }),
                     preallocated: None,
                     free_mint: None,
@@ -3596,7 +3628,9 @@ async fn test_integration_contract_ticker() {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
                         pay_to_key: None,
-                        ratio: RatioType::Fixed { ratio: (1, 1) },
+                        ratio: RatioType::Fixed {
+                            ratio: (Varuint(1), Varuint(1)),
+                        },
                     }),
                     preallocated: None,
                     free_mint: None,
@@ -3647,8 +3681,8 @@ async fn test_contract_creation_and_mint() {
                 live_time: 0,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
-                        supply_cap: Some(U128(1_000_000)),
-                        amount_per_mint: U128(100_000),
+                        supply_cap: Some(Varuint(1_000_000)),
+                        amount_per_mint: Varuint(100_000),
                     }),
                     preallocated: None,
                     purchase: None,
@@ -3671,8 +3705,8 @@ async fn test_contract_creation_and_mint() {
                 live_time: 0,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
-                        supply_cap: Some(U128(1_000_000)),
-                        amount_per_mint: U128(50_000),
+                        supply_cap: Some(Varuint(1_000_000)),
+                        amount_per_mint: Varuint(50_000),
                     }),
                     preallocated: None,
                     purchase: None,
@@ -3693,7 +3727,7 @@ async fn test_contract_creation_and_mint() {
         contract_call: Some(ContractCall {
             contract: Some(token1_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -3708,7 +3742,7 @@ async fn test_contract_creation_and_mint() {
         contract_call: Some(ContractCall {
             contract: Some(token2_contract.to_tuple()),
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -3762,7 +3796,7 @@ async fn test_contract_creation_and_mint() {
         contract_call: Some(ContractCall {
             contract: None,
             call_type: CallType::Mint(MintBurnOption {
-                pointer: Some(1),
+                pointer: Some(Varuint(1)),
                 oracle_message: None,
                 pointer_to_key: None,
                 assert_values: None,
@@ -3775,9 +3809,9 @@ async fn test_contract_creation_and_mint() {
     ctx.core.broadcast_tx(TransactionTemplate {
         fee: 0,
         inputs: &[
-            (token1_mint_tx.block as usize, 1, 1, Witness::new()),
-            (token2_mint_tx.block as usize, 1, 1, Witness::new()),
-            (token2_mint_tx.block as usize, 0, 0, Witness::new()),
+            (token1_mint_tx.block.0 as usize, 1, 1, Witness::new()),
+            (token2_mint_tx.block.0 as usize, 1, 1, Witness::new()),
+            (token2_mint_tx.block.0 as usize, 0, 0, Witness::new()),
         ],
         op_return: Some(lp_message.into_script()),
         op_return_index: Some(0),
@@ -3790,8 +3824,8 @@ async fn test_contract_creation_and_mint() {
     ctx.core.mine_blocks(1);
 
     let contract_create_and_mint_lp_block_tx = BlockTx {
-        block: ctx.core.height(),
-        tx: 1,
+        block: Varuint(ctx.core.height()),
+        tx: Varuint(1),
     };
 
     start_indexer(Arc::clone(&ctx.indexer)).await;

@@ -4,6 +4,7 @@ use mint_burn_asset::MintStructure;
 use transaction_shared::InputAsset;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use varuint_dyn::Varuint;
 
 use super::*;
 
@@ -87,7 +88,7 @@ pub struct SpecContract {
     pub spec: SpecContractType,
     // the target output index that holds the spec
     // if the pointer is None, it will point to the first non-op_return output
-    pub pointer: Option<u32>,
+    pub pointer: Option<Varuint<u32>>,
     // if the block_tx is provided,
     // the spec would be updated based on valid field
     pub block_tx: Option<BlockTxTuple>,
@@ -192,7 +193,7 @@ mod test {
                 peg_in_type: Some(MintOnlyAssetSpecPegInType::Burn),
             }),
             block_tx: None,
-            pointer: Some(1),
+            pointer: Some(Varuint(1)),
         };
         let flaw = spec.validate();
         assert_eq!(
@@ -209,7 +210,7 @@ mod test {
                 peg_in_type: Some(MintOnlyAssetSpecPegInType::Burn),
             }),
             block_tx: Some(BlockTxTuple::default()),
-            pointer: Some(1),
+            pointer: Some(Varuint(1)),
         };
         let flaw = spec.validate();
         assert_eq!(flaw, Some(Flaw::SpecNotMutable));
@@ -262,7 +263,7 @@ mod test {
                 }),
             }),
             block_tx: Some(BlockTxTuple::default()),
-            pointer: Some(1),
+            pointer: Some(Varuint(1)),
         };
         let flaw = spec.validate();
         assert_eq!(flaw, None);
