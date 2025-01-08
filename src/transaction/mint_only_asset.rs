@@ -2,7 +2,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use flaw::Flaw;
 use message::{Commitment, ContractValidator};
 use transaction_shared::{FreeMint, Preallocated, PurchaseBurnSwap};
-use varuint_dyn::VaruintDyn;
+use varuint_dyn::Varuint;
 
 use super::*;
 
@@ -19,7 +19,7 @@ pub struct MOAMintMechanisms {
 #[serde(rename_all = "snake_case")]
 pub struct MintOnlyAssetContract {
     pub ticker: Option<String>,
-    pub supply_cap: Option<VaruintDyn<u128>>,
+    pub supply_cap: Option<Varuint<u128>>,
     pub divisibility: u8,
     pub live_time: RelativeOrAbsoluteBlockHeight,
     pub end_time: Option<RelativeOrAbsoluteBlockHeight>,

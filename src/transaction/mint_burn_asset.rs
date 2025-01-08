@@ -5,14 +5,14 @@ use transaction_shared::{
 };
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use varuint_dyn::VaruintDyn;
+use varuint_dyn::Varuint;
 
 #[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MintBurnAssetContract {
     pub ticker: Option<String>,
-    pub supply_cap: Option<VaruintDyn<u128>>,
+    pub supply_cap: Option<Varuint<u128>>,
     pub divisibility: u8,
     pub live_time: RelativeOrAbsoluteBlockHeight,
     pub end_time: Option<RelativeOrAbsoluteBlockHeight>,

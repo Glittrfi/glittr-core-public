@@ -5,7 +5,7 @@ use bitcoin::{OutPoint, Txid};
 use borsh::io::{Error, ErrorKind};
 use borsh::{BorshDeserialize, BorshSerialize};
 
-use crate::{varuint::Varuint, BitcoinOutpoint, U128};
+use crate::{BitcoinOutpoint, U128};
 
 pub const ERROR_UNEXPECTED_LENGTH_OF_INPUT: &str = "Unexpected length of input";
 
@@ -61,39 +61,5 @@ impl BorshDeserialize for BitcoinOutpoint {
         let vout = u32::from_le_bytes(bytes[32..].to_vec().try_into().unwrap());
 
         Ok(BitcoinOutpoint(OutPoint::new(txid, vout)))
-    }
-}
-
-impl BorshSerialize for Varuint {
-    fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        let varuint = self.encode_to_vec();
-        writer.write_all(&varuint)
-    }
-}
-
-impl BorshDeserialize for Varuint {
-    fn deserialize_reader<R: Read>(reader: &mut R) -> Result<Self, Error> {
-        let mut bytes: Vec<u8> = Vec::new();
-
-        loop {
-            let mut byte = [0u8; 1];
-            reader
-                .read_exact(&mut byte)
-                .map_err(unexpected_eof_to_unexpected_length_of_input)?;
-
-            bytes.push(byte[0]);
-
-            if byte[0] & 128 == 0 {
-                break;
-            }
-        }
-
-        let decoded = Varuint::decode(&bytes);
-        if decoded.is_err() {
-            // TODO: specific error of varuint decode flaw
-            return Err(Error::new(ErrorKind::InvalidData, "Varuint decode error"));
-        }
-
-        Ok(Varuint(decoded.unwrap()))
     }
 }

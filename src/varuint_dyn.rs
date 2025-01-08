@@ -10,7 +10,7 @@ use std::{
 };
 
 #[derive(PartialEq, Debug, Clone, PartialOrd)]
-pub struct VaruintDyn<T: Unsigned>(pub T);
+pub struct Varuint<T: Unsigned>(pub T);
 
 #[derive(Debug)]
 pub enum VaruintFlaw {
@@ -18,7 +18,7 @@ pub enum VaruintFlaw {
     Unterminated,
 }
 
-impl<T> VaruintDyn<T>
+impl<T> Varuint<T>
 where
     T: Clone
         + PartialOrd
@@ -74,7 +74,7 @@ where
 }
 
 // for now, the serde parser is only used for JSON.
-impl<T> Serialize for VaruintDyn<T>
+impl<T> Serialize for Varuint<T>
 where
     T: Unsigned + ToString,
 {
@@ -87,7 +87,7 @@ where
 }
 
 // for now, the serde parser is only used for JSON.
-impl<'de, T> Deserialize<'de> for VaruintDyn<T>
+impl<'de, T> Deserialize<'de> for Varuint<T>
 where
     T: Unsigned + FromStr,
 {
@@ -104,7 +104,7 @@ where
     }
 }
 
-impl<T> BorshSerialize for VaruintDyn<T>
+impl<T> BorshSerialize for Varuint<T>
 where
     T: Clone
         + PartialOrd
@@ -124,7 +124,7 @@ where
     }
 }
 
-impl<T> BorshDeserialize for VaruintDyn<T>
+impl<T> BorshDeserialize for Varuint<T>
 where
     T: Clone
         + PartialOrd
@@ -154,7 +154,7 @@ where
             }
         }
 
-        let decoded = VaruintDyn::<T>::decode(&bytes);
+        let decoded = Varuint::<T>::decode(&bytes);
         if decoded.is_err() {
             // TODO: specific error of varuint decode flaw
             return Err(Error::new(
@@ -163,6 +163,6 @@ where
             ));
         }
 
-        Ok(VaruintDyn(decoded.unwrap()))
+        Ok(Varuint(decoded.unwrap()))
     }
 }

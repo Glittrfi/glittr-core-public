@@ -12,7 +12,7 @@ use bitcoincore_rpc::{Auth, Client, RpcApi};
 use serde_json::{json, Value};
 use store::database::{DatabaseError, MESSAGE_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX};
 use transaction::message::OpReturnMessage;
-use varuint_dyn::VaruintDyn;
+use varuint_dyn::Varuint;
 
 // TODO: The database lock could possibly slowing down indexing. Add cache or rate limit for the API.
 #[derive(Clone)]
@@ -25,7 +25,7 @@ pub struct APIState {
 #[derive(Serialize, Deserialize)]
 pub struct ContractInfo {
     pub ticker: Option<String>,
-    pub supply_cap: Option<VaruintDyn<u128>>,
+    pub supply_cap: Option<Varuint<u128>>,
     pub divisibility: u8,
     pub total_supply: U128,
     pub r#type: MintType,

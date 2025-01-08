@@ -8,6 +8,7 @@ use tokio::sync::Mutex;
 
 mod api;
 mod borsh_serde;
+mod compression;
 mod config;
 mod constants;
 mod flaw;
@@ -17,9 +18,7 @@ mod store;
 mod transaction;
 mod types;
 mod updater;
-pub mod varuint;
 pub mod varuint_dyn;
-mod compression;
 
 #[cfg(feature = "helper-api")]
 mod helper_api;
