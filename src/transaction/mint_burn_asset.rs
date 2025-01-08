@@ -43,7 +43,7 @@ pub struct BurnMechanisms {
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct SwapMechanisms {
-    pub fee: Option<U128>,
+    pub fee: Option<Varuint<u128>>,
 }
 
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
@@ -74,7 +74,7 @@ pub struct AccountType {
 pub struct ProportionalType {
     pub ratio_model: RatioModel,
     // The initial mint can be restricted to a state key (utxo)
-    pub inital_mint_pointer_to_key: Option<u32>,
+    pub inital_mint_pointer_to_key: Option<Varuint<u32>>,
 }
 
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]

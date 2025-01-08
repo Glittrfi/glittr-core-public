@@ -6,6 +6,7 @@ mod updater_shared;
 use api::MintType;
 use collateralized::CollateralizedAssetData;
 pub use updater_shared::*;
+use varuint_dyn::Varuint;
 mod spec;
 
 use std::{
@@ -369,8 +370,8 @@ impl Updater {
         };
 
         let block_tx = &BlockTx {
-            block: block_height,
-            tx: tx_index,
+            block: Varuint(block_height),
+            tx: Varuint(tx_index),
         };
         let mut ticker: Option<String> = None;
 
@@ -487,12 +488,12 @@ impl Updater {
                                         proportional_type.inital_mint_pointer_to_key
                                     {
                                         if let Some(flaw) =
-                                            self.validate_pointer(pointer_to_key, tx)
+                                            self.validate_pointer(pointer_to_key.0, tx)
                                         {
                                             outcome.flaw = Some(flaw)
                                         } else {
                                             self.allocate_new_state_key(
-                                                pointer_to_key,
+                                                pointer_to_key.0,
                                                 &block_tx.to_tuple(),
                                             )
                                             .await;
@@ -620,11 +621,11 @@ impl Updater {
         let mut overflow_i = Vec::new();
 
         for (i, transfer) in transfers.iter().enumerate() {
-            if transfer.output >= tx.output.len() as u32 {
+            if transfer.output.0 >= tx.output.len() as u32 {
                 overflow_i.push(i as u32);
                 continue;
             }
-            self.move_asset_allocation(transfer.output, &transfer.asset, transfer.amount.0)
+            self.move_asset_allocation(transfer.output.0, &transfer.asset, transfer.amount.0)
                 .await;
         }
 

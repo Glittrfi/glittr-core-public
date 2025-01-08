@@ -3,19 +3,50 @@ use borsh::io::{Error, ErrorKind};
 use borsh::{BorshDeserialize, BorshSerialize};
 use num_traits::{FromPrimitive, One, ToPrimitive, Unsigned, Zero};
 use serde::{Deserialize, Serialize};
+use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
 use std::{
     io::Read,
     ops::{BitAnd, BitOr, Shl, Shr},
 };
 
-#[derive(PartialEq, Debug, Clone, PartialOrd)]
+#[derive(PartialEq, Debug, Clone, PartialOrd, Copy, Ord, Eq, Hash)]
 pub struct Varuint<T: Unsigned>(pub T);
 
 #[derive(Debug)]
 pub enum VaruintFlaw {
     Overlong,
     Unterminated,
+}
+
+impl<T> Display for Varuint<T>
+where
+    T: Unsigned + Display,
+{
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl<T> FromStr for Varuint<T>
+where
+    T: Unsigned + FromStr,
+{
+    type Err = Box<dyn std::error::Error>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let value = T::from_str(s).ok().ok_or("Invalid varuint number")?;
+        Ok(Varuint(value))
+    }
+}
+
+impl<T> Default for Varuint<T>
+where
+    T: Zero + Unsigned
+{
+    fn default() -> Self {
+        Varuint(T::zero())
+    }
 }
 
 impl<T> Varuint<T>

@@ -4,15 +4,17 @@ use serde::{Deserialize, Serialize};
 
 use bitcoin::OutPoint;
 
-#[derive(Clone, Copy, Debug)]
+use crate::varuint_dyn::Varuint;
+
+#[derive(Clone, Copy, Debug, Default)]
 pub struct BlockTx {
-    pub block: u64,
-    pub tx: u32,
+    pub block: Varuint<u64>,
+    pub tx: Varuint<u32>,
 }
 
-pub type Fraction = (u64, u64);
-pub type BlockTxTuple = (u64, u32);
-pub type BlockHeight = u64;
+pub type Fraction = (Varuint<u64>, Varuint<u64>);
+pub type BlockTxTuple = (Varuint<u64>, Varuint<u32>);
+pub type BlockHeight = Varuint<u64>;
 pub type BitcoinAddress = String;
 pub type BlockTxString = String;
 pub type Pubkey = Vec<u8>;

@@ -160,7 +160,12 @@ impl ContractValidator for SpecContract {
 #[cfg(test)]
 mod test {
     use crate::{
-        message::ContractValidator, mint_burn_asset::MintStructure, spec::{MintBurnAssetCollateralizedSpec, MintBurnAssetSpec}, transaction_shared::{InputAsset, RatioType}, BlockTxTuple, Flaw
+        message::ContractValidator,
+        mint_burn_asset::MintStructure,
+        spec::{MintBurnAssetCollateralizedSpec, MintBurnAssetSpec},
+        transaction_shared::{InputAsset, RatioType},
+        varuint_dyn::Varuint,
+        BlockTxTuple, Flaw,
     };
 
     use super::{MintOnlyAssetSpec, MintOnlyAssetSpecPegInType, SpecContract, SpecContractType};
@@ -218,7 +223,7 @@ mod test {
                     _mutable_assets: false,
                     input_assets: Some(vec![InputAsset::Rune]),
                     mint_structure: Some(MintStructure::Ratio(RatioType::Fixed {
-                        ratio: (10, 10),
+                        ratio: (Varuint(10), Varuint(10)),
                     })),
                 }),
             }),

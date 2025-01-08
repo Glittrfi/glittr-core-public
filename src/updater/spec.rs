@@ -1,5 +1,6 @@
 use database::SPEC_CONTRACT_OWNED_PREFIX;
 use message::ContractCreation;
+use varuint_dyn::Varuint;
 
 use crate::spec::{
     MintBurnAssetCollateralizedSpec, MintOnlyAssetSpecPegInType, SpecContract, SpecContractType,
@@ -21,7 +22,7 @@ impl Updater {
                 return Some(flaw);
             }
 
-            let spec_contract_id = BlockTxTuple::from((block_height, tx_index));
+            let spec_contract_id = BlockTxTuple::from((Varuint(block_height), Varuint(tx_index)));
             self.allocate_new_spec(pointer, &spec_contract_id).await;
         }
 
@@ -192,7 +193,7 @@ mod test {
     use crate::{
         message::ContractType, spec::{
             MintBurnAssetCollateralizedSpec, MintBurnAssetSpec, SpecContract, SpecContractType,
-        }, Flaw
+        }, varuint_dyn::Varuint, Flaw
     };
 
     use super::{
@@ -220,7 +221,7 @@ mod test {
                     _mutable_assets: false,
                     mint_structure: MintStructure::Proportional(ProportionalType {
                         ratio_model: RatioModel::ConstantProduct,
-                        inital_mint_pointer_to_key: Some(100),
+                        inital_mint_pointer_to_key: Some(Varuint(100)),
                     }),
                 }),
             },
@@ -241,7 +242,7 @@ mod test {
                     input_assets: Some(vec![InputAsset::Rune, InputAsset::Ordinal]),
                     mint_structure: Some(MintStructure::Proportional(ProportionalType {
                         ratio_model: RatioModel::ConstantProduct,
-                        inital_mint_pointer_to_key: Some(100),
+                        inital_mint_pointer_to_key: Some(Varuint(100)),
                     })),
                 }),
             }),
@@ -341,7 +342,7 @@ mod test {
                     input_assets: Some(vec![InputAsset::Rune]),
                     mint_structure: Some(MintStructure::Proportional(ProportionalType {
                         ratio_model: RatioModel::ConstantProduct,
-                        inital_mint_pointer_to_key: Some(100),
+                        inital_mint_pointer_to_key: Some(Varuint(100)),
                     })),
                 }),
             }),

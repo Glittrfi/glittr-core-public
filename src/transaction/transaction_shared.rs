@@ -31,7 +31,7 @@ pub struct MintMechanisms {
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct Preallocated {
-    pub allocations: HashMap<U128, AllocationType>,
+    pub allocations: HashMap<Varuint<u128>, AllocationType>,
     pub vesting_plan: Option<VestingPlan>,
 }
 
@@ -62,8 +62,8 @@ pub enum VestingPlan {
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct FreeMint {
-    pub supply_cap: Option<U128>,
-    pub amount_per_mint: U128,
+    pub supply_cap: Option<Varuint<u128>>,
+    pub amount_per_mint: Varuint<u128>,
 }
 
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
@@ -170,7 +170,7 @@ impl FreeMint {
 impl PurchaseBurnSwap {
     pub fn validate(&self) -> Option<Flaw> {
         if let InputAsset::GlittrAsset(block_tx_tuple) = self.input_asset {
-            if block_tx_tuple.1 == 0 {
+            if block_tx_tuple.1.0 == 0 {
                 return Some(Flaw::InvalidBlockTxPointer);
             }
         }
@@ -211,7 +211,7 @@ impl RatioType {
     pub fn validate(&self) -> Option<Flaw> {
         match &self {
             RatioType::Fixed { ratio } => {
-                if ratio.1 == 0 {
+                if ratio.1.0 == 0 {
                     return Some(Flaw::DivideByZero);
                 }
             }

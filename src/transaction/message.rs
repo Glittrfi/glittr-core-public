@@ -15,6 +15,7 @@ use mint_only_asset::MintOnlyAssetContract;
 use spec::SpecContract;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use varuint_dyn::Varuint;
 
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -27,9 +28,9 @@ pub enum ContractType {
 #[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 pub struct MintBurnOption {
-    pub pointer: Option<u32>,
+    pub pointer: Option<Varuint<u32>>,
     pub oracle_message: Option<OracleMessageSigned>,
-    pub pointer_to_key: Option<u32>,
+    pub pointer_to_key: Option<Varuint<u32>>,
     pub assert_values: Option<AssertValues>,
     pub commitment_message: Option<CommitmentMessage>,
 }
@@ -37,16 +38,16 @@ pub struct MintBurnOption {
 #[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 pub struct SwapOption {
-    pub pointer: u32,
+    pub pointer: Varuint<u32>,
     pub assert_values: Option<AssertValues>,
 }
 
 #[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 pub struct AssertValues {
-    pub input_values: Option<Vec<U128>>,
-    pub total_collateralized: Option<Vec<U128>>,
-    pub min_out_value: Option<U128>,
+    pub input_values: Option<Vec<Varuint<u128>>>,
+    pub total_collateralized: Option<Vec<Varuint<u128>>>,
+    pub min_out_value: Option<Varuint<u128>>,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -63,13 +64,13 @@ pub enum CallType {
 
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 pub struct OpenAccountOption {
-    pub pointer_to_key: u32,
-    pub share_amount: U128, // representation of total value of the inputs
+    pub pointer_to_key: Varuint<u32>,
+    pub share_amount: Varuint<u128>, // representation of total value of the inputs
 }
 
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 pub struct CloseAccountOption {
-    pub pointer: u32,
+    pub pointer: Varuint<u32>,
 }
 
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
@@ -84,17 +85,17 @@ pub struct OracleMessage {
     /// the input_outpoint dictates which UTXO is being evaluated by the Oracle
     pub input_outpoint: Option<BitcoinOutpoint>,
     /// min_in_value represents what the input valued at (minimum because btc value could differ (-fee))
-    pub min_in_value: Option<U128>,
+    pub min_in_value: Option<Varuint<u128>>,
     /// out_value represents the oracle's valuation of the input e.g. for 1 btc == 72000 wusd, 72000 is the out_value
-    pub out_value: Option<U128>,
+    pub out_value: Option<Varuint<u128>>,
     /// rune's BlockTx if rune
     pub asset_id: Option<String>,
     // for raw_btc input it is more straightforward using ratio, output = received_value * ratio
     pub ratio: Option<Fraction>,
     pub ltv: Option<Fraction>,
-    pub outstanding: Option<U128>,
+    pub outstanding: Option<Varuint<u128>>,
     // the bitcoin block height when the message is signed
-    pub block_height: u64,
+    pub block_height: Varuint<u64>,
 }
 
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
@@ -123,8 +124,8 @@ pub struct CommitmentMessage {
 #[serde(rename_all = "snake_case")]
 pub struct TxTypeTransfer {
     pub asset: BlockTxTuple,
-    pub output: u32,
-    pub amount: U128,
+    pub output: Varuint<u32>,
+    pub amount: Varuint<u128>,
 }
 
 // TxTypes: Transfer, ContractCreation, ContractCall
@@ -275,7 +276,6 @@ mod test {
 
     use crate::transaction::message::ContractType;
     use crate::transaction::mint_only_asset::MintOnlyAssetContract;
-    use crate::U128;
 
     use super::mint_only_asset::MOAMintMechanisms;
     use super::transaction_shared::FreeMint;
@@ -294,8 +294,8 @@ mod test {
                     end_time: None,
                     mint_mechanism: MOAMintMechanisms {
                         free_mint: Some(FreeMint {
-                            supply_cap: Some(U128(1000)),
-                            amount_per_mint: U128(10),
+                            supply_cap: Some(Varuint(1000)),
+                            amount_per_mint: Varuint(10),
                         }),
                         preallocated: None,
                         purchase: None,
@@ -307,7 +307,7 @@ mod test {
             contract_call: Some(super::ContractCall {
                 contract: None,
                 call_type: super::CallType::Mint(super::MintBurnOption {
-                    pointer: Some(2),
+                    pointer: Some(Varuint(2)),
                     oracle_message: Some(super::OracleMessageSigned {
                         signature: [].to_vec(),
                         message: super::OracleMessage {
@@ -318,13 +318,13 @@ mod test {
                             min_in_value: None,
                             out_value: None,
                             asset_id: None,
-                            block_height: 0,
+                            block_height: Varuint(0),
                             ratio: None,
                             ltv: None,
                             outstanding: None,
                         },
                     }),
-                    pointer_to_key: Some(1),
+                    pointer_to_key: Some(Varuint(1)),
                     assert_values: None,
                     commitment_message: None,
                 }),
@@ -359,8 +359,8 @@ mod test {
                     );
                     assert_eq!(mint_only_asset_contract.divisibility, 18);
                     assert_eq!(mint_only_asset_contract.live_time, 0);
-                    assert_eq!(free_mint.supply_cap, Some(U128(1000)));
-                    assert_eq!(free_mint.amount_per_mint, U128(10));
+                    assert_eq!(free_mint.supply_cap, Some(Varuint(1000)));
+                    assert_eq!(free_mint.amount_per_mint, Varuint(10));
                 }
                 _ => panic!("Invalid contract type"),
             }

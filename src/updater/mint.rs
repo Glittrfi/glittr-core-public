@@ -47,12 +47,12 @@ impl Updater {
 
         // check pointer overflow
         if let Some(pointer) = mint_option.pointer {
-            if let Some(flaw) = self.validate_pointer(pointer, tx) {
+            if let Some(flaw) = self.validate_pointer(pointer.0, tx) {
                 return Some(flaw);
             }
 
             // allocate enw asset for the mint
-            self.allocate_new_asset(pointer, contract_id, free_mint.amount_per_mint.0)
+            self.allocate_new_asset(pointer.0, contract_id, free_mint.amount_per_mint.0)
                 .await;
         }
 
@@ -228,11 +228,11 @@ impl Updater {
         }
 
         if let Some(pointer) = mint_option.pointer {
-            if let Some(flaw) = self.validate_pointer(pointer, tx) {
+            if let Some(flaw) = self.validate_pointer(pointer.0, tx) {
                 return Some(flaw);
             }
 
-            self.allocate_new_asset(pointer, contract_id, out_value)
+            self.allocate_new_asset(pointer.0, contract_id, out_value)
                 .await;
         }
 
@@ -349,7 +349,7 @@ impl Updater {
 
                         if block_tx.block >= vested_block_height {
                             vested_allocation = vested_allocation.saturating_add(
-                                (total_allocation * ratio.0 as u128) / ratio.1 as u128,
+                                (total_allocation * ratio.0.0 as u128) / ratio.1.0 as u128,
                             );
                         }
                     }
@@ -384,7 +384,7 @@ impl Updater {
         }
 
         if let Some(pointer) = mint_option.pointer {
-            if let Some(flaw) = self.validate_pointer(pointer, tx) {
+            if let Some(flaw) = self.validate_pointer(pointer.0, tx) {
                 return Some(flaw);
             }
         }
@@ -397,10 +397,10 @@ impl Updater {
             .await;
 
         if let Some(pointer) = mint_option.pointer {
-            if let Some(flaw) = self.validate_pointer(pointer, tx) {
+            if let Some(flaw) = self.validate_pointer(pointer.0, tx) {
                 return Some(flaw);
             }
-            self.allocate_new_asset(pointer, contract_id, out_value)
+            self.allocate_new_asset(pointer.0, contract_id, out_value)
                 .await;
         }
 
@@ -426,8 +426,8 @@ impl Updater {
                         if let Some(flaw) = check_live_time(
                             moa.live_time,
                             moa.end_time,
-                            contract_id.0,
-                            block_tx.block,
+                            contract_id.0.0,
+                            block_tx.block.0,
                         ) {
                             return Some(flaw);
                         }
@@ -492,8 +492,8 @@ impl Updater {
                         if let Some(flaw) = check_live_time(
                             mba.live_time,
                             mba.end_time,
-                            contract_id.0,
-                            block_tx.block,
+                            contract_id.0.0,
+                            block_tx.block.0,
                         ) {
                             return Some(flaw);
                         }

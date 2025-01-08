@@ -12,9 +12,13 @@ pub fn relative_block_height_to_block_height(
     current_block_height: BlockHeight,
 ) -> BlockHeight {
     if block_height_relative_absolute < 0 {
-        current_block_height.saturating_add(-block_height_relative_absolute as u64)
+        Varuint(
+            current_block_height
+                .0
+                .saturating_add(-block_height_relative_absolute as u64),
+        )
     } else {
-        block_height_relative_absolute as u64
+        Varuint(block_height_relative_absolute as u64)
     }
 }
 
@@ -24,12 +28,14 @@ pub fn check_live_time(
     contract_block: u64,
     current_block: u64,
 ) -> Option<Flaw> {
-    if relative_block_height_to_block_height(live_time, contract_block) > current_block {
+    if relative_block_height_to_block_height(live_time, Varuint(contract_block)).0 > current_block {
         return Some(Flaw::ContractIsNotLive);
     }
 
     if let Some(end_time) = end_time {
-        if relative_block_height_to_block_height(end_time, contract_block) < current_block {
+        if relative_block_height_to_block_height(end_time, Varuint(contract_block)).0
+            < current_block
+        {
             return Some(Flaw::ContractIsNotLive);
         }
     }
@@ -92,7 +98,7 @@ impl Updater {
         }
 
         // Check block height slippage
-        if block_tx.block - oracle_message.message.block_height
+        if block_tx.block.0 - oracle_message.message.block_height.0
             > setting.block_height_slippage as u64
         {
             return Some(Flaw::OracleMintBlockSlippageExceeded);
@@ -134,7 +140,7 @@ impl Updater {
         amount: u128,
         is_mint: bool,
         is_free_mint: bool,
-        free_mint_supply: Option<U128>,
+        free_mint_supply: Option<Varuint<u128>>,
     ) -> Option<Flaw> {
         let mut data = match self.get_asset_contract_data(contract_id).await {
             Ok(data) => data,
@@ -181,9 +187,9 @@ impl Updater {
         match ratio {
             RatioType::Fixed { ratio } => {
                 if !is_burn {
-                    Ok((total_received_value * ratio.0 as u128) / ratio.1 as u128)
+                    Ok((total_received_value * ratio.0 .0 as u128) / ratio.1 .0 as u128)
                 } else {
-                    Ok((total_received_value * ratio.1 as u128) / ratio.0 as u128)
+                    Ok((total_received_value * ratio.1 .0 as u128) / ratio.0 .0 as u128)
                 }
             }
             RatioType::Oracle { setting } => {
@@ -202,8 +208,8 @@ impl Updater {
                                 is_btc = true;
                                 if let Some(ratio) = oracle_message_signed.message.ratio {
                                     return Ok(total_received_value
-                                        .saturating_mul(ratio.0 as u128)
-                                        .saturating_div(ratio.1 as u128));
+                                        .saturating_mul(ratio.0 .0 as u128)
+                                        .saturating_div(ratio.1 .0 as u128));
                                 }
                             }
                         }

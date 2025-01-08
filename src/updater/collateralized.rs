@@ -1,5 +1,6 @@
 use num::integer::Roots;
 use std::cmp::min;
+use varuint_dyn::Varuint;
 
 use super::*;
 use crate::updater::database::COLLATERAL_ACCOUNTS_PREFIX;
@@ -134,8 +135,8 @@ impl Updater {
                         let available_amount = collateral_account.total_collateral_amount
                             - (collateral_account
                                 .total_collateral_amount
-                                .saturating_mul(collateral_account.ltv.0 as u128))
-                            .saturating_div(collateral_account.ltv.1 as u128);
+                                .saturating_mul(collateral_account.ltv.0 .0 as u128))
+                            .saturating_div(collateral_account.ltv.1 .0 as u128);
 
                         input_values.push(available_amount);
 
@@ -143,14 +144,14 @@ impl Updater {
                         let allowed_amount = min(
                             collateral_account
                                 .total_collateral_amount
-                                .saturating_mul(account_type.max_ltv.0 as u128)
-                                .saturating_div(account_type.max_ltv.1 as u128),
+                                .saturating_mul(account_type.max_ltv.0 .0 as u128)
+                                .saturating_div(account_type.max_ltv.1 .0 as u128),
                             available_amount,
                         );
 
                         out_value = allowed_amount
-                            .saturating_mul(ratio.0 as u128)
-                            .saturating_div(ratio.1 as u128);
+                            .saturating_mul(ratio.0 .0 as u128)
+                            .saturating_div(ratio.1 .0 as u128);
 
                         collateral_account.ltv = account_type.max_ltv;
                         collateral_account.amount_outstanding = out_value;
@@ -208,12 +209,12 @@ impl Updater {
                 }
 
                 if let Some(pointer_to_key) = mint_option.pointer_to_key {
-                    if let Some(flaw) = self.validate_pointer(pointer_to_key, tx) {
+                    if let Some(flaw) = self.validate_pointer(pointer_to_key.0, tx) {
                         return Some(flaw);
                     }
 
                     self.allocate_new_collateral_accounts(
-                        pointer_to_key,
+                        pointer_to_key.0,
                         &collateral_account,
                         BlockTx::from_tuple(*contract_id).to_string(),
                     )
@@ -340,12 +341,12 @@ impl Updater {
 
                                     if let Some(pointer_to_key) = mint_option.pointer_to_key {
                                         if let Some(flaw) =
-                                            self.validate_pointer(pointer_to_key, tx)
+                                            self.validate_pointer(pointer_to_key.0, tx)
                                         {
                                             return Some(flaw);
                                         }
 
-                                        self.allocate_new_state_key(pointer_to_key, contract_id)
+                                        self.allocate_new_state_key(pointer_to_key.0, contract_id)
                                             .await;
                                     }
                                 }
@@ -411,12 +412,12 @@ impl Updater {
 
         // check pointer overflow
         if let Some(pointer) = mint_option.pointer {
-            if let Some(flaw) = self.validate_pointer(pointer, tx) {
+            if let Some(flaw) = self.validate_pointer(pointer.0, tx) {
                 return Some(flaw);
             }
 
             // allocate enw asset for the mint
-            self.allocate_new_asset(pointer, contract_id, out_value)
+            self.allocate_new_asset(pointer.0, contract_id, out_value)
                 .await;
         }
 
@@ -444,7 +445,7 @@ impl Updater {
         let collateral_account = collateral_account.unwrap();
 
         // Validate LTV is 0 and no outstanding amounts
-        if collateral_account.ltv.0 != 0 {
+        if collateral_account.ltv.0 .0 != 0 {
             return Some(Flaw::LtvMustBeZero);
         }
 
@@ -453,13 +454,13 @@ impl Updater {
         }
 
         // Validate pointer for output
-        if let Some(flaw) = self.validate_pointer(close_account_option.pointer, tx) {
+        if let Some(flaw) = self.validate_pointer(close_account_option.pointer.0, tx) {
             return Some(flaw);
         }
 
         // Return collateral assets to user
         for (asset_id, amount) in collateral_account.collateral_amounts {
-            self.allocate_new_asset(close_account_option.pointer, &asset_id, amount)
+            self.allocate_new_asset(close_account_option.pointer.0, &asset_id, amount)
                 .await;
         }
 
@@ -523,16 +524,16 @@ impl Updater {
             collateral_amounts,
             total_collateral_amount,
             share_amount: open_account_option.share_amount.0,
-            ltv: (0, 100),
+            ltv: (Varuint(0), Varuint(100)),
             amount_outstanding: 0,
         };
 
-        if let Some(flaw) = self.validate_pointer(open_account_option.pointer_to_key, tx) {
+        if let Some(flaw) = self.validate_pointer(open_account_option.pointer_to_key.0, tx) {
             return Some(flaw);
         }
 
         self.allocate_new_collateral_accounts(
-            open_account_option.pointer_to_key,
+            open_account_option.pointer_to_key.0,
             &collateral_account,
             BlockTx::from_tuple(*contract_id).to_string(),
         )
@@ -702,13 +703,13 @@ impl Updater {
                                 );
                             }
 
-                            if let Some(flaw) = self.validate_pointer(swap_option.pointer, tx) {
+                            if let Some(flaw) = self.validate_pointer(swap_option.pointer.0, tx) {
                                 return Some(flaw);
                             }
 
                             // Allocate output asset
                             self.allocate_new_asset(
-                                swap_option.pointer,
+                                swap_option.pointer.0,
                                 &other_asset_id,
                                 out_value,
                             )

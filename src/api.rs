@@ -146,11 +146,15 @@ async fn get_block_tx(
     State(state): State<APIState>,
     Path((block, tx)): Path<(u64, u32)>,
 ) -> Result<Json<Value>, StatusCode> {
-    let message: Result<MessageDataOutcome, DatabaseError> = state
-        .database
-        .lock()
-        .await
-        .get(MESSAGE_PREFIX, BlockTx { block, tx }.to_string().as_str());
+    let message: Result<MessageDataOutcome, DatabaseError> = state.database.lock().await.get(
+        MESSAGE_PREFIX,
+        BlockTx {
+            block: Varuint(block),
+            tx: Varuint(tx),
+        }
+        .to_string()
+        .as_str(),
+    );
 
     if let Ok(message) = message {
         Ok(Json(json!({"is_valid": true, "message": message})))
@@ -226,9 +230,12 @@ async fn get_asset_contract(
     Path((block, tx)): Path<(u64, u32)>,
 ) -> Result<Json<Value>, StatusCode> {
     let updater = Updater::new(state.database, true).await;
-    if let Ok(asset_contract_data) = updater.get_asset_contract_data(&(block, tx)).await {
+    if let Ok(asset_contract_data) = updater
+        .get_asset_contract_data(&(Varuint(block), Varuint(tx)))
+        .await
+    {
         let contract_info = updater
-            .get_contract_info_by_block_tx((block, tx))
+            .get_contract_info_by_block_tx((Varuint(block), Varuint(tx)))
             .await
             .unwrap();
         Ok(Json(
@@ -244,11 +251,12 @@ async fn get_collateralized_contract(
     Path((block, tx)): Path<(u64, u32)>,
 ) -> Result<Json<Value>, StatusCode> {
     let updater = Updater::new(state.database, true).await;
-    if let Ok(collateralized_contract_data) =
-        updater.get_collateralized_contract_data(&(block, tx)).await
+    if let Ok(collateralized_contract_data) = updater
+        .get_collateralized_contract_data(&(Varuint(block), Varuint(tx)))
+        .await
     {
         let contract_info = updater
-            .get_contract_info_by_block_tx((block, tx))
+            .get_contract_info_by_block_tx((Varuint(block), Varuint(tx)))
             .await
             .unwrap();
 

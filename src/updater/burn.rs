@@ -191,12 +191,12 @@ impl Updater {
 
                                 if burned_remainder > 0 {
                                     if let Some(pointer) = burn_option.pointer {
-                                        if let Some(flaw) = self.validate_pointer(pointer, tx) {
+                                        if let Some(flaw) = self.validate_pointer(pointer.0, tx) {
                                             return Some(flaw);
                                         }
 
                                         self.allocate_new_asset(
-                                            pointer,
+                                            pointer.0,
                                             &contract_id,
                                             burned_remainder,
                                         )
@@ -215,12 +215,12 @@ impl Updater {
                     }
 
                     if let Some(pointer_to_key) = burn_option.pointer_to_key {
-                        if let Some(flaw) = self.validate_pointer(pointer_to_key, tx) {
+                        if let Some(flaw) = self.validate_pointer(pointer_to_key.0, tx) {
                             return Some(flaw);
                         }
 
                         self.allocate_new_collateral_accounts(
-                            pointer_to_key,
+                            pointer_to_key.0,
                             &collateral_account,
                             BlockTx::from_tuple(*contract_id).to_string(),
                         )
@@ -248,14 +248,14 @@ impl Updater {
             }
 
             if let Some(pointer) = burn_option.pointer {
-                if let Some(flaw) = self.validate_pointer(pointer, tx) {
+                if let Some(flaw) = self.validate_pointer(pointer.0, tx) {
                     return Some(flaw);
                 }
 
                 // allocate return collateral
                 for (pos, out_value) in out_values.iter().enumerate() {
                     if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[pos] {
-                        self.allocate_new_asset(pointer, &asset_id, *out_value)
+                        self.allocate_new_asset(pointer.0, &asset_id, *out_value)
                             .await;
                     }
                 }
@@ -281,7 +281,7 @@ impl Updater {
                     ContractType::Moa(_moa) => None,
                     ContractType::Mba(mba) => {
 
-                        if let Some(flaw) = check_live_time(mba.live_time, mba.end_time, contract_id.0, block_tx.block) {
+                        if let Some(flaw) = check_live_time(mba.live_time, mba.end_time, contract_id.0.0, block_tx.block.0) {
                             return Some(flaw);
                         }
 
