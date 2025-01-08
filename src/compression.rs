@@ -44,14 +44,14 @@ impl Compression for Brotli {
         let mut comp = CompressorReader::with_params(data, self.buffer_size, &params);
 
         let mut compressed_data = Vec::new();
-        comp.read_to_end(&mut compressed_data).unwrap();
+        comp.read_to_end(&mut compressed_data)?;
         Ok(compressed_data)
     }
 
     fn decompress(&mut self, data: &[u8]) -> io::Result<Vec<u8>> {
         let mut decomp = Decompressor::new(data, self.buffer_size);
         let mut decompressed_data = Vec::new();
-        decomp.read_to_end(&mut decompressed_data).unwrap();
+        decomp.read_to_end(&mut decompressed_data)?;
         Ok(decompressed_data)
     }
 }
