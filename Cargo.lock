@@ -957,6 +957,7 @@ dependencies = [
  "miniz_oxide",
  "mockcore",
  "num",
+ "num-traits",
  "paste",
  "rand",
  "rocksdb",

@@ -5,7 +5,7 @@ use bitcoin::{PublicKey, XOnlyPublicKey};
 use message::ContractType;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use varuint::Varuint;
+use varuint_dyn::VaruintDyn;
 
 pub trait ContractValidator {
     fn validate(&self) -> Option<Flaw>;
@@ -76,7 +76,7 @@ pub struct PurchaseBurnSwap {
 
 impl Preallocated {
     pub fn validate(&self, contract: &ContractType) -> Option<Flaw> {
-        let supply_cap: Option<Varuint>;
+        let supply_cap: Option<VaruintDyn<u128>>;
         let free_mint: Option<FreeMint>;
         match contract {
             ContractType::Moa(mint_only_asset_contract) => {
@@ -185,7 +185,9 @@ impl PurchaseBurnSwap {
     }
 }
 
-#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Copy, Debug, PartialEq)]
+#[derive(
+    Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Copy, Debug, PartialEq,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum InputAsset {
     RawBtc,

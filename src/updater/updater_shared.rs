@@ -3,7 +3,7 @@ use growable_bloom_filter::GrowableBloom;
 use message::{AssertValues, MintBurnOption, OracleMessageSigned};
 use miniz_oxide::{deflate::compress_to_vec, inflate::decompress_to_vec};
 use transaction_shared::{OracleSetting, RatioType};
-use varuint::Varuint;
+use varuint_dyn::VaruintDyn;
 
 use super::*;
 
@@ -22,7 +22,7 @@ pub fn check_live_time(
     live_time: RelativeOrAbsoluteBlockHeight,
     end_time: Option<RelativeOrAbsoluteBlockHeight>,
     contract_block: u64,
-    current_block: u64
+    current_block: u64,
 ) -> Option<Flaw> {
     if relative_block_height_to_block_height(live_time, contract_block) > current_block {
         return Some(Flaw::ContractIsNotLive);
@@ -62,12 +62,8 @@ impl Updater {
         let contract_block_tx = self.get_contract_block_tx_by_ticker(ticker).await;
 
         match contract_block_tx {
-            Ok(_) => {
-                Some(Flaw::TickerAlreadyExist)
-            }
-            Err(Flaw::FailedDeserialization) => {
-                Some(Flaw::FailedDeserialization)
-            }
+            Ok(_) => Some(Flaw::TickerAlreadyExist),
+            Err(Flaw::FailedDeserialization) => Some(Flaw::FailedDeserialization),
             _ => None,
         }
     }
@@ -134,7 +130,7 @@ impl Updater {
     pub async fn validate_and_update_supply_cap(
         &mut self,
         contract_id: &BlockTxTuple,
-        supply_cap: Option<Varuint>,
+        supply_cap: Option<VaruintDyn<u128>>,
         amount: u128,
         is_mint: bool,
         is_free_mint: bool,

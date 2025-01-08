@@ -1,23 +1,25 @@
 use super::*;
 use message::{Commitment, ContractValidator};
-use transaction_shared::{FreeMint, InputAsset, OracleSetting, Preallocated, PurchaseBurnSwap, RatioType};
+use transaction_shared::{
+    FreeMint, InputAsset, OracleSetting, Preallocated, PurchaseBurnSwap, RatioType,
+};
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use varuint::Varuint;
+use varuint_dyn::VaruintDyn;
 
 #[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MintBurnAssetContract {
     pub ticker: Option<String>,
-    pub supply_cap: Option<Varuint>,
+    pub supply_cap: Option<VaruintDyn<u128>>,
     pub divisibility: u8,
     pub live_time: RelativeOrAbsoluteBlockHeight,
     pub end_time: Option<RelativeOrAbsoluteBlockHeight>,
     pub mint_mechanism: MBAMintMechanisms,
     pub burn_mechanism: BurnMechanisms,
     pub swap_mechanism: SwapMechanisms,
-    pub commitment: Option<Commitment>
+    pub commitment: Option<Commitment>,
 }
 
 #[serde_with::skip_serializing_none]
@@ -72,13 +74,13 @@ pub struct AccountType {
 pub struct ProportionalType {
     pub ratio_model: RatioModel,
     // The initial mint can be restricted to a state key (utxo)
-    pub inital_mint_pointer_to_key: Option<u32>, 
+    pub inital_mint_pointer_to_key: Option<u32>,
 }
 
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum RatioModel {
-    ConstantProduct
+    ConstantProduct,
 }
 
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
@@ -102,16 +104,15 @@ impl ContractValidator for Collateralized {
         match &self.mint_structure {
             MintStructure::Ratio(ratio_type) => {
                 if self.input_assets.len() != 1 {
-                    return Some(Flaw::InputAssetsOnlyOneForRatio)
+                    return Some(Flaw::InputAssetsOnlyOneForRatio);
                 }
-                return ratio_type.validate()
+                return ratio_type.validate();
             }
-                ,
             MintStructure::Proportional(_proportional_type) => {
                 if self.input_assets.len() != 2 {
-                    return Some(Flaw::InputAssetsOnlyTwoForProportional)
+                    return Some(Flaw::InputAssetsOnlyTwoForProportional);
                 }
-            },
+            }
             MintStructure::Account(account) => {
                 if account.max_ltv.0 > account.max_ltv.1 {
                     return Some(Flaw::FractionInvalid);

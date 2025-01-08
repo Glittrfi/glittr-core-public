@@ -7,9 +7,9 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use crate::{varuint::Varuint, BitcoinOutpoint, U128};
 
-const ERROR_UNEXPECTED_LENGTH_OF_INPUT: &str = "Unexpected length of input";
+pub const ERROR_UNEXPECTED_LENGTH_OF_INPUT: &str = "Unexpected length of input";
 
-fn unexpected_eof_to_unexpected_length_of_input(e: Error) -> Error {
+pub fn unexpected_eof_to_unexpected_length_of_input(e: Error) -> Error {
     if e.kind() == ErrorKind::UnexpectedEof {
         Error::new(ErrorKind::InvalidData, ERROR_UNEXPECTED_LENGTH_OF_INPUT)
     } else {
