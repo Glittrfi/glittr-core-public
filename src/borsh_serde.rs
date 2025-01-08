@@ -64,34 +64,31 @@ impl BorshDeserialize for BitcoinOutpoint {
     }
 }
 
-// Varuint: size of data + data
 impl BorshSerialize for Varuint {
     fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
         let varuint = self.encode_to_vec();
-        let size = (varuint.len() as u8).to_le_bytes();
-
-        let mut bytes = vec![size[0]];
-        bytes.extend(varuint);
-
-        writer.write_all(&bytes)
+        writer.write_all(&varuint)
     }
 }
 
-// Varuint: size of data + data
 impl BorshDeserialize for Varuint {
     fn deserialize_reader<R: Read>(reader: &mut R) -> Result<Self, Error> {
-        let mut size_bytes = [0u8; 1];
-        reader
-            .read_exact(&mut size_bytes)
-            .map_err(unexpected_eof_to_unexpected_length_of_input)?;
+        let mut bytes: Vec<u8> = Vec::new();
 
-        let varuint_size: u8 = u8::from_le_bytes(size_bytes);
-        let mut data_bytes = vec![0; varuint_size.into()];
-        reader
-            .read_exact(&mut data_bytes)
-            .map_err(unexpected_eof_to_unexpected_length_of_input)?;
+        loop {
+            let mut byte = [0u8; 1];
+            reader
+                .read_exact(&mut byte)
+                .map_err(unexpected_eof_to_unexpected_length_of_input)?;
 
-        let decoded = Varuint::decode(&data_bytes);
+            bytes.push(byte[0]);
+
+            if byte[0] & 128 == 0 {
+                break;
+            }
+        }
+
+        let decoded = Varuint::decode(&bytes);
         if decoded.is_err() {
             // TODO: specific error of varuint decode flaw
             return Err(Error::new(ErrorKind::InvalidData, "Varuint decode error"));
