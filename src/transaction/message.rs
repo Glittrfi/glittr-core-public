@@ -209,8 +209,12 @@ impl OpReturnMessage {
 
         // TODO: singleton for brotli
         let mut brotli = Brotli::new(11, 22, 4096);
-        let decompress = brotli.decompress(&payload).unwrap();
-        let message = borsh::from_slice::<OpReturnMessage>(&decompress);
+        let decompresed = brotli.decompress(&payload);
+        if let Err(_) = decompresed {
+            return Err(Flaw::FailedDeserialization);
+        }
+
+        let message = borsh::from_slice::<OpReturnMessage>(&decompresed.unwrap());
 
         match message {
             Ok(message) => {
