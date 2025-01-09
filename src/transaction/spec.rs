@@ -4,7 +4,7 @@ use mint_burn_asset::MintStructure;
 use transaction_shared::InputAsset;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use varuint_dyn::Varuint;
+use varuint::Varuint;
 
 use super::*;
 
@@ -165,7 +165,7 @@ mod test {
         mint_burn_asset::MintStructure,
         spec::{MintBurnAssetCollateralizedSpec, MintBurnAssetSpec},
         transaction_shared::{InputAsset, RatioType},
-        varuint_dyn::Varuint,
+        varuint::Varuint,
         BlockTxTuple, Flaw,
     };
 

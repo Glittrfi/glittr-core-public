@@ -6,7 +6,7 @@ use transaction_shared::{
 };
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use varuint_dyn::Varuint;
+use varuint::Varuint;
 
 #[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]

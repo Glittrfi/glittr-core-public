@@ -16,7 +16,7 @@ use mint_only_asset::MintOnlyAssetContract;
 use spec::SpecContract;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use varuint_dyn::Varuint;
+use varuint::Varuint;
 
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -284,7 +284,7 @@ mod test {
 
     use super::mint_only_asset::MOAMintMechanisms;
     use super::transaction_shared::FreeMint;
-    use super::varuint_dyn::Varuint;
+    use super::varuint::Varuint;
     use super::{ContractCreation, OpReturnMessage};
 
     fn create_dummy_tx() -> Transaction {

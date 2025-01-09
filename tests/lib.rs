@@ -33,7 +33,7 @@ use glittr::{
         AllocationType, BloomFilterArgType, FreeMint, InputAsset, OracleSetting, Preallocated,
         PurchaseBurnSwap, RatioType, VestingPlan,
     },
-    varuint_dyn::Varuint,
+    varuint::Varuint,
     AssetContractData, AssetList, BlockTx, BlockTxTuple, CollateralAccounts, Flaw, Indexer,
     MessageDataOutcome,
 };

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use bitcoin::OutPoint;
 
-use crate::varuint_dyn::Varuint;
+use crate::varuint::Varuint;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct BlockTx {

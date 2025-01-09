@@ -5,7 +5,7 @@ use bitcoin::{PublicKey, XOnlyPublicKey};
 use message::ContractType;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use varuint_dyn::Varuint;
+use varuint::Varuint;
 
 pub trait ContractValidator {
     fn validate(&self) -> Option<Flaw>;

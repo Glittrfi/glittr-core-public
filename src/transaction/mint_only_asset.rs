@@ -3,7 +3,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use flaw::Flaw;
 use message::{Commitment, ContractValidator};
 use transaction_shared::{FreeMint, Preallocated, PurchaseBurnSwap};
-use varuint_dyn::Varuint;
+use varuint::Varuint;
 
 use super::*;
 

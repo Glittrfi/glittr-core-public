@@ -6,7 +6,7 @@ mod updater_shared;
 use api::MintType;
 use collateralized::CollateralizedAssetData;
 pub use updater_shared::*;
-use varuint_dyn::Varuint;
+use varuint::Varuint;
 mod spec;
 
 use std::{

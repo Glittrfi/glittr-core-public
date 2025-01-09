@@ -13,7 +13,7 @@ use bitcoincore_rpc::{Auth, Client, RpcApi};
 use serde_json::{json, Value};
 use store::database::{DatabaseError, MESSAGE_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX};
 use transaction::message::OpReturnMessage;
-use varuint_dyn::Varuint;
+use varuint::Varuint;
 
 // TODO: The database lock could possibly slowing down indexing. Add cache or rate limit for the API.
 #[derive(Clone)]

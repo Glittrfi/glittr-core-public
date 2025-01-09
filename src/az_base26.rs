@@ -7,7 +7,7 @@ use std::{
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
-use crate::varuint_dyn::Varuint;
+use crate::varuint::Varuint;
 
 #[derive(Debug, BorshSerialize, BorshDeserialize, Clone)]
 pub struct AZBase26(pub Varuint<u128>);
