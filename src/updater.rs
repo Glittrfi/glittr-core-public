@@ -410,12 +410,13 @@ impl Updater {
                     ContractType::Moa(mint_only_asset_contract) => {
                         if outcome.flaw.is_none() {
                             if let Some(_ticker) = mint_only_asset_contract.ticker {
-                                if let Some(ticker_flaw) =
-                                    self.validate_ticker_not_exist(_ticker.clone()).await
+                                if let Some(ticker_flaw) = self
+                                    .validate_ticker_not_exist(_ticker.clone().to_string())
+                                    .await
                                 {
                                     outcome.flaw = Some(ticker_flaw);
                                 } else {
-                                    ticker = Some(_ticker);
+                                    ticker = Some(_ticker.to_string());
                                 }
                             }
                         }
@@ -438,12 +439,13 @@ impl Updater {
                     ContractType::Mba(mint_burn_asset_contract) => {
                         if outcome.flaw.is_none() {
                             if let Some(_ticker) = mint_burn_asset_contract.ticker {
-                                if let Some(ticker_flaw) =
-                                    self.validate_ticker_not_exist(_ticker.clone()).await
+                                if let Some(ticker_flaw) = self
+                                    .validate_ticker_not_exist(_ticker.clone().to_string())
+                                    .await
                                 {
                                     outcome.flaw = Some(ticker_flaw);
                                 } else {
-                                    ticker = Some(_ticker);
+                                    ticker = Some(_ticker.to_string());
                                 }
                             }
                         }

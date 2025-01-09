@@ -1,6 +1,7 @@
 use std::fmt;
 
 use super::*;
+use az_base26::AZBase26;
 use bitcoin::{
     opcodes,
     script::{self, Instruction, PushBytes},
@@ -106,7 +107,7 @@ pub struct Commitment {
 
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 pub struct ArgsCommitment {
-    pub fixed_string: String,
+    pub fixed_string: AZBase26,
     pub string: String,
 }
 

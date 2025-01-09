@@ -19,6 +19,7 @@ mod transaction;
 mod types;
 mod updater;
 pub mod varuint_dyn;
+pub mod az_base26;
 
 #[cfg(feature = "helper-api")]
 mod helper_api;
