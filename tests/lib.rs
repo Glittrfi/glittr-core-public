@@ -3586,7 +3586,7 @@ async fn test_integration_glittr_airdrop() {
 async fn test_integration_contract_ticker() {
     let mut ctx = TestContext::new().await;
 
-    let ticker = AZBase26::from_str("POHONPISANG").unwrap();
+    let ticker = AZBase26::from_str("POHON.PISANG").unwrap();
 
     let contract_message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
