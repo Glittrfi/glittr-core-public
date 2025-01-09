@@ -2,7 +2,10 @@
 /// but will help the initial integration with dApps.
 /// These helpers APIs will take more storage resources.
 /// It is best for dApps to run their own API to ensure decentralization
-use crate::{APIState, BlockTx, BlockTxString, ContractInfo, MintType, Updater, U128};
+use crate::{
+    az_base26::AZBase26, varuint::Varuint, APIState, BlockTx, BlockTxString, ContractInfo,
+    MintType, Updater,
+};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -14,13 +17,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{collections::HashMap, str::FromStr};
 
-
-
 #[derive(Serialize, Deserialize)]
 struct AssetBalance {
     contract_id: BlockTxString,
-    balance: U128,
-    ticker: Option<String>,
+    balance: Varuint<u128>,
+    ticker: Option<AZBase26>,
     divisibility: u8,
     r#type: MintType,
 }
@@ -146,7 +147,7 @@ async fn helper_get_address_valid_outputs(
                         balance,
                         ticker: contract_info.ticker,
                         divisibility: contract_info.divisibility,
-                        r#type: contract_info.r#type
+                        r#type: contract_info.r#type,
                     })
                 }
 
@@ -193,10 +194,10 @@ async fn helper_get_assets_in_outpoint(
 
                 asset_balances.push(AssetBalance {
                     contract_id,
-                    balance: U128(balance),
+                    balance: Varuint(balance),
                     ticker: contract_info.ticker,
                     divisibility: contract_info.divisibility,
-                    r#type: contract_info.r#type
+                    r#type: contract_info.r#type,
                 });
             }
             let block_height = updater.get_last_indexed_block().await;

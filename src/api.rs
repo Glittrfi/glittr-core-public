@@ -28,7 +28,7 @@ pub struct ContractInfo {
     pub ticker: Option<AZBase26>,
     pub supply_cap: Option<Varuint<u128>>,
     pub divisibility: u8,
-    pub total_supply: U128,
+    pub total_supply: Varuint<u128>,
     pub r#type: MintType,
 }
 

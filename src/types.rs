@@ -58,34 +58,6 @@ impl FromStr for BlockTx {
     }
 }
 
-/// U128 is wrapped u128, represented as string when serialized
-/// This is because JSON only supports up to u32 as integer representation
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct U128(pub u128);
-
-// for now, the serde parser is only used for JSON.
-impl Serialize for U128 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&self.0.to_string())
-    }
-}
-
-// for now, the serde parser is only used for JSON.
-impl<'de> Deserialize<'de> for U128 {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let s: String = Deserialize::deserialize(deserializer)?;
-        Ok(Self(str::parse::<u128>(&s).map_err(|err| {
-            serde::de::Error::custom(err.to_string())
-        })?))
-    }
-}
-
 // internal wrapper for bitcoin outpoint
 #[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq)]
 pub struct BitcoinOutpoint(pub OutPoint);
