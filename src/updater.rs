@@ -1031,6 +1031,41 @@ impl Updater {
         Ok(())
     }
 
+    #[cfg(feature = "helper-api")]
+    pub async fn expensive_get_all_messages(&self) -> Vec<BlockTxTuple> {
+        use database::MESSAGE_PREFIX;
+
+        let all_messages: Result<Vec<BlockTxTuple>, DatabaseError> = self
+            .database
+            .lock()
+            .await
+            .expensive_find_by_prefix(MESSAGE_PREFIX)
+            .map(|vec: Vec<(String, MessageDataOutcome)>| {
+                vec.into_iter()
+                    .filter(|(_, v)| {
+                        v.flaw.is_none()
+                            && v.message.is_some()
+                            && v.message.clone().unwrap().contract_creation.is_some()
+                    })
+                    .map(|(k, _)| {
+                        BlockTx::from_str(
+                            k.trim_start_matches(&format!("{}:", MESSAGE_PREFIX))
+                                .to_string()
+                                .as_str(),
+                        )
+                        .unwrap()
+                        .to_tuple()
+                    })
+                    .collect()
+            });
+
+        if all_messages.is_ok() {
+            return all_messages.unwrap();
+        } else {
+            return Vec::new();
+        }
+    }
+
     pub async fn get_last_indexed_block(&self) -> Option<u64> {
         let last_indexed_block: Option<u64> = self
             .database
