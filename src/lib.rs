@@ -11,11 +11,11 @@ mod config;
 mod constants;
 mod flaw;
 mod indexer;
+mod macros;
 mod store;
 mod transaction;
 mod types;
 mod updater;
-mod macros;
 
 #[cfg(feature = "helper-api")]
 mod helper_api;
@@ -38,6 +38,16 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
     let database = Arc::new(Mutex::new(Database::new(CONFIG.rocks_db_path.clone())));
     let database_indexer = Arc::clone(&database);
 
+    // Add Ctrl+C handling
+    let shutdown_signal= Arc::new(Mutex::new(false));
+    let shutdown_signal_indexer = Arc::clone(&shutdown_signal);
+
+    ctrlc::set_handler(move || {
+        log::warn!("Ctrl+C pressed, waiting for the process to gracefully exit.");
+        *shutdown_signal.blocking_lock() = true;
+    })
+    .expect("Error setting Ctrl+C handler");
+
     let indexer_handle = tokio::spawn(async {
         let mut current_indexer = Indexer::new(
             database_indexer,
@@ -47,7 +57,7 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
         )
         .await
         .expect("New indexer");
-        current_indexer.run_indexer().await.expect("Run indexer");
+        current_indexer.run_indexer(shutdown_signal_indexer).await.expect("Run indexer");
     });
 
     let api_handle = tokio::spawn(async { run_api(database).await });
