@@ -36,10 +36,12 @@ pub enum DatabaseError {
 // - hash the key
 // - add transaction feature
 impl Database {
-    pub fn new(path: String) -> Self {
-        Self {
-            db: Arc::new(DB::open_default(path).unwrap()),
-        }
+    pub fn new(path: String) -> Result<Self, rocksdb::Error> {
+        let db = DB::open_default(path)?;
+
+        Ok(Self {
+            db: Arc::new(db),
+        })
     }
 
     pub fn put<T: Serialize>(&mut self, prefix: &str, key: &str, value: T) {
