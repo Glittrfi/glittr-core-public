@@ -280,7 +280,7 @@ impl TestContext {
     }
 
     async fn verify_last_block(&self, expected_height: u64) {
-        let last_block: u64 = self
+        let last_block: Option<u64> = self
             .indexer
             .lock()
             .await
@@ -290,7 +290,7 @@ impl TestContext {
             .get(INDEXER_LAST_BLOCK_PREFIX, "")
             .unwrap();
 
-        assert_eq!(last_block, expected_height);
+        assert_eq!(last_block.unwrap(), expected_height);
     }
 
     async fn drop(self) {

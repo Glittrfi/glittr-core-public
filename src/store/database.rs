@@ -1,6 +1,6 @@
 use super::*;
-use bitcoincore_rpc::jsonrpc::serde_json::{self, Deserializer};
-use rocksdb::{IteratorMode, DB};
+use borsh::{BorshDeserialize, BorshSerialize};
+use rocksdb::{IteratorMode, Options, DB};
 
 pub const INDEXER_LAST_BLOCK_PREFIX: &str = "last_block";
 pub const MESSAGE_PREFIX: &str = "message";
@@ -33,46 +33,46 @@ pub enum DatabaseError {
 
 // TODO:
 // - implement error handling
-// - hash the key
 // - add transaction feature
 impl Database {
     pub fn new(path: String) -> Self {
+        let mut opts = Options::default();
+        opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
+        opts.set_bottommost_compression_type(rocksdb::DBCompressionType::Zstd);
+        opts.create_if_missing(true);
+
         Self {
-            db: Arc::new(DB::open_default(path).unwrap()),
+            db: Arc::new(DB::open(&opts, path).unwrap()),
         }
     }
 
-    pub fn put<T: Serialize>(&mut self, prefix: &str, key: &str, value: T) {
+    pub fn put<T: BorshSerialize>(&mut self, prefix: &str, key: &str, value: T) {
         self.db
             .put(
                 format!("{}:{}", prefix, key),
-                serde_json::to_string(&value).unwrap(),
+                borsh::to_vec(&value).unwrap(),
             )
             .expect("Error putting data into database");
     }
 
-    pub fn get<T: for<'a> Deserialize<'a>>(
-        &self,
-        prefix: &str,
-        key: &str,
-    ) -> Result<T, DatabaseError> {
+    pub fn get<T: BorshDeserialize>(&self, prefix: &str, key: &str) -> Result<T, DatabaseError> {
         let value = self
             .db
             .get(format!("{}:{}", prefix, key))
             .expect("Error getting data from database");
 
         if let Some(value) = value {
-            let message = T::deserialize(&mut Deserializer::from_slice(value.as_slice()));
+            let message = borsh::from_slice(value.as_slice());
 
             return match message {
                 Ok(message) => Ok(message),
-                Err(_) => Err(DatabaseError::DeserializeFailed),
+                Err(err) => Err(DatabaseError::DeserializeFailed),
             };
         }
         Err(DatabaseError::NotFound)
     }
 
-    pub fn expensive_find_by_prefix<T: for<'a> Deserialize<'a>>(
+    pub fn expensive_find_by_prefix<T: BorshDeserialize>(
         &self,
         prefix: &str,
     ) -> Result<Vec<(String, T)>, DatabaseError> {
@@ -90,7 +90,7 @@ impl Database {
                         break; // Stop when we've moved past the prefix
                     }
 
-                    match T::deserialize(&mut Deserializer::from_slice(&value)) {
+                    match borsh::from_slice(&value) {
                         Ok(deserialized) => results.push((key_str.to_string(), deserialized)),
                         Err(_) => return Err(DatabaseError::DeserializeFailed),
                     }

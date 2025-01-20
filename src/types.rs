@@ -1,9 +1,6 @@
 use std::{error::Error, fmt, str::FromStr};
-
 use serde::{Deserialize, Serialize};
-
-use bitcoin::OutPoint;
-
+use bitcoin::{OutPoint, Transaction};
 use crate::varuint_dyn::Varuint;
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -98,6 +95,24 @@ impl From<OutPoint> for BitcoinOutpoint {
 
 impl Into<OutPoint> for BitcoinOutpoint {
     fn into(self) -> OutPoint {
+        self.0
+    }
+}
+
+// internal wrapper for bitcoin transaction
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
+pub struct BitcoinTransaction(
+    pub Transaction
+);
+
+impl From<Transaction> for BitcoinTransaction {
+    fn from(tx: Transaction) -> Self {
+        BitcoinTransaction(tx)
+    }
+}
+
+impl Into<Transaction> for BitcoinTransaction {
+    fn into(self) -> Transaction {
         self.0
     }
 }
