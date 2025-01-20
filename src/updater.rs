@@ -1033,14 +1033,13 @@ impl Updater {
         Ok(())
     }
 
-    pub async fn get_last_indexed_block(&self) -> Option<u64> {
-        let last_indexed_block: Option<u64> = self
+    pub async fn get_last_indexed_block(&self) -> Result<u64, DatabaseError> {
+        let last_indexed_block: LastIndexedBlock = self
             .database
             .lock()
             .await
-            .get(INDEXER_LAST_BLOCK_PREFIX, "")
-            .ok();
+            .get(INDEXER_LAST_BLOCK_PREFIX, "")?;
 
-        return last_indexed_block;
+        Ok(last_indexed_block.0)
     }
 }

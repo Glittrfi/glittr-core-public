@@ -3,6 +3,7 @@ use super::*;
 use bitcoin::{consensus::deserialize, OutPoint, Transaction};
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use constants::first_glittr_height;
+use database::DatabaseError;
 use std::{error::Error, time::Duration};
 use store::database::INDEXER_LAST_BLOCK_PREFIX;
 use tokio::time::sleep;
@@ -27,13 +28,19 @@ impl Indexer {
             Auth::UserPass(btc_rpc_username.clone(), btc_rpc_password.clone()),
         )?;
 
-        let mut last_indexed_block: Option<u64> = database
+        let last_indexed_block_res: Result<LastIndexedBlock, DatabaseError> = database
             .lock()
             .await
-            .get(INDEXER_LAST_BLOCK_PREFIX, "")
-            .ok();
-        if last_indexed_block.is_none() && first_glittr_height() > 0 {
-            last_indexed_block = Some(first_glittr_height() - 1)
+            .get(INDEXER_LAST_BLOCK_PREFIX, "");
+
+        let mut last_indexed_block: Option<u64> = None;
+        
+        if last_indexed_block_res.is_err() {
+            if first_glittr_height() > 0 {
+            last_indexed_block = Some(first_glittr_height() - 1);
+            }
+        } else {
+            last_indexed_block = Some(last_indexed_block_res.unwrap().0);
         }
 
         Ok(Indexer {
@@ -87,7 +94,7 @@ impl Indexer {
             self.database
                 .lock()
                 .await
-                .put(INDEXER_LAST_BLOCK_PREFIX, "", self.last_indexed_block);
+                .put(INDEXER_LAST_BLOCK_PREFIX, "", LastIndexedBlock(self.last_indexed_block.unwrap()));
 
             sleep(Duration::from_secs(10)).await;
         }

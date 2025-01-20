@@ -1,7 +1,8 @@
-use std::{error::Error, fmt, str::FromStr};
-use serde::{Deserialize, Serialize};
-use bitcoin::{OutPoint, Transaction};
 use crate::varuint_dyn::Varuint;
+use bitcoin::{OutPoint, Transaction};
+use borsh::{BorshDeserialize, BorshSerialize};
+use serde::{Deserialize, Serialize};
+use std::{error::Error, fmt, str::FromStr};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct BlockTx {
@@ -101,9 +102,7 @@ impl Into<OutPoint> for BitcoinOutpoint {
 
 // internal wrapper for bitcoin transaction
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
-pub struct BitcoinTransaction(
-    pub Transaction
-);
+pub struct BitcoinTransaction(pub Transaction);
 
 impl From<Transaction> for BitcoinTransaction {
     fn from(tx: Transaction) -> Self {
@@ -116,3 +115,6 @@ impl Into<Transaction> for BitcoinTransaction {
         self.0
     }
 }
+
+#[derive(BorshSerialize, BorshDeserialize)]
+pub struct LastIndexedBlock(pub u64);
