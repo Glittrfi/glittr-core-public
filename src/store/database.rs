@@ -21,6 +21,9 @@ pub const ADDRESS_ASSET_LIST_PREFIX: &str = "address_asset_list";
 #[cfg(feature = "helper-api")]
 pub const TXID_TO_TRANSACTION_PREFIX: &str = "txid_to_transaction";
 
+#[cfg(feature = "helper-api")]
+pub const OUTPOINT_TO_ADDRESS: &str = "outpoint_to_address";
+
 pub struct Database {
     db: Arc<DB>,
 }
