@@ -7,7 +7,7 @@ use bitcoin::{
     ScriptBuf, Transaction,
 };
 use bitcoincore_rpc::jsonrpc::serde_json::{self};
-use compression::{Brotli, Compression};
+use compression::{default_brotli_compress, default_brotli_decompress};
 use constants::OP_RETURN_MAGIC_PREFIX;
 use flaw::Flaw;
 use mint_burn_asset::MintBurnAssetContract;
@@ -207,9 +207,7 @@ impl OpReturnMessage {
             return Err(Flaw::NonGlittrMessage);
         }
 
-        // TODO: singleton for brotli
-        let mut brotli = Brotli::new(11, 22, 4096);
-        let decompresed = brotli.decompress(&payload);
+        let decompresed = default_brotli_decompress(&payload);
         if let Err(_) = decompresed {
             return Err(Flaw::FailedDeserialization);
         }
@@ -251,9 +249,7 @@ impl OpReturnMessage {
         let magic_prefix: &PushBytes = OP_RETURN_MAGIC_PREFIX.as_bytes().try_into().unwrap();
 
         let binding = borsh::to_vec(self).unwrap();
-        // TODO: singleton for brotli
-        let mut brotli = Brotli::new(11, 22, 4096);
-        let binding_compressed = brotli.compress(&binding).unwrap();
+        let binding_compressed = default_brotli_compress(&binding).unwrap();
 
         let script_bytes: &PushBytes = binding_compressed.as_slice().try_into().unwrap();
 

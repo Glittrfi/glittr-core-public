@@ -55,3 +55,13 @@ impl Compression for Brotli {
         Ok(decompressed_data)
     }
 }
+
+pub fn default_brotli_decompress(payload: &[u8]) -> io::Result<Vec<u8>> {
+    let mut brotli = Brotli::new(11, 22, 80 * 2); // couldn't exceed 80
+    brotli.decompress(&payload)
+}
+
+pub fn default_brotli_compress(payload: &[u8]) -> io::Result<Vec<u8>> {
+    let mut brotli = Brotli::new(11, 22, 80 * 2);
+    brotli.compress(&payload)
+}
