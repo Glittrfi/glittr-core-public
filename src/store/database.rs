@@ -37,8 +37,7 @@ pub enum DatabaseError {
 impl Database {
     pub fn new(path: String) -> Self {
         let mut opts = Options::default();
-        opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
-        opts.set_bottommost_compression_type(rocksdb::DBCompressionType::Zstd);
+        opts.set_compression_type(rocksdb::DBCompressionType::Zstd);
         opts.create_if_missing(true);
 
         Self {
