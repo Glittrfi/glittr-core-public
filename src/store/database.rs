@@ -66,7 +66,7 @@ impl Database {
 
             return match message {
                 Ok(message) => Ok(message),
-                Err(err) => Err(DatabaseError::DeserializeFailed),
+                Err(_) => Err(DatabaseError::DeserializeFailed),
             };
         }
         Err(DatabaseError::NotFound)
