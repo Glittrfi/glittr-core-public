@@ -22,7 +22,7 @@ pub const ADDRESS_ASSET_LIST_PREFIX: &str = "address_asset_list";
 pub const TXID_TO_TRANSACTION_PREFIX: &str = "txid_to_transaction";
 
 pub struct Database {
-    db: Arc<DB>,
+    pub db: Arc<DB>,
 }
 
 #[derive(Debug)]
@@ -37,8 +37,13 @@ pub enum DatabaseError {
 // - add transaction feature
 impl Database {
     pub fn new(path: String) -> Self {
+        let mut options = rocksdb::Options::default();
+        options.create_if_missing(true);
+        options.set_manual_wal_flush(true);
+        options.set_wal_recovery_mode(rocksdb::DBRecoveryMode::AbsoluteConsistency);
+
         Self {
-            db: Arc::new(DB::open_default(path).unwrap()),
+            db: Arc::new(DB::open(&options, path).unwrap()),
         }
     }
 
