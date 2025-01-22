@@ -45,13 +45,13 @@ impl Indexer {
 
     pub async fn run_indexer(
         &mut self,
-        shutdown_rx: Arc<Mutex<bool>>,
+        shutdown_signal: Arc<Mutex<bool>>,
     ) -> Result<(), Box<dyn Error>> {
         let mut updater = Updater::new(self.database.clone(), false).await;
 
         log::info!("Indexing start");
         loop {
-            if *shutdown_rx.lock().await {
+            if *shutdown_signal.lock().await {
                 log::warn!("Shutdown signal received, stopping indexer...");
                 return Ok(());
             }
