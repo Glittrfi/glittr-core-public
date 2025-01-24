@@ -42,11 +42,19 @@ impl Indexer {
         })
     }
 
-    pub async fn run_indexer(&mut self) -> Result<(), Box<dyn Error>> {
+    pub async fn run_indexer(
+        &mut self,
+        shutdown_signal: Arc<Mutex<bool>>,
+    ) -> Result<(), Box<dyn Error>> {
         let mut updater = Updater::new(self.database.clone(), false).await;
 
         log::info!("Indexing start");
         loop {
+            if *shutdown_signal.lock().await {
+                log::warn!("Shutdown signal received, stopping indexer...");
+                return Ok(());
+            }
+
             let current_block_tip = self.rpc.get_block_count()?;
 
             let first_block_height = first_glittr_height();
