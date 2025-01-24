@@ -17,6 +17,7 @@ pub fn get_bitcoin_network() -> Network {
     match CONFIG.bitcoin_network.as_str() {
         "mainnet" => Network::Bitcoin,
         "testnet" => Network::Testnet,
+        "signet" => Network::Signet,
         "regtest" => Network::Regtest,
         _ => Network::Regtest, // Default to Regtest if not specified
     }

@@ -21,7 +21,6 @@ impl Indexer {
         btc_rpc_username: String,
         btc_rpc_password: String,
     ) -> Result<Self, Box<dyn Error>> {
-        log::info!("Indexer start");
         let rpc = Client::new(
             btc_rpc_url.as_str(),
             Auth::UserPass(btc_rpc_username.clone(), btc_rpc_password.clone()),
@@ -89,12 +88,14 @@ impl Indexer {
                 }
 
                 self.last_indexed_block = Some(block_height);
-            }
+                self.database.lock().await.put(
+                    INDEXER_LAST_BLOCK_PREFIX,
+                    "",
+                    self.last_indexed_block,
+                );
 
-            self.database
-                .lock()
-                .await
-                .put(INDEXER_LAST_BLOCK_PREFIX, "", self.last_indexed_block);
+                self.database.lock().await.db.flush()?;
+            }
 
             sleep(Duration::from_secs(10)).await;
         }
