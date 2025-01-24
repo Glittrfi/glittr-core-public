@@ -21,8 +21,9 @@ struct AssetBalance {
     contract_id: BlockTxString,
     balance: U128,
     ticker: Option<String>,
-    divisibility: u8,
-    r#type: MintType,
+    divisibility: Option<u8>,
+    r#type: Option<MintType>,
+    asset_image: Option<Vec<u8>>
 }
 
 #[derive(Serialize, Deserialize)]
@@ -106,6 +107,7 @@ async fn helper_get_address_balance_summary(
                     ticker: contract_info.ticker,
                     divisibility: contract_info.divisibility,
                     r#type: contract_info.r#type,
+                    asset_image: contract_info.asset_image,
                 });
             }
 
@@ -146,7 +148,8 @@ async fn helper_get_address_valid_outputs(
                         balance,
                         ticker: contract_info.ticker,
                         divisibility: contract_info.divisibility,
-                        r#type: contract_info.r#type
+                        r#type: contract_info.r#type,
+                    asset_image: contract_info.asset_image,
                     })
                 }
 
@@ -196,7 +199,8 @@ async fn helper_get_assets_in_outpoint(
                     balance: U128(balance),
                     ticker: contract_info.ticker,
                     divisibility: contract_info.divisibility,
-                    r#type: contract_info.r#type
+                    r#type: contract_info.r#type,
+                    asset_image: contract_info.asset_image,
                 });
             }
             let block_height = updater.get_last_indexed_block().await;

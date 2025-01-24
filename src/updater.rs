@@ -66,13 +66,26 @@ pub struct VestingContractData {
     pub claimed_allocations: HashMap<String, u128>,
 }
 
-#[derive(Serialize, Deserialize, BorshSerialize, BorshDeserialize, Debug, Clone, Default, Eq, PartialEq)]
+#[derive(
+    Serialize, Deserialize, BorshSerialize, BorshDeserialize, Debug, Clone, Default, Eq, PartialEq,
+)]
 #[serde(rename_all = "snake_case")]
 pub struct CollateralAccounts {
     pub collateral_accounts: HashMap<BlockTxString, CollateralAccount>,
 }
 
-#[derive(Serialize, Deserialize, BorshSerialize, BorshDeserialize, Debug, Clone, Default, Eq, Hash, PartialEq)]
+#[derive(
+    Serialize,
+    Deserialize,
+    BorshSerialize,
+    BorshDeserialize,
+    Debug,
+    Clone,
+    Default,
+    Eq,
+    Hash,
+    PartialEq,
+)]
 pub struct CollateralAccount {
     pub collateral_amounts: Vec<(BlockTxTuple, u128)>,
     // TODO: remove total_collateral_amount
@@ -83,7 +96,9 @@ pub struct CollateralAccount {
 }
 
 // TODO: statekey should be general, could accept dynamic value for the key value
-#[derive(Serialize, Deserialize, BorshSerialize, BorshDeserialize, Default, Eq, PartialEq, Debug)]
+#[derive(
+    Serialize, Deserialize, BorshSerialize, BorshDeserialize, Default, Eq, PartialEq, Debug,
+)]
 pub struct StateKeys {
     pub contract_ids: HashSet<BlockTxTuple>,
 }
@@ -517,6 +532,7 @@ impl Updater {
                             }
                         }
                     }
+                    ContractType::NFT(_nft_asset_contract) => {}
                 }
             }
 
@@ -572,6 +588,9 @@ impl Updater {
                                 )
                                 .await;
                         }
+                    }
+                    CallType::UpdateNft(_update_nft_option) => {
+                        // TODO update nft
                     }
                 }
             }
@@ -665,9 +684,9 @@ impl Updater {
                     return Ok(Some(ContractInfo {
                         ticker: moa.ticker,
                         supply_cap: moa.supply_cap,
-                        divisibility: moa.divisibility,
+                        divisibility: Some(moa.divisibility),
                         total_supply: U128(asset_data.minted_supply - asset_data.burned_supply),
-                        r#type: MintType {
+                        r#type: Some(MintType {
                             preallocated: if moa.mint_mechanism.preallocated.is_some() {
                                 Some(true)
                             } else {
@@ -684,15 +703,16 @@ impl Updater {
                                 None
                             },
                             collateralized: None,
-                        },
+                        }),
+                        asset_image: None,
                     }));
                 }
                 ContractType::Mba(mba) => Ok(Some(ContractInfo {
                     ticker: mba.ticker,
                     supply_cap: mba.supply_cap,
-                    divisibility: mba.divisibility,
+                    divisibility: Some(mba.divisibility),
                     total_supply: U128(asset_data.minted_supply - asset_data.burned_supply),
-                    r#type: MintType {
+                    r#type: Some(MintType {
                         preallocated: if mba.mint_mechanism.preallocated.is_some() {
                             Some(true)
                         } else {
@@ -726,7 +746,7 @@ impl Updater {
                                         simple_assets.push(InputAssetSimple {
                                             contract_id: block_tx.to_string(),
                                             ticker: asset_contract_info.ticker,
-                                            divisibility: asset_contract_info.divisibility,
+                                            divisibility: asset_contract_info.divisibility.unwrap(),
                                         })
                                     }
                                     _ => {}
@@ -743,9 +763,18 @@ impl Updater {
                         } else {
                             None
                         },
-                    },
+                    }),
+                    asset_image: None,
                 })),
                 ContractType::Spec(_) => Ok(None),
+                ContractType::NFT(nft)=> Ok(Some(ContractInfo {
+                    ticker: None,
+                    supply_cap: None,
+                    divisibility: None,
+                    total_supply: U128(asset_data.minted_supply - asset_data.burned_supply),
+                    r#type: None,
+                    asset_image: Some(nft.asset_image),
+                })),
             },
             None => Ok(None),
         }
@@ -1011,10 +1040,10 @@ impl Updater {
                         &address_asset_list,
                     );
 
-                    self.database.lock().await.delete(
-                        OUTPOINT_TO_ADDRESS,
-                        &outpoint.to_string(),
-                    )
+                    self.database
+                        .lock()
+                        .await
+                        .delete(OUTPOINT_TO_ADDRESS, &outpoint.to_string())
                 }
             }
         }
