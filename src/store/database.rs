@@ -1,6 +1,6 @@
 use super::*;
 use borsh::{BorshDeserialize, BorshSerialize};
-use rocksdb::{IteratorMode, Options, DB};
+use rocksdb::{IteratorMode, DB};
 
 pub const INDEXER_LAST_BLOCK_PREFIX: &str = "last_block";
 pub const MESSAGE_PREFIX: &str = "message";
@@ -21,8 +21,11 @@ pub const ADDRESS_ASSET_LIST_PREFIX: &str = "address_asset_list";
 #[cfg(feature = "helper-api")]
 pub const TXID_TO_TRANSACTION_PREFIX: &str = "txid_to_transaction";
 
+#[cfg(feature = "helper-api")]
+pub const OUTPOINT_TO_ADDRESS: &str = "outpoint_to_address";
+
 pub struct Database {
-    db: Arc<DB>,
+    pub db: Arc<DB>,
 }
 
 #[derive(Debug)]
@@ -36,12 +39,14 @@ pub enum DatabaseError {
 // - add transaction feature
 impl Database {
     pub fn new(path: String) -> Self {
-        let mut opts = Options::default();
-        opts.set_compression_type(rocksdb::DBCompressionType::Zstd);
-        opts.create_if_missing(true);
+        let mut options = rocksdb::Options::default();
+        options.create_if_missing(true);
+        options.set_manual_wal_flush(true);
+        options.set_wal_recovery_mode(rocksdb::DBRecoveryMode::AbsoluteConsistency);
+        options.set_compression_type(rocksdb::DBCompressionType::Zstd);
 
         Self {
-            db: Arc::new(DB::open(&opts, path).unwrap()),
+            db: Arc::new(DB::open(&options, path).unwrap()),
         }
     }
 

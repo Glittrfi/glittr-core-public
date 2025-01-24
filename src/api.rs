@@ -96,10 +96,20 @@ pub async fn run_api(database: Arc<Mutex<Database>>) -> Result<(), std::io::Erro
         .merge(helper_api::helper_routes())
         .with_state(shared_state);
 
-    log::info!("API is listening on {}", CONFIG.api_url);
-    let listener = tokio::net::TcpListener::bind(CONFIG.api_url.clone()).await?;
+    let listener = tokio::net::TcpListener::bind(CONFIG.api_url.clone()).await;
 
-    axum::serve(listener, app).await
+    match listener {
+        Ok(_) => {}
+        Err(error) => {
+            if error.to_string().contains("Address already in use") {
+                log::error!("Address {} already in use", CONFIG.api_url);
+            }
+            panic!("Error message: {error:?}");
+        }
+    }
+
+    log::info!("API is listening on {}", CONFIG.api_url);
+    axum::serve(listener.unwrap(), app).await
 }
 
 async fn tx_result(

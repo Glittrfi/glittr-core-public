@@ -308,7 +308,7 @@ async fn start_indexer(indexer: Arc<Mutex<Indexer>>) -> JoinHandle<()> {
         indexer
             .lock()
             .await
-            .run_indexer()
+            .run_indexer(Arc::new(Mutex::new(false)))
             .await
             .expect("Run indexer");
     });
