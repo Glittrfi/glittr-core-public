@@ -36,7 +36,6 @@ pub enum DatabaseError {
 
 // TODO:
 // - implement error handling
-// - hash the key
 // - add transaction feature
 impl Database {
     pub fn new(path: String) -> Self {
@@ -44,6 +43,7 @@ impl Database {
         options.create_if_missing(true);
         options.set_manual_wal_flush(true);
         options.set_wal_recovery_mode(rocksdb::DBRecoveryMode::AbsoluteConsistency);
+        options.set_compression_type(rocksdb::DBCompressionType::Zstd);
 
         Self {
             db: Arc::new(DB::open(&options, path).unwrap()),
