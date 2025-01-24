@@ -7,34 +7,25 @@ use bitcoin::{
 };
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use glittr::{
-    bloom_filter_to_compressed_vec,
-    database::{
+    bloom_filter_to_compressed_vec, database::{
         Database, DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX,
         COLLATERAL_ACCOUNTS_PREFIX, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX,
         TICKER_TO_BLOCK_TX_PREFIX,
-    },
-    message::{
+    }, message::{
         ArgsCommitment, AssertValues, CallType, CloseAccountOption, Commitment, CommitmentMessage,
         ContractCall, ContractCreation, ContractType, MintBurnOption, OpReturnMessage,
         OpenAccountOption, OracleMessage, OracleMessageSigned, SwapOption, Transfer,
         TxTypeTransfer,
-    },
-    mint_burn_asset::{
+    }, mint_burn_asset::{
         AccountType, BurnMechanisms, Collateralized, MBAMintMechanisms, MintBurnAssetContract,
         MintStructure, ProportionalType, RatioModel, ReturnCollateral, SwapMechanisms,
-    },
-    mint_only_asset::{MOAMintMechanisms, MintOnlyAssetContract},
-    spec::{
+    }, mint_only_asset::{MOAMintMechanisms, MintOnlyAssetContract}, spec::{
         MintBurnAssetCollateralizedSpec, MintBurnAssetSpec, MintOnlyAssetSpec,
         MintOnlyAssetSpecPegInType, SpecContract, SpecContractType,
-    },
-    transaction_shared::{
+    }, transaction_shared::{
         AllocationType, BloomFilterArgType, FreeMint, InputAsset, OracleSetting, Preallocated,
         PurchaseBurnSwap, RatioType, VestingPlan,
-    },
-    varuint_dyn::Varuint,
-    AssetContractData, AssetList, BlockTx, BlockTxTuple, CollateralAccounts, Flaw, Indexer,
-    MessageDataOutcome,
+    }, varuint_dyn::Varuint, AssetContractData, AssetList, BlockTx, BlockTxTuple, CollateralAccounts, Flaw, Indexer, LastIndexedBlock, MessageDataOutcome
 };
 use growable_bloom_filter::GrowableBloom;
 use mockcore::{Handle, TransactionTemplate};
@@ -280,7 +271,7 @@ impl TestContext {
     }
 
     async fn verify_last_block(&self, expected_height: u64) {
-        let last_block: u64 = self
+        let last_block: LastIndexedBlock = self
             .indexer
             .lock()
             .await
@@ -290,7 +281,7 @@ impl TestContext {
             .get(INDEXER_LAST_BLOCK_PREFIX, "")
             .unwrap();
 
-        assert_eq!(last_block, expected_height);
+        assert_eq!(last_block.0, expected_height);
     }
 
     async fn drop(self) {
