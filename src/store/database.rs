@@ -25,7 +25,7 @@ pub const TXID_TO_TRANSACTION_PREFIX: &str = "txid_to_transaction";
 pub const OUTPOINT_TO_ADDRESS: &str = "outpoint_to_address";
 
 pub struct Database {
-    db: Arc<DB>,
+    pub db: Arc<DB>,
 }
 
 #[derive(Debug)]
@@ -39,12 +39,15 @@ pub enum DatabaseError {
 // - hash the key
 // - add transaction feature
 impl Database {
-    pub fn new(path: String) -> Result<Self, rocksdb::Error> {
-        let db = DB::open_default(path)?;
+    pub fn new(path: String) -> Self {
+        let mut options = rocksdb::Options::default();
+        options.create_if_missing(true);
+        options.set_manual_wal_flush(true);
+        options.set_wal_recovery_mode(rocksdb::DBRecoveryMode::AbsoluteConsistency);
 
-        Ok(Self {
-            db: Arc::new(db),
-        })
+        Self {
+            db: Arc::new(DB::open(&options, path).unwrap()),
+        }
     }
 
     pub fn put<T: Serialize>(&mut self, prefix: &str, key: &str, value: T) {

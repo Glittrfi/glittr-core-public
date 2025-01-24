@@ -159,7 +159,6 @@ impl Updater {
                     );
                 }
 
-                // TODO: Implement a backup mechanism to recover when downtime occurs
                 self.delete_asset_list(outpoint).await;
             }
 

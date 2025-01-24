@@ -48,7 +48,7 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let database = Arc::new(Mutex::new(Database::new(CONFIG.rocks_db_path.clone())?));
+    let database = Arc::new(Mutex::new(Database::new(CONFIG.rocks_db_path.clone())));
     let database_indexer = Arc::clone(&database);
 
     let indexer_handle = tokio::spawn(async {
