@@ -324,9 +324,6 @@ impl Updater {
         }
 
         #[cfg(feature = "helper-api")]
-        self.set_transaction(txid, tx.clone()).await;
-
-        #[cfg(feature = "helper-api")]
         self.update_address_balance(tx, txid).await?;
 
         // reset asset list
@@ -892,31 +889,19 @@ impl Updater {
     }
 
     #[cfg(feature = "helper-api")]
-    async fn get_transaction(&self, txid: bitcoin::Txid) -> Result<Transaction, Flaw> {
-        use database::TXID_TO_TRANSACTION_PREFIX;
+    async fn get_address_from_outpoint(&self, outpoint: &OutPoint) -> Result<String, Flaw> {
+        use database::OUTPOINT_TO_ADDRESS;
 
-        let tx: Result<Transaction, DatabaseError> = self
+        let address: Result<String, DatabaseError> = self
             .database
             .lock()
             .await
-            .get(TXID_TO_TRANSACTION_PREFIX, &txid.to_string());
+            .get(OUTPOINT_TO_ADDRESS, &outpoint.to_string());
 
-        match tx {
-            Ok(tx) => Ok(tx),
+        match address {
+            Ok(address) => Ok(address),
             Err(DatabaseError::NotFound) => Err(Flaw::NotFound),
             Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
-        }
-    }
-
-    #[cfg(feature = "helper-api")]
-    async fn set_transaction(&self, txid: bitcoin::Txid, tx: Transaction) {
-        use database::TXID_TO_TRANSACTION_PREFIX;
-
-        if !self.is_read_only {
-            self.database
-                .lock()
-                .await
-                .put(TXID_TO_TRANSACTION_PREFIX, &txid.to_string(), tx);
         }
     }
 
@@ -927,7 +912,7 @@ impl Updater {
         txid: bitcoin::Txid,
     ) -> Result<(), Box<dyn Error>> {
         use crate::config::get_bitcoin_network;
-        use database::ADDRESS_ASSET_LIST_PREFIX;
+        use database::{ADDRESS_ASSET_LIST_PREFIX, OUTPOINT_TO_ADDRESS};
 
         // Process outputs
         for (vout, output) in tx.output.iter().enumerate() {
@@ -977,6 +962,12 @@ impl Updater {
                             &address.to_string(),
                             &address_asset_list,
                         );
+
+                        self.database.lock().await.put(
+                            OUTPOINT_TO_ADDRESS,
+                            &outpoint.to_string(),
+                            address.to_string(),
+                        )
                     }
                 }
             }
@@ -987,43 +978,42 @@ impl Updater {
             let outpoint = &input.previous_output;
 
             // Get the previous output's address and asset list
-            if let Ok(prev_tx) = self.get_transaction(outpoint.txid).await {
-                if let Some(prev_output) = prev_tx.output.get(outpoint.vout as usize) {
-                    if let Ok(address) =
-                        Address::from_script(&prev_output.script_pubkey, get_bitcoin_network())
-                    {
-                        let mut address_asset_list = self
-                            .get_address_balance(address.to_string())
-                            .await
-                            .unwrap_or_default();
+            if let Ok(address) = self.get_address_from_outpoint(outpoint).await {
+                let mut address_asset_list = self
+                    .get_address_balance(address.to_string())
+                    .await
+                    .unwrap_or_default();
 
-                        // Remove the spent UTXO
-                        address_asset_list.utxos.retain(|utxo_balances| {
-                            !(utxo_balances.txid == outpoint.txid.to_string()
-                                && utxo_balances.vout == outpoint.vout)
-                        });
+                // Remove the spent UTXO
+                address_asset_list.utxos.retain(|utxo_balances| {
+                    !(utxo_balances.txid == outpoint.txid.to_string()
+                        && utxo_balances.vout == outpoint.vout)
+                });
 
-                        // Recalculate summarized balances
-                        address_asset_list.summarized.clear();
-                        for utxo_balances in &address_asset_list.utxos {
-                            for (asset_id, amount) in &utxo_balances.assets {
-                                let current_amount = address_asset_list
-                                    .summarized
-                                    .entry(asset_id.clone())
-                                    .or_insert(U128(0));
-                                current_amount.0 = current_amount.0.saturating_add(amount.0);
-                            }
-                        }
-
-                        // Save updated address asset list
-                        if !self.is_read_only {
-                            self.database.lock().await.put(
-                                ADDRESS_ASSET_LIST_PREFIX,
-                                &address.to_string(),
-                                &address_asset_list,
-                            );
-                        }
+                // Recalculate summarized balances
+                address_asset_list.summarized.clear();
+                for utxo_balances in &address_asset_list.utxos {
+                    for (asset_id, amount) in &utxo_balances.assets {
+                        let current_amount = address_asset_list
+                            .summarized
+                            .entry(asset_id.clone())
+                            .or_insert(U128(0));
+                        current_amount.0 = current_amount.0.saturating_add(amount.0);
                     }
+                }
+
+                // Save updated address asset list
+                if !self.is_read_only {
+                    self.database.lock().await.put(
+                        ADDRESS_ASSET_LIST_PREFIX,
+                        &address.to_string(),
+                        &address_asset_list,
+                    );
+
+                    self.database.lock().await.delete(
+                        OUTPOINT_TO_ADDRESS,
+                        &outpoint.to_string(),
+                    )
                 }
             }
         }
