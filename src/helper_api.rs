@@ -52,6 +52,10 @@ pub fn helper_routes() -> Router<APIState> {
             "/helper/assets/:outpoint",
             get(helper_get_assets_in_outpoint),
         )
+        .route(
+            "/helper/assets",
+            get(expensive_helper_get_assets)
+        )
 }
 
 async fn helper_get_address_balance(
@@ -211,4 +215,30 @@ async fn helper_get_assets_in_outpoint(
         }
         Err(_) => Err(StatusCode::NOT_FOUND),
     }
+}
+
+async fn expensive_helper_get_assets(
+    State(state): State<APIState>,
+) -> Result<Json<Value>, StatusCode> {
+    let updater = Updater::new(state.database, true).await;
+
+    let all_ticker = updater.expensive_get_all_messages().await;
+
+    let block_height = updater.get_last_indexed_block().await.unwrap();
+
+    let mut result: HashMap<BlockTxString, ContractInfo> = HashMap::new();
+
+    for block_tx_tuple in all_ticker {
+        let contract_info = updater
+            .get_contract_info_by_block_tx(block_tx_tuple.clone())
+            .await
+            .unwrap()
+            .unwrap();
+
+        result.insert(BlockTx::from_tuple(block_tx_tuple.clone()).to_string(), contract_info);
+    }
+
+    Ok(Json(
+        json!({ "result": result, "block_height": block_height }),
+    ))
 }
