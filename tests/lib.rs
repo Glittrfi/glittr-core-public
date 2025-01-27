@@ -3859,7 +3859,7 @@ async fn test_integration_mint_nft() {
     let message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
             spec: None,
-            contract_type: ContractType::NFT(NftAssetContract {
+            contract_type: ContractType::Nft(NftAssetContract {
                 supply_cap: Some(Varuint(1)),
                 live_time: 0,
                 end_time: None,

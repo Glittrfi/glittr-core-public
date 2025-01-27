@@ -532,7 +532,7 @@ impl Updater {
                             }
                         }
                     }
-                    ContractType::NFT(_nft_asset_contract) => {}
+                    ContractType::Nft(_nft_asset_contract) => {}
                 }
             }
 
@@ -767,7 +767,7 @@ impl Updater {
                     asset_image: None,
                 })),
                 ContractType::Spec(_) => Ok(None),
-                ContractType::NFT(nft)=> Ok(Some(ContractInfo {
+                ContractType::Nft(nft)=> Ok(Some(ContractInfo {
                     ticker: None,
                     supply_cap: None,
                     divisibility: None,
