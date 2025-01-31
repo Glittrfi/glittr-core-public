@@ -207,12 +207,26 @@ impl OpReturnMessage {
             return Err(Flaw::NonGlittrMessage);
         }
 
-        let decompresed = default_brotli_decompress(&payload);
-        if let Err(_) = decompresed {
-            return Err(Flaw::FailedDeserialization);
+        let header = header::Header::from_bytes(payload[0..1].to_vec());
+        let payload = payload[1..].to_vec();
+
+        match header.get_version() {
+            0 => {}
+            _ => return Err(Flaw::InvalidHeaderVersion),
         }
 
-        let message = borsh::from_slice::<OpReturnMessage>(&decompresed.unwrap());
+        let data_bytes = if header.is_compressed() {
+            let decompresed = default_brotli_decompress(&payload);
+            if let Err(_) = decompresed {
+                return Err(Flaw::FailedDeserialization);
+            }
+
+            decompresed.unwrap()
+        } else {
+            payload
+        };
+
+        let message = borsh::from_slice::<OpReturnMessage>(&data_bytes);
 
         match message {
             Ok(message) => {
@@ -251,7 +265,19 @@ impl OpReturnMessage {
         let binding = borsh::to_vec(self).unwrap();
         let binding_compressed = default_brotli_compress(&binding).unwrap();
 
-        let script_bytes: &PushBytes = binding_compressed.as_slice().try_into().unwrap();
+        let use_compressed = binding.len() > binding_compressed.len();
+        let data_bytes = if use_compressed {
+            &binding_compressed
+        } else {
+            &binding
+        };
+
+        let header_version = 0;
+        let header_bytes = header::Header::new(header_version, use_compressed).to_bytes();
+
+        let bytes = [header_bytes, data_bytes.clone()].concat();
+
+        let script_bytes: &PushBytes = bytes.as_slice().try_into().unwrap();
 
         builder = builder.push_slice(magic_prefix);
         builder = builder.push_slice(script_bytes);

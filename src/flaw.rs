@@ -5,6 +5,8 @@ use super::*;
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Flaw {
+    InvalidHeaderVersion,
+
     // parse tx
     InvalidInstruction(String),
     InvalidScript,
