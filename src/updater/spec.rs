@@ -1,6 +1,6 @@
 use database::SPEC_CONTRACT_OWNED_PREFIX;
 use message::ContractCreation;
-use varuint_dyn::Varuint;
+use varuint::Varuint;
 
 use crate::spec::{
     MintBurnAssetCollateralizedSpec, MintOnlyAssetSpecPegInType, SpecContract, SpecContractType,
@@ -191,9 +191,12 @@ impl Updater {
 #[cfg(test)]
 mod test {
     use crate::{
-        message::ContractType, spec::{
+        message::ContractType,
+        spec::{
             MintBurnAssetCollateralizedSpec, MintBurnAssetSpec, SpecContract, SpecContractType,
-        }, varuint_dyn::Varuint, Flaw
+        },
+        varuint::Varuint,
+        Flaw,
     };
 
     use super::{

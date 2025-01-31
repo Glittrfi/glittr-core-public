@@ -7,31 +7,41 @@ use bitcoin::{
 };
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use glittr::{
-    bloom_filter_to_compressed_vec, database::{
+    az_base26::AZBase26,
+    bloom_filter_to_compressed_vec,
+    database::{
         Database, DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX,
         COLLATERAL_ACCOUNTS_PREFIX, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX,
         TICKER_TO_BLOCK_TX_PREFIX,
-    }, message::{
+    },
+    message::{
         ArgsCommitment, AssertValues, CallType, CloseAccountOption, Commitment, CommitmentMessage,
         ContractCall, ContractCreation, ContractType, MintBurnOption, OpReturnMessage,
         OpenAccountOption, OracleMessage, OracleMessageSigned, SwapOption, Transfer,
         TxTypeTransfer,
-    }, mint_burn_asset::{
+    },
+    mint_burn_asset::{
         AccountType, BurnMechanisms, Collateralized, MBAMintMechanisms, MintBurnAssetContract,
         MintStructure, ProportionalType, RatioModel, ReturnCollateral, SwapMechanisms,
-    }, mint_only_asset::{MOAMintMechanisms, MintOnlyAssetContract}, spec::{
+    },
+    mint_only_asset::{MOAMintMechanisms, MintOnlyAssetContract},
+    spec::{
         MintBurnAssetCollateralizedSpec, MintBurnAssetSpec, MintOnlyAssetSpec,
         MintOnlyAssetSpecPegInType, SpecContract, SpecContractType,
-    }, transaction_shared::{
+    },
+    transaction_shared::{
         AllocationType, BloomFilterArgType, FreeMint, InputAsset, OracleSetting, Preallocated,
         PurchaseBurnSwap, RatioType, VestingPlan,
-    }, varuint_dyn::Varuint, AssetContractData, AssetList, BlockTx, BlockTxTuple, CollateralAccounts, Flaw, Indexer, LastIndexedBlock, MessageDataOutcome
+    },
+    varuint::Varuint,
+    AssetContractData, AssetList, BlockTx, BlockTxTuple, CollateralAccounts, Flaw, Indexer,
+    LastIndexedBlock, MessageDataOutcome,
 };
 use growable_bloom_filter::GrowableBloom;
 use mockcore::{Handle, TransactionTemplate};
 use rand::rngs::OsRng;
 use sha2::{Digest, Sha256};
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
 use tempfile::TempDir;
 use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
 
@@ -3395,7 +3405,7 @@ async fn test_integration_glittr_airdrop() {
                 commitment: Some(Commitment {
                     public_key: admin_public_key.serialize().to_vec(),
                     args: ArgsCommitment {
-                        fixed_string: "GLITTRAIRDROP".to_string(),
+                        fixed_string: AZBase26::from_str("GLITTRAIRDROP").unwrap(),
                         string: "username".to_string(),
                     },
                 }),
@@ -3576,7 +3586,7 @@ async fn test_integration_glittr_airdrop() {
 async fn test_integration_contract_ticker() {
     let mut ctx = TestContext::new().await;
 
-    let ticker = "POHON_PISANG".to_string();
+    let ticker = AZBase26::from_str("POHON.PISANG").unwrap();
 
     let contract_message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
@@ -3646,7 +3656,7 @@ async fn test_integration_contract_ticker() {
         .database
         .lock()
         .await
-        .get(TICKER_TO_BLOCK_TX_PREFIX, &ticker);
+        .get(TICKER_TO_BLOCK_TX_PREFIX, &ticker.to_string());
 
     assert_eq!(block_tx_by_ticker.unwrap(), block_tx.to_tuple());
 

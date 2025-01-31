@@ -7,7 +7,7 @@ use bitcoin::{Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, T
 use borsh::io::{Error, ErrorKind};
 use borsh::{BorshDeserialize, BorshSerialize};
 
-use crate::{BitcoinOutpoint, BitcoinTransaction, U128};
+use crate::{BitcoinOutpoint, BitcoinTransaction};
 
 pub const ERROR_UNEXPECTED_LENGTH_OF_INPUT: &str = "Unexpected length of input";
 
@@ -16,26 +16,6 @@ pub fn unexpected_eof_to_unexpected_length_of_input(e: Error) -> Error {
         Error::new(ErrorKind::InvalidData, ERROR_UNEXPECTED_LENGTH_OF_INPUT)
     } else {
         e
-    }
-}
-
-// U128
-impl BorshSerialize for U128 {
-    fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        let bytes = self.0.to_le_bytes();
-        writer.write_all(&bytes)
-    }
-}
-
-impl BorshDeserialize for U128 {
-    fn deserialize_reader<R: Read>(reader: &mut R) -> Result<Self, Error> {
-        let mut bytes = [0u8; 16];
-
-        reader
-            .read_exact(&mut bytes)
-            .map_err(unexpected_eof_to_unexpected_length_of_input)?;
-
-        Ok(U128(u128::from_le_bytes(bytes)))
     }
 }
 

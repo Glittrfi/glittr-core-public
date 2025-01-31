@@ -7,12 +7,13 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use az_base26::AZBase26;
 use bitcoin::{consensus::deserialize, OutPoint, Transaction, Txid};
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use serde_json::{json, Value};
 use store::database::{DatabaseError, MESSAGE_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX};
 use transaction::message::OpReturnMessage;
-use varuint_dyn::Varuint;
+use varuint::Varuint;
 
 // TODO: The database lock could possibly slowing down indexing. Add cache or rate limit for the API.
 #[derive(Clone)]
@@ -24,10 +25,10 @@ pub struct APIState {
 #[serde_with::skip_serializing_none]
 #[derive(Serialize, Deserialize)]
 pub struct ContractInfo {
-    pub ticker: Option<String>,
+    pub ticker: Option<AZBase26>,
     pub supply_cap: Option<Varuint<u128>>,
     pub divisibility: u8,
-    pub total_supply: U128,
+    pub total_supply: Varuint<u128>,
     pub r#type: MintType,
 }
 
@@ -49,7 +50,7 @@ pub struct MintType {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct InputAssetSimple {
     pub contract_id: BlockTxString,
-    pub ticker: Option<String>,
+    pub ticker: Option<AZBase26>,
     pub divisibility: u8,
 }
 
