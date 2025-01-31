@@ -91,6 +91,10 @@ impl Preallocated {
                 supply_cap = None;
                 free_mint = None;
             }
+            ContractType::Nft(_) => {
+                supply_cap = None;
+                free_mint = None;
+            }
         }
 
         if let Some(supply_cap) = &supply_cap {
@@ -148,6 +152,9 @@ impl FreeMint {
                 mint_burn_asset_contract.supply_cap.clone()
             }
             ContractType::Spec(_) => None,
+            ContractType::Nft(_) => {
+                None
+            }
         };
 
         if let Some(supply_cap) = &self.supply_cap {

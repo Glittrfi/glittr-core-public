@@ -22,8 +22,9 @@ struct AssetBalance {
     contract_id: BlockTxString,
     balance: Varuint<u128>,
     ticker: Option<AZBase26>,
-    divisibility: u8,
-    r#type: MintType,
+    divisibility: Option<u8>,
+    r#type: Option<MintType>,
+    asset: Option<Vec<u8>>
 }
 
 #[derive(Serialize, Deserialize)]
@@ -51,6 +52,10 @@ pub fn helper_routes() -> Router<APIState> {
         .route(
             "/helper/assets/:outpoint",
             get(helper_get_assets_in_outpoint),
+        )
+        .route(
+            "/helper/assets",
+            get(expensive_helper_get_assets)
         )
 }
 
@@ -107,6 +112,7 @@ async fn helper_get_address_balance_summary(
                     ticker: contract_info.ticker,
                     divisibility: contract_info.divisibility,
                     r#type: contract_info.r#type,
+                    asset: contract_info.asset,
                 });
             }
 
@@ -148,6 +154,7 @@ async fn helper_get_address_valid_outputs(
                         ticker: contract_info.ticker,
                         divisibility: contract_info.divisibility,
                         r#type: contract_info.r#type,
+                    asset: contract_info.asset,
                     })
                 }
 
@@ -198,6 +205,7 @@ async fn helper_get_assets_in_outpoint(
                     ticker: contract_info.ticker,
                     divisibility: contract_info.divisibility,
                     r#type: contract_info.r#type,
+                    asset: contract_info.asset,
                 });
             }
             let block_height = updater.get_last_indexed_block().await;
@@ -208,4 +216,30 @@ async fn helper_get_assets_in_outpoint(
         }
         Err(_) => Err(StatusCode::NOT_FOUND),
     }
+}
+
+async fn expensive_helper_get_assets(
+    State(state): State<APIState>,
+) -> Result<Json<Value>, StatusCode> {
+    let updater = Updater::new(state.database, true).await;
+
+    let all_ticker = updater.expensive_get_all_messages().await;
+
+    let block_height = updater.get_last_indexed_block().await.unwrap();
+
+    let mut result: HashMap<BlockTxString, ContractInfo> = HashMap::new();
+
+    for block_tx_tuple in all_ticker {
+        let contract_info = updater
+            .get_contract_info_by_block_tx(block_tx_tuple.clone())
+            .await
+            .unwrap()
+            .unwrap();
+
+        result.insert(BlockTx::from_tuple(block_tx_tuple.clone()).to_string(), contract_info);
+    }
+
+    Ok(Json(
+        json!({ "result": result, "block_height": block_height }),
+    ))
 }

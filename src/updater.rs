@@ -534,6 +534,7 @@ impl Updater {
                             }
                         }
                     }
+                    ContractType::Nft(_nft_asset_contract) => {}
                 }
             }
 
@@ -589,6 +590,9 @@ impl Updater {
                                 )
                                 .await;
                         }
+                    }
+                    CallType::UpdateNft(_update_nft_option) => {
+                        // TODO update nft
                     }
                 }
             }
@@ -682,9 +686,9 @@ impl Updater {
                     return Ok(Some(ContractInfo {
                         ticker: moa.ticker,
                         supply_cap: moa.supply_cap,
-                        divisibility: moa.divisibility,
+                        divisibility: Some(moa.divisibility),
                         total_supply: Varuint(asset_data.minted_supply - asset_data.burned_supply),
-                        r#type: MintType {
+                        r#type: Some(MintType {
                             preallocated: if moa.mint_mechanism.preallocated.is_some() {
                                 Some(true)
                             } else {
@@ -701,15 +705,16 @@ impl Updater {
                                 None
                             },
                             collateralized: None,
-                        },
+                        }),
+                        asset: None,
                     }));
                 }
                 ContractType::Mba(mba) => Ok(Some(ContractInfo {
                     ticker: mba.ticker,
                     supply_cap: mba.supply_cap,
-                    divisibility: mba.divisibility,
+                    divisibility: Some(mba.divisibility),
                     total_supply: Varuint(asset_data.minted_supply - asset_data.burned_supply),
-                    r#type: MintType {
+                    r#type: Some(MintType {
                         preallocated: if mba.mint_mechanism.preallocated.is_some() {
                             Some(true)
                         } else {
@@ -743,7 +748,7 @@ impl Updater {
                                         simple_assets.push(InputAssetSimple {
                                             contract_id: block_tx.to_string(),
                                             ticker: asset_contract_info.ticker,
-                                            divisibility: asset_contract_info.divisibility,
+                                            divisibility: asset_contract_info.divisibility.unwrap(),
                                         })
                                     }
                                     _ => {}
@@ -760,9 +765,18 @@ impl Updater {
                         } else {
                             None
                         },
-                    },
+                    }),
+                    asset: None,
                 })),
                 ContractType::Spec(_) => Ok(None),
+                ContractType::Nft(nft)=> Ok(Some(ContractInfo {
+                    ticker: None,
+                    supply_cap: None,
+                    divisibility: None,
+                    total_supply: Varuint(asset_data.minted_supply - asset_data.burned_supply),
+                    r#type: None,
+                    asset: Some(nft.asset),
+                })),
             },
             None => Ok(None),
         }
@@ -1039,8 +1053,46 @@ impl Updater {
         Ok(())
     }
 
-    pub async fn get_last_indexed_block(&self) -> Result<u64, DatabaseError> {
-        let last_indexed_block: LastIndexedBlock = self
+
+
+
+    #[cfg(feature = "helper-api")]
+    pub async fn expensive_get_all_messages(&self) -> Vec<BlockTxTuple> {
+        use database::MESSAGE_PREFIX;
+
+        let all_messages: Result<Vec<BlockTxTuple>, DatabaseError> = self
+            .database
+            .lock()
+            .await
+            .expensive_find_by_prefix(MESSAGE_PREFIX)
+            .map(|vec: Vec<(String, MessageDataOutcome)>| {
+                vec.into_iter()
+                    .filter(|(_, v)| {
+                        v.flaw.is_none()
+                            && v.message.is_some()
+                            && v.message.clone().unwrap().contract_creation.is_some()
+                    })
+                    .map(|(k, _)| {
+                        BlockTx::from_str(
+                            k.trim_start_matches(&format!("{}:", MESSAGE_PREFIX))
+                                .to_string()
+                                .as_str(),
+                        )
+                        .unwrap()
+                        .to_tuple()
+                    })
+                    .collect()
+            });
+
+        if all_messages.is_ok() {
+            return all_messages.unwrap();
+        } else {
+            return Vec::new();
+        }
+    }
+
+        pub async fn get_last_indexed_block(&self) -> Result<u64, DatabaseError> {
+            let last_indexed_block: LastIndexedBlock = self
             .database
             .lock()
             .await

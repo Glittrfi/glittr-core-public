@@ -139,6 +139,12 @@ impl ReturnCollateral {
 
 impl ContractValidator for MintBurnAssetContract {
     fn validate(&self) -> Option<Flaw> {
+        if let Some(end_time) = self.end_time {
+            if end_time < self.live_time {
+                return Some(Flaw::EndTimeIsLessThanLiveTime)
+            }
+        }
+
         if self.mint_mechanism.purchase.is_some() && self.mint_mechanism.free_mint.is_some() {
             return Some(Flaw::NotImplemented);
         }
