@@ -30,7 +30,7 @@ pub struct ContractInfo {
     pub divisibility: Option<u8>,
     pub total_supply: Varuint<u128>,
     pub r#type: Option<MintType>,
-    pub asset_image: Option<Vec<u8>>,
+    pub asset: Option<Vec<u8>>,
 }
 
 #[derive(Deserialize, Serialize, Clone)]
