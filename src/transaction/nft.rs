@@ -1,24 +1,9 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use flaw::Flaw;
 use message::ContractValidator;
-use varuint_dyn::Varuint;
+use crate::varuint::Varuint;
 
 use super::*;
-
-// ContractCreation::NFT {
-//     asset_image: Vec<u8>,
-//     royalty: Option<HashMap<pointer, fraction>>,
-//     supply_cap: Option<Varuint>,
-//     live_time: RelativeOrAbsoluteBlockHeight,
-//     end_time: Option<RelativeOrAbsoluteBlockHeight>,
-//     access_key_pointer: Option<u64> --> for whitelist and royalty enforcement
-//   }
-//
-//   ContractCall::UpdateNFT {
-//     whitelist: Option<BloomFilter>,
-//     trusted_marketplace_fee_address: Option<Set<Address>>, --> royalty enforcement
-//     access_key_pointer: Option<u64>
-//   }
 
 #[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]

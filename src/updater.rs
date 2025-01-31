@@ -7,7 +7,7 @@ use api::MintType;
 use borsh::{BorshDeserialize, BorshSerialize};
 use collateralized::CollateralizedAssetData;
 pub use updater_shared::*;
-use varuint_dyn::Varuint;
+use varuint::Varuint;
 mod spec;
 
 use std::{
@@ -112,14 +112,14 @@ pub struct SpecContractOwned {
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 pub struct UTXOBalances {
     pub txid: String,
-    pub vout: u32,
-    pub assets: HashMap<BlockTxString, U128>,
+    pub vout: Varuint<u32>,
+    pub assets: HashMap<BlockTxString, Varuint<u128>>,
 }
 
 #[cfg(feature = "helper-api")]
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Default, Debug)]
 pub struct AddressAssetList {
-    pub summarized: HashMap<BlockTxString, U128>,
+    pub summarized: HashMap<BlockTxString, Varuint<u128>>,
     pub utxos: Vec<UTXOBalances>,
 }
 
@@ -422,12 +422,13 @@ impl Updater {
                     ContractType::Moa(mint_only_asset_contract) => {
                         if outcome.flaw.is_none() {
                             if let Some(_ticker) = mint_only_asset_contract.ticker {
-                                if let Some(ticker_flaw) =
-                                    self.validate_ticker_not_exist(_ticker.clone()).await
+                                if let Some(ticker_flaw) = self
+                                    .validate_ticker_not_exist(_ticker.clone().to_string())
+                                    .await
                                 {
                                     outcome.flaw = Some(ticker_flaw);
                                 } else {
-                                    ticker = Some(_ticker);
+                                    ticker = Some(_ticker.to_string());
                                 }
                             }
                         }
@@ -450,12 +451,13 @@ impl Updater {
                     ContractType::Mba(mint_burn_asset_contract) => {
                         if outcome.flaw.is_none() {
                             if let Some(_ticker) = mint_burn_asset_contract.ticker {
-                                if let Some(ticker_flaw) =
-                                    self.validate_ticker_not_exist(_ticker.clone()).await
+                                if let Some(ticker_flaw) = self
+                                    .validate_ticker_not_exist(_ticker.clone().to_string())
+                                    .await
                                 {
                                     outcome.flaw = Some(ticker_flaw);
                                 } else {
-                                    ticker = Some(_ticker);
+                                    ticker = Some(_ticker.to_string());
                                 }
                             }
                         }
@@ -685,7 +687,7 @@ impl Updater {
                         ticker: moa.ticker,
                         supply_cap: moa.supply_cap,
                         divisibility: Some(moa.divisibility),
-                        total_supply: U128(asset_data.minted_supply - asset_data.burned_supply),
+                        total_supply: Varuint(asset_data.minted_supply - asset_data.burned_supply),
                         r#type: Some(MintType {
                             preallocated: if moa.mint_mechanism.preallocated.is_some() {
                                 Some(true)
@@ -711,7 +713,7 @@ impl Updater {
                     ticker: mba.ticker,
                     supply_cap: mba.supply_cap,
                     divisibility: Some(mba.divisibility),
-                    total_supply: U128(asset_data.minted_supply - asset_data.burned_supply),
+                    total_supply: Varuint(asset_data.minted_supply - asset_data.burned_supply),
                     r#type: Some(MintType {
                         preallocated: if mba.mint_mechanism.preallocated.is_some() {
                             Some(true)
@@ -771,7 +773,7 @@ impl Updater {
                     ticker: None,
                     supply_cap: None,
                     divisibility: None,
-                    total_supply: U128(asset_data.minted_supply - asset_data.burned_supply),
+                    total_supply: Varuint(asset_data.minted_supply - asset_data.burned_supply),
                     r#type: None,
                     asset_image: Some(nft.asset_image),
                 })),
@@ -967,20 +969,20 @@ impl Updater {
                     let mut utxo_assets = HashMap::new();
 
                     for (asset_id, amount) in &allocation.asset_list.list {
-                        utxo_assets.insert(asset_id.clone(), U128(*amount));
+                        utxo_assets.insert(asset_id.clone(), Varuint(*amount));
 
                         // Update summarized balances
-                        let current_amount: &mut U128 = address_asset_list
+                        let current_amount: &mut Varuint<u128> = address_asset_list
                             .summarized
                             .entry(asset_id.clone())
-                            .or_insert(U128(0));
+                            .or_insert(Varuint(0));
                         current_amount.0 = current_amount.0.saturating_add(*amount);
                     }
 
                     if !utxo_assets.is_empty() {
                         address_asset_list.utxos.push(UTXOBalances {
                             txid: outpoint.txid.to_string(),
-                            vout: outpoint.vout,
+                            vout: Varuint(outpoint.vout),
                             assets: utxo_assets,
                         });
                     }
@@ -1017,7 +1019,7 @@ impl Updater {
                 // Remove the spent UTXO
                 address_asset_list.utxos.retain(|utxo_balances| {
                     !(utxo_balances.txid == outpoint.txid.to_string()
-                        && utxo_balances.vout == outpoint.vout)
+                        && utxo_balances.vout.0 == outpoint.vout)
                 });
 
                 // Recalculate summarized balances
@@ -1027,7 +1029,7 @@ impl Updater {
                         let current_amount = address_asset_list
                             .summarized
                             .entry(asset_id.clone())
-                            .or_insert(U128(0));
+                            .or_insert(Varuint(0));
                         current_amount.0 = current_amount.0.saturating_add(amount.0);
                     }
                 }

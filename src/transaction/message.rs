@@ -1,6 +1,7 @@
 use std::fmt;
 
 use super::*;
+use az_base26::AZBase26;
 use bitcoin::{
     opcodes,
     script::{self, Instruction, PushBytes},
@@ -16,7 +17,7 @@ use nft::NftAssetContract;
 use spec::SpecContract;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use varuint_dyn::Varuint;
+use varuint::Varuint;
 
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -116,7 +117,7 @@ pub struct Commitment {
 
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 pub struct ArgsCommitment {
-    pub fixed_string: String,
+    pub fixed_string: AZBase26,
     pub string: String,
 }
 
@@ -290,7 +291,7 @@ mod test {
 
     use super::mint_only_asset::MOAMintMechanisms;
     use super::transaction_shared::FreeMint;
-    use super::varuint_dyn::Varuint;
+    use super::varuint::Varuint;
     use super::{ContractCreation, OpReturnMessage};
 
     fn create_dummy_tx() -> Transaction {

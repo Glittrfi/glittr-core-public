@@ -3,7 +3,7 @@ use growable_bloom_filter::GrowableBloom;
 use message::{AssertValues, MintBurnOption, OracleMessageSigned};
 use miniz_oxide::{deflate::compress_to_vec, inflate::decompress_to_vec};
 use transaction_shared::{OracleSetting, RatioType};
-use varuint_dyn::Varuint;
+use varuint::Varuint;
 
 use super::*;
 

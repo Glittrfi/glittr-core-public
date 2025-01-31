@@ -1,8 +1,9 @@
+use az_base26::AZBase26;
 use borsh::{BorshDeserialize, BorshSerialize};
 use flaw::Flaw;
 use message::{Commitment, ContractValidator};
 use transaction_shared::{FreeMint, Preallocated, PurchaseBurnSwap};
-use varuint_dyn::Varuint;
+use varuint::Varuint;
 
 use super::*;
 
@@ -18,7 +19,7 @@ pub struct MOAMintMechanisms {
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MintOnlyAssetContract {
-    pub ticker: Option<String>,
+    pub ticker: Option<AZBase26>,
     pub supply_cap: Option<Varuint<u128>>,
     pub divisibility: u8,
     pub live_time: RelativeOrAbsoluteBlockHeight,
