@@ -1,6 +1,8 @@
+use borsh::{BorshDeserialize, BorshSerialize};
+
 use super::*;
 
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Flaw {
     // parse tx
@@ -51,7 +53,7 @@ pub enum Flaw {
     // call type::close account
     LtvMustBeZero,
     OutstandingMustBeZero,
-    
+
     // call type: swap
     InsufficientInputAmount,
     InsufficientOutputAmount,

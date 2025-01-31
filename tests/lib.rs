@@ -35,7 +35,7 @@ use glittr::{
     },
     varuint::Varuint,
     AssetContractData, AssetList, BlockTx, BlockTxTuple, CollateralAccounts, Flaw, Indexer,
-    MessageDataOutcome,
+    LastIndexedBlock, MessageDataOutcome,
 };
 use growable_bloom_filter::GrowableBloom;
 use mockcore::{Handle, TransactionTemplate};
@@ -281,7 +281,7 @@ impl TestContext {
     }
 
     async fn verify_last_block(&self, expected_height: u64) {
-        let last_block: u64 = self
+        let last_block: LastIndexedBlock = self
             .indexer
             .lock()
             .await
@@ -291,7 +291,7 @@ impl TestContext {
             .get(INDEXER_LAST_BLOCK_PREFIX, "")
             .unwrap();
 
-        assert_eq!(last_block, expected_height);
+        assert_eq!(last_block.0, expected_height);
     }
 
     async fn drop(self) {
@@ -318,7 +318,7 @@ async fn start_indexer(indexer: Arc<Mutex<Indexer>>) -> JoinHandle<()> {
         indexer
             .lock()
             .await
-            .run_indexer()
+            .run_indexer(Arc::new(Mutex::new(false)))
             .await
             .expect("Run indexer");
     });

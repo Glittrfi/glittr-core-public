@@ -4,6 +4,7 @@ mod mint;
 mod updater_shared;
 
 use api::MintType;
+use borsh::{BorshDeserialize, BorshSerialize};
 use collateralized::CollateralizedAssetData;
 pub use updater_shared::*;
 use varuint::Varuint;
@@ -34,7 +35,7 @@ use transaction_shared::{InputAsset, PurchaseBurnSwap, VestingPlan};
 
 use super::*;
 
-#[derive(Deserialize, Serialize, Clone, Default, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Default, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct AssetContractData {
     pub minted_supply: u128,
@@ -42,13 +43,13 @@ pub struct AssetContractData {
     pub burned_supply: u128,
 }
 
-#[derive(Deserialize, Serialize, Clone, Default, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Default, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct AssetList {
     pub list: HashMap<BlockTxString, u128>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MessageDataOutcome {
     pub message: Option<OpReturnMessage>,
@@ -59,19 +60,32 @@ pub struct PBSMintResult {
     pub txout: u32,
 }
 
-#[derive(Deserialize, Serialize, Clone, Default, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Default, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct VestingContractData {
     pub claimed_allocations: HashMap<String, u128>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default, Eq, PartialEq)]
+#[derive(
+    Serialize, Deserialize, BorshSerialize, BorshDeserialize, Debug, Clone, Default, Eq, PartialEq,
+)]
 #[serde(rename_all = "snake_case")]
 pub struct CollateralAccounts {
     pub collateral_accounts: HashMap<BlockTxString, CollateralAccount>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default, Eq, Hash, PartialEq)]
+#[derive(
+    Serialize,
+    Deserialize,
+    BorshSerialize,
+    BorshDeserialize,
+    Debug,
+    Clone,
+    Default,
+    Eq,
+    Hash,
+    PartialEq,
+)]
 pub struct CollateralAccount {
     pub collateral_amounts: Vec<(BlockTxTuple, u128)>,
     // TODO: remove total_collateral_amount
@@ -82,18 +96,20 @@ pub struct CollateralAccount {
 }
 
 // TODO: statekey should be general, could accept dynamic value for the key value
-#[derive(Serialize, Deserialize, Default, Eq, PartialEq, Debug)]
+#[derive(
+    Serialize, Deserialize, BorshSerialize, BorshDeserialize, Default, Eq, PartialEq, Debug,
+)]
 pub struct StateKeys {
     pub contract_ids: HashSet<BlockTxTuple>,
 }
 
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct SpecContractOwned {
     pub specs: HashSet<BlockTxTuple>,
 }
 #[cfg(feature = "helper-api")]
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 pub struct UTXOBalances {
     pub txid: String,
     pub vout: Varuint<u32>,
@@ -101,7 +117,7 @@ pub struct UTXOBalances {
 }
 
 #[cfg(feature = "helper-api")]
-#[derive(Deserialize, Serialize, Clone, Default, Debug)]
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Default, Debug)]
 pub struct AddressAssetList {
     pub summarized: HashMap<BlockTxString, Varuint<u128>>,
     pub utxos: Vec<UTXOBalances>,
@@ -160,7 +176,6 @@ impl Updater {
                     );
                 }
 
-                // TODO: Implement a backup mechanism to recover when downtime occurs
                 self.delete_asset_list(outpoint).await;
             }
 
@@ -323,9 +338,6 @@ impl Updater {
                     .await;
             }
         }
-
-        #[cfg(feature = "helper-api")]
-        self.set_transaction(txid, tx.clone()).await;
 
         #[cfg(feature = "helper-api")]
         self.update_address_balance(tx, txid).await?;
@@ -895,31 +907,19 @@ impl Updater {
     }
 
     #[cfg(feature = "helper-api")]
-    async fn get_transaction(&self, txid: bitcoin::Txid) -> Result<Transaction, Flaw> {
-        use database::TXID_TO_TRANSACTION_PREFIX;
+    async fn get_address_from_outpoint(&self, outpoint: &OutPoint) -> Result<String, Flaw> {
+        use database::OUTPOINT_TO_ADDRESS;
 
-        let tx: Result<Transaction, DatabaseError> = self
+        let address: Result<String, DatabaseError> = self
             .database
             .lock()
             .await
-            .get(TXID_TO_TRANSACTION_PREFIX, &txid.to_string());
+            .get(OUTPOINT_TO_ADDRESS, &outpoint.to_string());
 
-        match tx {
-            Ok(tx) => Ok(tx),
+        match address {
+            Ok(address) => Ok(address),
             Err(DatabaseError::NotFound) => Err(Flaw::NotFound),
             Err(DatabaseError::DeserializeFailed) => Err(Flaw::FailedDeserialization),
-        }
-    }
-
-    #[cfg(feature = "helper-api")]
-    async fn set_transaction(&self, txid: bitcoin::Txid, tx: Transaction) {
-        use database::TXID_TO_TRANSACTION_PREFIX;
-
-        if !self.is_read_only {
-            self.database
-                .lock()
-                .await
-                .put(TXID_TO_TRANSACTION_PREFIX, &txid.to_string(), tx);
         }
     }
 
@@ -930,7 +930,7 @@ impl Updater {
         txid: bitcoin::Txid,
     ) -> Result<(), Box<dyn Error>> {
         use crate::config::get_bitcoin_network;
-        use database::ADDRESS_ASSET_LIST_PREFIX;
+        use database::{ADDRESS_ASSET_LIST_PREFIX, OUTPOINT_TO_ADDRESS};
 
         // Process outputs
         for (vout, output) in tx.output.iter().enumerate() {
@@ -980,6 +980,12 @@ impl Updater {
                             &address.to_string(),
                             &address_asset_list,
                         );
+
+                        self.database.lock().await.put(
+                            OUTPOINT_TO_ADDRESS,
+                            &outpoint.to_string(),
+                            address.to_string(),
+                        )
                     }
                 }
             }
@@ -990,43 +996,42 @@ impl Updater {
             let outpoint = &input.previous_output;
 
             // Get the previous output's address and asset list
-            if let Ok(prev_tx) = self.get_transaction(outpoint.txid).await {
-                if let Some(prev_output) = prev_tx.output.get(outpoint.vout as usize) {
-                    if let Ok(address) =
-                        Address::from_script(&prev_output.script_pubkey, get_bitcoin_network())
-                    {
-                        let mut address_asset_list = self
-                            .get_address_balance(address.to_string())
-                            .await
-                            .unwrap_or_default();
+            if let Ok(address) = self.get_address_from_outpoint(outpoint).await {
+                let mut address_asset_list = self
+                    .get_address_balance(address.to_string())
+                    .await
+                    .unwrap_or_default();
 
-                        // Remove the spent UTXO
-                        address_asset_list.utxos.retain(|utxo_balances| {
-                            !(utxo_balances.txid == outpoint.txid.to_string()
-                                && utxo_balances.vout.0 == outpoint.vout)
-                        });
+                // Remove the spent UTXO
+                address_asset_list.utxos.retain(|utxo_balances| {
+                    !(utxo_balances.txid == outpoint.txid.to_string()
+                        && utxo_balances.vout.0 == outpoint.vout)
+                });
 
-                        // Recalculate summarized balances
-                        address_asset_list.summarized.clear();
-                        for utxo_balances in &address_asset_list.utxos {
-                            for (asset_id, amount) in &utxo_balances.assets {
-                                let current_amount = address_asset_list
-                                    .summarized
-                                    .entry(asset_id.clone())
-                                    .or_insert(Varuint(0));
-                                current_amount.0 = current_amount.0.saturating_add(amount.0);
-                            }
-                        }
-
-                        // Save updated address asset list
-                        if !self.is_read_only {
-                            self.database.lock().await.put(
-                                ADDRESS_ASSET_LIST_PREFIX,
-                                &address.to_string(),
-                                &address_asset_list,
-                            );
-                        }
+                // Recalculate summarized balances
+                address_asset_list.summarized.clear();
+                for utxo_balances in &address_asset_list.utxos {
+                    for (asset_id, amount) in &utxo_balances.assets {
+                        let current_amount = address_asset_list
+                            .summarized
+                            .entry(asset_id.clone())
+                            .or_insert(Varuint(0));
+                        current_amount.0 = current_amount.0.saturating_add(amount.0);
                     }
+                }
+
+                // Save updated address asset list
+                if !self.is_read_only {
+                    self.database.lock().await.put(
+                        ADDRESS_ASSET_LIST_PREFIX,
+                        &address.to_string(),
+                        &address_asset_list,
+                    );
+
+                    self.database
+                        .lock()
+                        .await
+                        .delete(OUTPOINT_TO_ADDRESS, &outpoint.to_string())
                 }
             }
         }
@@ -1034,14 +1039,13 @@ impl Updater {
         Ok(())
     }
 
-    pub async fn get_last_indexed_block(&self) -> Option<u64> {
-        let last_indexed_block: Option<u64> = self
+    pub async fn get_last_indexed_block(&self) -> Result<u64, DatabaseError> {
+        let last_indexed_block: LastIndexedBlock = self
             .database
             .lock()
             .await
-            .get(INDEXER_LAST_BLOCK_PREFIX, "")
-            .ok();
+            .get(INDEXER_LAST_BLOCK_PREFIX, "")?;
 
-        return last_indexed_block;
+        Ok(last_indexed_block.0)
     }
 }

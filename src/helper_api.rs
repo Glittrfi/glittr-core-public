@@ -113,7 +113,7 @@ async fn helper_get_address_balance_summary(
             let block_height = updater.get_last_indexed_block().await;
 
             return Ok(Json(
-                json!({ "data": result, "block_height": block_height }),
+                json!({ "data": result, "block_height": block_height.unwrap() }),
             ));
         }
         Err(_) => Err(StatusCode::NOT_FOUND),
@@ -161,7 +161,7 @@ async fn helper_get_address_valid_outputs(
             let block_height = updater.get_last_indexed_block().await;
 
             return Ok(Json(
-                json!({ "data": result, "block_height": block_height }),
+                json!({ "data": result, "block_height": block_height.unwrap() }),
             ));
         }
         Err(_) => Err(StatusCode::NOT_FOUND),
@@ -203,7 +203,7 @@ async fn helper_get_assets_in_outpoint(
             let block_height = updater.get_last_indexed_block().await;
 
             Ok(Json(
-                json!({ "result": asset_balances, "block_height": block_height }),
+                json!({ "result": asset_balances, "block_height": block_height.unwrap() }),
             ))
         }
         Err(_) => Err(StatusCode::NOT_FOUND),

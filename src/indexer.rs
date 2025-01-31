@@ -3,6 +3,7 @@ use super::*;
 use bitcoin::{consensus::deserialize, OutPoint, Transaction};
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use constants::first_glittr_height;
+use database::DatabaseError;
 use std::{error::Error, time::Duration};
 use store::database::INDEXER_LAST_BLOCK_PREFIX;
 use tokio::time::sleep;
@@ -21,19 +22,24 @@ impl Indexer {
         btc_rpc_username: String,
         btc_rpc_password: String,
     ) -> Result<Self, Box<dyn Error>> {
-        log::info!("Indexer start");
         let rpc = Client::new(
             btc_rpc_url.as_str(),
             Auth::UserPass(btc_rpc_username.clone(), btc_rpc_password.clone()),
         )?;
 
-        let mut last_indexed_block: Option<u64> = database
+        let last_indexed_block_res: Result<LastIndexedBlock, DatabaseError> = database
             .lock()
             .await
-            .get(INDEXER_LAST_BLOCK_PREFIX, "")
-            .ok();
-        if last_indexed_block.is_none() && first_glittr_height() > 0 {
-            last_indexed_block = Some(first_glittr_height() - 1)
+            .get(INDEXER_LAST_BLOCK_PREFIX, "");
+
+        let mut last_indexed_block: Option<u64> = None;
+        
+        if last_indexed_block_res.is_err() {
+            if first_glittr_height() > 0 {
+            last_indexed_block = Some(first_glittr_height() - 1);
+            }
+        } else {
+            last_indexed_block = Some(last_indexed_block_res.unwrap().0);
         }
 
         Ok(Indexer {
@@ -43,11 +49,19 @@ impl Indexer {
         })
     }
 
-    pub async fn run_indexer(&mut self) -> Result<(), Box<dyn Error>> {
+    pub async fn run_indexer(
+        &mut self,
+        shutdown_signal: Arc<Mutex<bool>>,
+    ) -> Result<(), Box<dyn Error>> {
         let mut updater = Updater::new(self.database.clone(), false).await;
 
         log::info!("Indexing start");
         loop {
+            if *shutdown_signal.lock().await {
+                log::warn!("Shutdown signal received, stopping indexer...");
+                return Ok(());
+            }
+
             let current_block_tip = self.rpc.get_block_count()?;
 
             let first_block_height = first_glittr_height();
@@ -81,13 +95,14 @@ impl Indexer {
                 }
 
                 self.last_indexed_block = Some(block_height);
+                self.database.lock().await.put(
+                    INDEXER_LAST_BLOCK_PREFIX,
+                    "",
+                    LastIndexedBlock(self.last_indexed_block.unwrap()),
+                );
+
+                self.database.lock().await.db.flush()?;
             }
-
-
-            self.database
-                .lock()
-                .await
-                .put(INDEXER_LAST_BLOCK_PREFIX, "", self.last_indexed_block);
 
             sleep(Duration::from_secs(10)).await;
         }
