@@ -1,4 +1,5 @@
 use crate::varuint::Varuint;
+use crate::varint::Varint;
 use bitcoin::{OutPoint, Transaction};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
@@ -18,7 +19,7 @@ pub type BlockTxString = String;
 pub type Pubkey = Vec<u8>;
 
 /// negative indicates relative block height, delta from mined contract's block height
-pub type RelativeOrAbsoluteBlockHeight = i64;
+pub type RelativeOrAbsoluteBlockHeight = Varint<i64>;
 
 impl fmt::Display for BlockTx {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

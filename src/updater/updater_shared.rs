@@ -11,14 +11,14 @@ pub fn relative_block_height_to_block_height(
     block_height_relative_absolute: RelativeOrAbsoluteBlockHeight,
     current_block_height: BlockHeight,
 ) -> BlockHeight {
-    if block_height_relative_absolute < 0 {
+    if block_height_relative_absolute.0 < 0 {
         Varuint(
             current_block_height
                 .0
-                .saturating_add(-block_height_relative_absolute as u64),
+                .saturating_add(-block_height_relative_absolute.0 as u64),
         )
     } else {
-        Varuint(block_height_relative_absolute as u64)
+        Varuint(block_height_relative_absolute.0 as u64)
     }
 }
 
