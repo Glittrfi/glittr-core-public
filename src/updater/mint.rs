@@ -16,8 +16,6 @@ impl Updater {
         contract_id: &BlockTxTuple,
         mint_option: &MintBurnOption,
     ) -> Option<Flaw> {
-
-
         let free_mint = moa.mint_mechanism.free_mint.as_ref().unwrap();
 
         if let Some(assert_values) = &mint_option.assert_values {
@@ -248,15 +246,16 @@ impl Updater {
         contract_id: &BlockTxTuple,
         mint_option: &MintBurnOption,
     ) -> Option<Flaw> {
-        let mut owner_pub_key: Vec<u8> = Vec::new();
-        let mut total_allocation: u128 = 0;
+        // Handling edge case when there are two input utxos by two vesting owners
+        let mut owner_pub_keys: Vec<Vec<u8>> = Vec::new();
+        let mut total_allocations: Vec<u128> = vec![];
+        let mut total_out_value: u128 = 0;
 
         // validate input has utxo owned by one of the vestee
-        // TODO: edge case when there are two input utxos by two vesting owners
         for txin in &tx.input {
             // P2WPKH, P2TR
             let pubkey = if !txin.witness.is_empty() {
-                txin.witness.last().unwrap().to_vec()
+                txin.witness.last().unwrap().to_vec().clone()
             } else {
                 // P2PKH, P2PK
                 // [signature, public key]
@@ -265,7 +264,7 @@ impl Updater {
                 if instructions.clone().count() >= 2 {
                     if let Ok(Instruction::PushBytes(pubkey_bytes)) = &instructions.nth(1).unwrap()
                     {
-                        pubkey_bytes.as_bytes().to_vec()
+                        pubkey_bytes.as_bytes().to_vec().clone()
                     } else {
                         Vec::new()
                     }
@@ -278,11 +277,11 @@ impl Updater {
                 match alloc_type {
                     transaction_shared::AllocationType::VecPubkey(pubkeys) => {
                         if pubkeys.contains(&pubkey) {
-                            owner_pub_key = pubkey;
-                            total_allocation = allocation.0;
+                            owner_pub_keys.push(pubkey);
+                            total_allocations.push(allocation.0);
                             break;
                         }
-                    },
+                    }
                     transaction_shared::AllocationType::BloomFilter { filter, arg } => {
                         match arg {
                             transaction_shared::BloomFilterArgType::TxId => {
@@ -294,86 +293,88 @@ impl Updater {
                                 let key = format!("{}:{}", prev_txid, prev_vout);
 
                                 if bloom_filter.contains(&key) {
-                                    owner_pub_key = key.as_bytes().to_vec();
-                                    total_allocation = allocation.0;
+                                    owner_pub_keys.push(key.as_bytes().to_vec());
+                                    total_allocations.push(allocation.0);
                                     break;
                                 }
-                            },
+                            }
                         }
-                    },
+                    }
                 }
             }
         }
 
-        if owner_pub_key.is_empty() {
+        if owner_pub_keys.is_empty() {
             return Some(Flaw::VesteeNotFound);
         }
 
         let mut vesting_contract_data = self.get_vesting_contract_data(contract_id).await.unwrap();
-        let mut claimed_allocation = *vesting_contract_data
-            .claimed_allocations
-            .get(&owner_pub_key.to_hex_string(Case::Lower))
-            .unwrap_or(&0);
 
-        let out_value: u128 = if let Some(vesting_plan) = preallocated.vesting_plan.clone() {
-            match vesting_plan {
-                VestingPlan::Timelock(block_height_relative_absolute) => {
-                    let vested_block_height = relative_block_height_to_block_height(
-                        block_height_relative_absolute.clone(),
-                        contract_id.0,
-                    );
+        for (idx, owner_pub_key) in owner_pub_keys.iter().enumerate() {
+            let mut claimed_allocation = *vesting_contract_data
+                .claimed_allocations
+                .get(&owner_pub_key.to_hex_string(Case::Lower))
+                .unwrap_or(&0);
 
-                    if block_tx.block < vested_block_height {
-                        return Some(Flaw::VestingBlockNotReached);
-                    }
-
-                    total_allocation.saturating_sub(claimed_allocation)
-                }
-                VestingPlan::Scheduled(mut vesting_schedule) => {
-                    let mut vested_allocation: u128 = 0;
-
-                    vesting_schedule.sort_by(|a, b| {
-                        let vested_block_height_a =
-                            relative_block_height_to_block_height(a.1, contract_id.0);
-                        let vested_block_height_b =
-                            relative_block_height_to_block_height(b.1, contract_id.0);
-
-                        vested_block_height_a.cmp(&vested_block_height_b)
-                    });
-
-                    for (ratio, block_height_relative_absolute) in vesting_schedule {
+            let out_value: u128 = if let Some(vesting_plan) = preallocated.vesting_plan.clone() {
+                match vesting_plan {
+                    VestingPlan::Timelock(block_height_relative_absolute) => {
                         let vested_block_height = relative_block_height_to_block_height(
-                            block_height_relative_absolute,
+                            block_height_relative_absolute.clone(),
                             contract_id.0,
                         );
 
-                        if block_tx.block >= vested_block_height {
-                            vested_allocation = vested_allocation.saturating_add(
-                                (total_allocation * ratio.0 as u128) / ratio.1 as u128,
-                            );
+                        if block_tx.block < vested_block_height {
+                            return Some(Flaw::VestingBlockNotReached);
                         }
+
+                        total_allocations[idx].saturating_sub(claimed_allocation)
                     }
+                    VestingPlan::Scheduled(mut vesting_schedule) => {
+                        let mut vested_allocation: u128 = 0;
 
-                    vested_allocation.saturating_sub(claimed_allocation)
+                        vesting_schedule.sort_by(|a, b| {
+                            let vested_block_height_a =
+                                relative_block_height_to_block_height(a.1, contract_id.0);
+                            let vested_block_height_b =
+                                relative_block_height_to_block_height(b.1, contract_id.0);
+
+                            vested_block_height_a.cmp(&vested_block_height_b)
+                        });
+
+                        for (ratio, block_height_relative_absolute) in vesting_schedule {
+                            let vested_block_height = relative_block_height_to_block_height(
+                                block_height_relative_absolute,
+                                contract_id.0,
+                            );
+
+                            if block_tx.block >= vested_block_height {
+                                vested_allocation = vested_allocation.saturating_add(
+                                    (total_allocations[idx] * ratio.0 as u128) / ratio.1 as u128,
+                                );
+                            }
+                        }
+
+                        vested_allocation.saturating_sub(claimed_allocation)
+                    }
                 }
-            }
-        } else {
-            total_allocation.saturating_sub(claimed_allocation)
-        };
+            } else {
+                total_allocations[idx].saturating_sub(claimed_allocation)
+            };
 
-        if let Some(assert_values) = &mint_option.assert_values {
-            if let Some(flaw) =
-                self.validate_assert_values(&Some(assert_values.clone()), vec![], None, out_value)
-            {
-                return Some(flaw);
-            }
+            total_out_value += out_value;
+
+            claimed_allocation = claimed_allocation.saturating_add(out_value);
+            vesting_contract_data
+                .claimed_allocations
+                .insert(owner_pub_key.to_hex_string(Case::Lower), claimed_allocation);
         }
 
         if let Some(flaw) = self
             .validate_and_update_supply_cap(
                 contract_id,
                 moa.supply_cap.clone(),
-                out_value,
+                total_out_value,
                 true,
                 false,
                 None,
@@ -389,10 +390,6 @@ impl Updater {
             }
         }
 
-        claimed_allocation = claimed_allocation.saturating_add(out_value);
-        vesting_contract_data
-            .claimed_allocations
-            .insert(owner_pub_key.to_hex_string(Case::Lower), claimed_allocation);
         self.set_vesting_contract_data(contract_id, &vesting_contract_data)
             .await;
 
@@ -400,7 +397,7 @@ impl Updater {
             if let Some(flaw) = self.validate_pointer(pointer, tx) {
                 return Some(flaw);
             }
-            self.allocate_new_asset(pointer, contract_id, out_value)
+            self.allocate_new_asset(pointer, contract_id, total_out_value)
                 .await;
         }
 
@@ -413,7 +410,7 @@ impl Updater {
         block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
         mint_option: &MintBurnOption,
-        message: Result<OpReturnMessage, Flaw>
+        message: Result<OpReturnMessage, Flaw>,
     ) -> Option<Flaw> {
         if mint_option.pointer.is_none() {
             return Some(Flaw::InvalidPointer);
