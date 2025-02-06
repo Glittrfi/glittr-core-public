@@ -196,6 +196,7 @@ mod test {
             MintBurnAssetCollateralizedSpec, MintBurnAssetSpec, SpecContract, SpecContractType,
         },
         varuint::Varuint,
+        varint::Varint,
         Flaw,
     };
 
@@ -213,7 +214,7 @@ mod test {
             ticker: None,
             supply_cap: None,
             divisibility: 18,
-            live_time: 0,
+            live_time: Varint(0),
             end_time: None,
             mint_mechanism: MBAMintMechanisms {
                 preallocated: None,
@@ -263,7 +264,7 @@ mod test {
             ticker: None,
             supply_cap: None,
             divisibility: 18,
-            live_time: 0,
+            live_time: Varint(0),
             end_time: None,
             mint_mechanism: MBAMintMechanisms {
                 preallocated: None,
@@ -313,7 +314,7 @@ mod test {
             ticker: None,
             supply_cap: None,
             divisibility: 18,
-            live_time: 0,
+            live_time: Varint(0),
             end_time: None,
             mint_mechanism: MBAMintMechanisms {
                 preallocated: None,
