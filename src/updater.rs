@@ -7,7 +7,7 @@ use api::MintType;
 use borsh::{BorshDeserialize, BorshSerialize};
 use collateralized::CollateralizedAssetData;
 pub use updater_shared::*;
-use varuint_dyn::Varuint;
+use varuint::Varuint;
 mod spec;
 
 use std::{
@@ -66,13 +66,26 @@ pub struct VestingContractData {
     pub claimed_allocations: HashMap<String, u128>,
 }
 
-#[derive(Serialize, Deserialize, BorshSerialize, BorshDeserialize, Debug, Clone, Default, Eq, PartialEq)]
+#[derive(
+    Serialize, Deserialize, BorshSerialize, BorshDeserialize, Debug, Clone, Default, Eq, PartialEq,
+)]
 #[serde(rename_all = "snake_case")]
 pub struct CollateralAccounts {
     pub collateral_accounts: HashMap<BlockTxString, CollateralAccount>,
 }
 
-#[derive(Serialize, Deserialize, BorshSerialize, BorshDeserialize, Debug, Clone, Default, Eq, Hash, PartialEq)]
+#[derive(
+    Serialize,
+    Deserialize,
+    BorshSerialize,
+    BorshDeserialize,
+    Debug,
+    Clone,
+    Default,
+    Eq,
+    Hash,
+    PartialEq,
+)]
 pub struct CollateralAccount {
     pub collateral_amounts: Vec<(BlockTxTuple, u128)>,
     // TODO: remove total_collateral_amount
@@ -83,7 +96,9 @@ pub struct CollateralAccount {
 }
 
 // TODO: statekey should be general, could accept dynamic value for the key value
-#[derive(Serialize, Deserialize, BorshSerialize, BorshDeserialize, Default, Eq, PartialEq, Debug)]
+#[derive(
+    Serialize, Deserialize, BorshSerialize, BorshDeserialize, Default, Eq, PartialEq, Debug,
+)]
 pub struct StateKeys {
     pub contract_ids: HashSet<BlockTxTuple>,
 }
@@ -97,14 +112,14 @@ pub struct SpecContractOwned {
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 pub struct UTXOBalances {
     pub txid: String,
-    pub vout: u32,
-    pub assets: HashMap<BlockTxString, U128>,
+    pub vout: Varuint<u32>,
+    pub assets: HashMap<BlockTxString, Varuint<u128>>,
 }
 
 #[cfg(feature = "helper-api")]
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Default, Debug)]
 pub struct AddressAssetList {
-    pub summarized: HashMap<BlockTxString, U128>,
+    pub summarized: HashMap<BlockTxString, Varuint<u128>>,
     pub utxos: Vec<UTXOBalances>,
 }
 
@@ -407,12 +422,13 @@ impl Updater {
                     ContractType::Moa(mint_only_asset_contract) => {
                         if outcome.flaw.is_none() {
                             if let Some(_ticker) = mint_only_asset_contract.ticker {
-                                if let Some(ticker_flaw) =
-                                    self.validate_ticker_not_exist(_ticker.clone()).await
+                                if let Some(ticker_flaw) = self
+                                    .validate_ticker_not_exist(_ticker.clone().to_string())
+                                    .await
                                 {
                                     outcome.flaw = Some(ticker_flaw);
                                 } else {
-                                    ticker = Some(_ticker);
+                                    ticker = Some(_ticker.to_string());
                                 }
                             }
                         }
@@ -435,12 +451,13 @@ impl Updater {
                     ContractType::Mba(mint_burn_asset_contract) => {
                         if outcome.flaw.is_none() {
                             if let Some(_ticker) = mint_burn_asset_contract.ticker {
-                                if let Some(ticker_flaw) =
-                                    self.validate_ticker_not_exist(_ticker.clone()).await
+                                if let Some(ticker_flaw) = self
+                                    .validate_ticker_not_exist(_ticker.clone().to_string())
+                                    .await
                                 {
                                     outcome.flaw = Some(ticker_flaw);
                                 } else {
-                                    ticker = Some(_ticker);
+                                    ticker = Some(_ticker.to_string());
                                 }
                             }
                         }
@@ -517,6 +534,7 @@ impl Updater {
                             }
                         }
                     }
+                    ContractType::Nft(_nft_asset_contract) => {}
                 }
             }
 
@@ -572,6 +590,9 @@ impl Updater {
                                 )
                                 .await;
                         }
+                    }
+                    CallType::UpdateNft(_update_nft_option) => {
+                        // TODO update nft
                     }
                 }
             }
@@ -665,9 +686,9 @@ impl Updater {
                     return Ok(Some(ContractInfo {
                         ticker: moa.ticker,
                         supply_cap: moa.supply_cap,
-                        divisibility: moa.divisibility,
-                        total_supply: U128(asset_data.minted_supply - asset_data.burned_supply),
-                        r#type: MintType {
+                        divisibility: Some(moa.divisibility),
+                        total_supply: Varuint(asset_data.minted_supply - asset_data.burned_supply),
+                        r#type: Some(MintType {
                             preallocated: if moa.mint_mechanism.preallocated.is_some() {
                                 Some(true)
                             } else {
@@ -684,15 +705,16 @@ impl Updater {
                                 None
                             },
                             collateralized: None,
-                        },
+                        }),
+                        asset: None,
                     }));
                 }
                 ContractType::Mba(mba) => Ok(Some(ContractInfo {
                     ticker: mba.ticker,
                     supply_cap: mba.supply_cap,
-                    divisibility: mba.divisibility,
-                    total_supply: U128(asset_data.minted_supply - asset_data.burned_supply),
-                    r#type: MintType {
+                    divisibility: Some(mba.divisibility),
+                    total_supply: Varuint(asset_data.minted_supply - asset_data.burned_supply),
+                    r#type: Some(MintType {
                         preallocated: if mba.mint_mechanism.preallocated.is_some() {
                             Some(true)
                         } else {
@@ -726,7 +748,7 @@ impl Updater {
                                         simple_assets.push(InputAssetSimple {
                                             contract_id: block_tx.to_string(),
                                             ticker: asset_contract_info.ticker,
-                                            divisibility: asset_contract_info.divisibility,
+                                            divisibility: asset_contract_info.divisibility.unwrap(),
                                         })
                                     }
                                     _ => {}
@@ -743,9 +765,18 @@ impl Updater {
                         } else {
                             None
                         },
-                    },
+                    }),
+                    asset: None,
                 })),
                 ContractType::Spec(_) => Ok(None),
+                ContractType::Nft(nft)=> Ok(Some(ContractInfo {
+                    ticker: None,
+                    supply_cap: None,
+                    divisibility: None,
+                    total_supply: Varuint(asset_data.minted_supply - asset_data.burned_supply),
+                    r#type: None,
+                    asset: Some(nft.asset),
+                })),
             },
             None => Ok(None),
         }
@@ -938,20 +969,20 @@ impl Updater {
                     let mut utxo_assets = HashMap::new();
 
                     for (asset_id, amount) in &allocation.asset_list.list {
-                        utxo_assets.insert(asset_id.clone(), U128(*amount));
+                        utxo_assets.insert(asset_id.clone(), Varuint(*amount));
 
                         // Update summarized balances
-                        let current_amount: &mut U128 = address_asset_list
+                        let current_amount: &mut Varuint<u128> = address_asset_list
                             .summarized
                             .entry(asset_id.clone())
-                            .or_insert(U128(0));
+                            .or_insert(Varuint(0));
                         current_amount.0 = current_amount.0.saturating_add(*amount);
                     }
 
                     if !utxo_assets.is_empty() {
                         address_asset_list.utxos.push(UTXOBalances {
                             txid: outpoint.txid.to_string(),
-                            vout: outpoint.vout,
+                            vout: Varuint(outpoint.vout),
                             assets: utxo_assets,
                         });
                     }
@@ -988,7 +1019,7 @@ impl Updater {
                 // Remove the spent UTXO
                 address_asset_list.utxos.retain(|utxo_balances| {
                     !(utxo_balances.txid == outpoint.txid.to_string()
-                        && utxo_balances.vout == outpoint.vout)
+                        && utxo_balances.vout.0 == outpoint.vout)
                 });
 
                 // Recalculate summarized balances
@@ -998,7 +1029,7 @@ impl Updater {
                         let current_amount = address_asset_list
                             .summarized
                             .entry(asset_id.clone())
-                            .or_insert(U128(0));
+                            .or_insert(Varuint(0));
                         current_amount.0 = current_amount.0.saturating_add(amount.0);
                     }
                 }
@@ -1011,10 +1042,10 @@ impl Updater {
                         &address_asset_list,
                     );
 
-                    self.database.lock().await.delete(
-                        OUTPOINT_TO_ADDRESS,
-                        &outpoint.to_string(),
-                    )
+                    self.database
+                        .lock()
+                        .await
+                        .delete(OUTPOINT_TO_ADDRESS, &outpoint.to_string())
                 }
             }
         }
@@ -1022,8 +1053,46 @@ impl Updater {
         Ok(())
     }
 
-    pub async fn get_last_indexed_block(&self) -> Result<u64, DatabaseError> {
-        let last_indexed_block: LastIndexedBlock = self
+
+
+
+    #[cfg(feature = "helper-api")]
+    pub async fn expensive_get_all_messages(&self) -> Vec<BlockTxTuple> {
+        use database::MESSAGE_PREFIX;
+
+        let all_messages: Result<Vec<BlockTxTuple>, DatabaseError> = self
+            .database
+            .lock()
+            .await
+            .expensive_find_by_prefix(MESSAGE_PREFIX)
+            .map(|vec: Vec<(String, MessageDataOutcome)>| {
+                vec.into_iter()
+                    .filter(|(_, v)| {
+                        v.flaw.is_none()
+                            && v.message.is_some()
+                            && v.message.clone().unwrap().contract_creation.is_some()
+                    })
+                    .map(|(k, _)| {
+                        BlockTx::from_str(
+                            k.trim_start_matches(&format!("{}:", MESSAGE_PREFIX))
+                                .to_string()
+                                .as_str(),
+                        )
+                        .unwrap()
+                        .to_tuple()
+                    })
+                    .collect()
+            });
+
+        if all_messages.is_ok() {
+            return all_messages.unwrap();
+        } else {
+            return Vec::new();
+        }
+    }
+
+        pub async fn get_last_indexed_block(&self) -> Result<u64, DatabaseError> {
+            let last_indexed_block: LastIndexedBlock = self
             .database
             .lock()
             .await

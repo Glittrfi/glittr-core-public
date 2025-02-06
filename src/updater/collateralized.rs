@@ -1,6 +1,6 @@
 use num::integer::Roots;
 use std::cmp::min;
-use varuint_dyn::Varuint;
+use varuint::Varuint;
 
 use super::*;
 use crate::updater::database::COLLATERAL_ACCOUNTS_PREFIX;

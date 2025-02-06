@@ -1,17 +1,18 @@
 use super::*;
+use az_base26::AZBase26;
 use message::{Commitment, ContractValidator};
 use transaction_shared::{
     FreeMint, InputAsset, OracleSetting, Preallocated, PurchaseBurnSwap, RatioType,
 };
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use varuint_dyn::Varuint;
+use varuint::Varuint;
 
 #[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct MintBurnAssetContract {
-    pub ticker: Option<String>,
+    pub ticker: Option<AZBase26>,
     pub supply_cap: Option<Varuint<u128>>,
     pub divisibility: u8,
     pub live_time: RelativeOrAbsoluteBlockHeight,
@@ -138,6 +139,12 @@ impl ReturnCollateral {
 
 impl ContractValidator for MintBurnAssetContract {
     fn validate(&self) -> Option<Flaw> {
+        if let Some(end_time) = self.end_time {
+            if end_time < self.live_time {
+                return Some(Flaw::EndTimeIsLessThanLiveTime)
+            }
+        }
+
         if self.mint_mechanism.purchase.is_some() && self.mint_mechanism.free_mint.is_some() {
             return Some(Flaw::NotImplemented);
         }

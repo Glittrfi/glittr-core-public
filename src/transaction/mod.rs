@@ -5,3 +5,4 @@ pub mod mint_only_asset;
 pub mod transaction_shared;
 pub mod spec;
 pub mod header;
+pub mod nft;

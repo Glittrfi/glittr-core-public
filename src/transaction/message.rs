@@ -1,6 +1,7 @@
 use std::fmt;
 
 use super::*;
+use az_base26::AZBase26;
 use bitcoin::{
     opcodes,
     script::{self, Instruction, PushBytes},
@@ -12,10 +13,11 @@ use constants::OP_RETURN_MAGIC_PREFIX;
 use flaw::Flaw;
 use mint_burn_asset::MintBurnAssetContract;
 use mint_only_asset::MintOnlyAssetContract;
+use nft::NftAssetContract;
 use spec::SpecContract;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use varuint_dyn::Varuint;
+use varuint::Varuint;
 
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -23,6 +25,7 @@ pub enum ContractType {
     Moa(MintOnlyAssetContract),
     Mba(MintBurnAssetContract),
     Spec(SpecContract),
+    Nft(NftAssetContract)
 }
 
 #[serde_with::skip_serializing_none]
@@ -60,6 +63,7 @@ pub enum CallType {
     // Collateralized assets
     OpenAccount(OpenAccountOption),
     CloseAccount(CloseAccountOption), // TODO: partial return & fee
+    UpdateNft(UpdateNftOption)
 }
 
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
@@ -77,6 +81,13 @@ pub struct CloseAccountOption {
 pub struct OracleMessageSigned {
     pub signature: Vec<u8>,
     pub message: OracleMessage,
+}
+
+#[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
+pub struct UpdateNftOption {
+    pub whitelist_address_bloom_filter: Option<Vec<u8>>,
+    pub trusted_marketplace_fee_addresses: Option<Vec<String>>, 
+    pub access_key_pointer: Option<Varuint<u64>>
 }
 
 #[serde_with::skip_serializing_none]
@@ -106,7 +117,7 @@ pub struct Commitment {
 
 #[derive(Deserialize, Serialize, BorshSerialize, BorshDeserialize, Clone, Debug)]
 pub struct ArgsCommitment {
-    pub fixed_string: String,
+    pub fixed_string: AZBase26,
     pub string: String,
 }
 
@@ -248,6 +259,7 @@ impl OpReturnMessage {
                 ContractType::Moa(mint_only_asset_contract) => mint_only_asset_contract.validate(),
                 ContractType::Mba(mint_burn_asset_contract) => mint_burn_asset_contract.validate(),
                 ContractType::Spec(spec_contract) => spec_contract.validate(),
+                ContractType::Nft(nft_asset_contract) => nft_asset_contract.validate()
             };
         }
 
@@ -305,7 +317,8 @@ mod test {
 
     use super::mint_only_asset::MOAMintMechanisms;
     use super::transaction_shared::FreeMint;
-    use super::varuint_dyn::Varuint;
+    use super::varuint::Varuint;
+    use super::varint::Varint;
     use super::{ContractCreation, OpReturnMessage};
 
     fn create_dummy_tx() -> Transaction {
@@ -316,7 +329,7 @@ mod test {
                     ticker: None,
                     supply_cap: Some(Varuint(1000_000_000)),
                     divisibility: 18,
-                    live_time: 0,
+                    live_time: Varint(0),
                     end_time: None,
                     mint_mechanism: MOAMintMechanisms {
                         free_mint: Some(FreeMint {
@@ -384,7 +397,7 @@ mod test {
                         Some(Varuint(1000_000_000))
                     );
                     assert_eq!(mint_only_asset_contract.divisibility, 18);
-                    assert_eq!(mint_only_asset_contract.live_time, 0);
+                    assert_eq!(mint_only_asset_contract.live_time, Varint(0));
                     assert_eq!(free_mint.supply_cap, Some(Varuint(1000)));
                     assert_eq!(free_mint.amount_per_mint, Varuint(10));
                 }

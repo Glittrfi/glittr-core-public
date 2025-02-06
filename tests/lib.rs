@@ -7,31 +7,43 @@ use bitcoin::{
 };
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use glittr::{
-    bloom_filter_to_compressed_vec, database::{
+    az_base26::AZBase26,
+    bloom_filter_to_compressed_vec,
+    database::{
         Database, DatabaseError, ASSET_CONTRACT_DATA_PREFIX, ASSET_LIST_PREFIX,
         COLLATERAL_ACCOUNTS_PREFIX, INDEXER_LAST_BLOCK_PREFIX, MESSAGE_PREFIX,
         TICKER_TO_BLOCK_TX_PREFIX,
-    }, message::{
+    },
+    message::{
         ArgsCommitment, AssertValues, CallType, CloseAccountOption, Commitment, CommitmentMessage,
         ContractCall, ContractCreation, ContractType, MintBurnOption, OpReturnMessage,
         OpenAccountOption, OracleMessage, OracleMessageSigned, SwapOption, Transfer,
         TxTypeTransfer,
-    }, mint_burn_asset::{
+    },
+    mint_burn_asset::{
         AccountType, BurnMechanisms, Collateralized, MBAMintMechanisms, MintBurnAssetContract,
         MintStructure, ProportionalType, RatioModel, ReturnCollateral, SwapMechanisms,
-    }, mint_only_asset::{MOAMintMechanisms, MintOnlyAssetContract}, spec::{
+    },
+    mint_only_asset::{MOAMintMechanisms, MintOnlyAssetContract},
+    nft::NftAssetContract,
+    spec::{
         MintBurnAssetCollateralizedSpec, MintBurnAssetSpec, MintOnlyAssetSpec,
         MintOnlyAssetSpecPegInType, SpecContract, SpecContractType,
-    }, transaction_shared::{
+    },
+    transaction_shared::{
         AllocationType, BloomFilterArgType, FreeMint, InputAsset, OracleSetting, Preallocated,
         PurchaseBurnSwap, RatioType, VestingPlan,
-    }, varuint_dyn::Varuint, AssetContractData, AssetList, BlockTx, BlockTxTuple, CollateralAccounts, Flaw, Indexer, LastIndexedBlock, MessageDataOutcome
+    },
+    varint::Varint,
+    varuint::Varuint,
+    AssetContractData, AssetList, BlockTx, BlockTxTuple, CollateralAccounts, Flaw, Indexer,
+    LastIndexedBlock, MessageDataOutcome,
 };
 use growable_bloom_filter::GrowableBloom;
 use mockcore::{Handle, TransactionTemplate};
 use rand::rngs::OsRng;
 use sha2::{Digest, Sha256};
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
 use tempfile::TempDir;
 use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
 
@@ -346,7 +358,7 @@ async fn test_integration_broadcast_op_return_message_success() {
                 ticker: None,
                 supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
@@ -382,7 +394,7 @@ async fn test_integration_purchaseburnswap() {
                 ticker: None,
                 supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
@@ -421,7 +433,7 @@ async fn test_raw_btc_to_glittr_asset_burn() {
                 ticker: None,
                 supply_cap: None,
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
@@ -547,7 +559,7 @@ async fn test_raw_btc_to_glittr_asset_purchase_gbtc() {
                 ticker: None,
                 supply_cap: Some(Varuint(21_000_000 * 10u128.pow(8))),
                 divisibility: 8,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
@@ -658,7 +670,7 @@ async fn test_raw_btc_to_glittr_asset_burn_oracle() {
                 ticker: None,
                 supply_cap: None,
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
@@ -826,7 +838,7 @@ async fn test_raw_btc_to_glittr_asset_oracle_purchase() {
                 ticker: None,
                 supply_cap: Some(Varuint(21_000_000 * 10u128.pow(8))),
                 divisibility: 8,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
@@ -963,7 +975,7 @@ async fn test_metaprotocol_to_glittr_asset() {
                 ticker: None,
                 supply_cap: None,
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
@@ -1107,7 +1119,7 @@ async fn test_integration_freemint() {
                 ticker: None,
                 supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
@@ -1141,7 +1153,7 @@ async fn test_integration_mint_freemint() {
                 ticker: None,
                 supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
@@ -1212,7 +1224,7 @@ async fn test_integration_mint_freemint_supply_cap_exceeded() {
                 ticker: None,
                 supply_cap: Some(Varuint(50)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
@@ -1294,7 +1306,7 @@ async fn test_integration_mint_freemint_livetime_notreached() {
                 ticker: None,
                 supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
-                live_time: 5,
+                live_time: Varint(5),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
@@ -1416,10 +1428,10 @@ async fn test_integration_mint_preallocated_freemint() {
     );
 
     let vesting_plan = VestingPlan::Scheduled(vec![
-        ((Varuint(1), Varuint(4)), -4),
-        ((Varuint(1), Varuint(4)), -2),
-        ((Varuint(1), Varuint(4)), -3),
-        ((Varuint(1), Varuint(4)), -1),
+        ((Varuint(1), Varuint(4)), Varint(-4)),
+        ((Varuint(1), Varuint(4)), Varint(-2)),
+        ((Varuint(1), Varuint(4)), Varint(-3)),
+        ((Varuint(1), Varuint(4)), Varint(-1)),
     ]);
 
     let message = OpReturnMessage {
@@ -1429,7 +1441,7 @@ async fn test_integration_mint_preallocated_freemint() {
                 ticker: None,
                 supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     preallocated: Some(Preallocated {
@@ -1536,7 +1548,7 @@ async fn test_integration_mint_freemint_invalidpointer() {
                 ticker: None,
                 supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
@@ -1593,7 +1605,7 @@ async fn test_integration_transfer_normal() {
                 ticker: None,
                 supply_cap: Some(Varuint(100_000)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
@@ -1733,7 +1745,7 @@ async fn test_integration_transfer_overflow_output() {
                 ticker: None,
                 supply_cap: Some(Varuint(100_000)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
@@ -1854,7 +1866,7 @@ async fn test_integration_transfer_utxo() {
                 ticker: None,
                 supply_cap: Some(Varuint(100_000)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
@@ -1944,7 +1956,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
                 ticker: None,
                 supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
@@ -1990,7 +2002,7 @@ async fn test_integration_glittr_asset_mint_purchase() {
                 ticker: None,
                 supply_cap: Some(Varuint(500)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
@@ -2092,7 +2104,7 @@ async fn test_integration_collateralized_mba() {
                 ticker: None,
                 supply_cap: Some(Varuint(1_000_000)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
@@ -2136,7 +2148,7 @@ async fn test_integration_collateralized_mba() {
                 ticker: None,
                 supply_cap: Some(Varuint(500_000)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MBAMintMechanisms {
                     preallocated: None,
@@ -2609,7 +2621,7 @@ async fn test_integration_proportional_mba_lp() {
                 ticker: None,
                 supply_cap: Some(Varuint(1_000_000)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
@@ -2633,7 +2645,7 @@ async fn test_integration_proportional_mba_lp() {
                 ticker: None,
                 supply_cap: Some(Varuint(1_000_000)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
@@ -2695,7 +2707,7 @@ async fn test_integration_proportional_mba_lp() {
                 ticker: None,
                 supply_cap: None, // No supply cap for LP tokens
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MBAMintMechanisms {
                     preallocated: None,
@@ -3208,7 +3220,7 @@ async fn test_integration_spec_moa_valid_contract_creation() {
                 ticker: None,
                 supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
@@ -3267,7 +3279,7 @@ async fn test_integration_spec_moa_input_asset_invalid() {
                 ticker: None,
                 supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
@@ -3330,7 +3342,7 @@ async fn test_integration_spec_moa_peg_in_type_invalid() {
                 ticker: None,
                 supply_cap: Some(Varuint(1000)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
@@ -3382,7 +3394,7 @@ async fn test_integration_glittr_airdrop() {
                 ticker: None,
                 supply_cap: None, // Unlimited supply
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
@@ -3395,7 +3407,7 @@ async fn test_integration_glittr_airdrop() {
                 commitment: Some(Commitment {
                     public_key: admin_public_key.serialize().to_vec(),
                     args: ArgsCommitment {
-                        fixed_string: "GLITTRAIRDROP".to_string(),
+                        fixed_string: AZBase26::from_str("GLITTRAIRDROP").unwrap(),
                         string: "username".to_string(),
                     },
                 }),
@@ -3478,7 +3490,7 @@ async fn test_integration_glittr_airdrop() {
                 ticker: None,
                 supply_cap: Some(Varuint(100)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 end_time: None,
                 mint_mechanism: MOAMintMechanisms {
                     preallocated: Some(Preallocated {
@@ -3576,7 +3588,7 @@ async fn test_integration_glittr_airdrop() {
 async fn test_integration_contract_ticker() {
     let mut ctx = TestContext::new().await;
 
-    let ticker = "POHON_PISANG".to_string();
+    let ticker = AZBase26::from_str("POHON.PISANG").unwrap();
 
     let contract_message = OpReturnMessage {
         contract_creation: Some(ContractCreation {
@@ -3585,7 +3597,7 @@ async fn test_integration_contract_ticker() {
                 ticker: Some(ticker.clone()),
                 supply_cap: None,
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
@@ -3614,7 +3626,7 @@ async fn test_integration_contract_ticker() {
                 ticker: Some(ticker.clone()),
                 supply_cap: None,
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 mint_mechanism: MOAMintMechanisms {
                     purchase: Some(PurchaseBurnSwap {
                         input_asset: InputAsset::RawBtc,
@@ -3646,7 +3658,7 @@ async fn test_integration_contract_ticker() {
         .database
         .lock()
         .await
-        .get(TICKER_TO_BLOCK_TX_PREFIX, &ticker);
+        .get(TICKER_TO_BLOCK_TX_PREFIX, &ticker.to_string());
 
     assert_eq!(block_tx_by_ticker.unwrap(), block_tx.to_tuple());
 
@@ -3669,7 +3681,7 @@ async fn test_contract_creation_and_mint() {
                 ticker: None,
                 supply_cap: Some(Varuint(1_000_000)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(Varuint(1_000_000)),
@@ -3693,7 +3705,7 @@ async fn test_contract_creation_and_mint() {
                 ticker: None,
                 supply_cap: Some(Varuint(1_000_000)),
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 mint_mechanism: MOAMintMechanisms {
                     free_mint: Some(FreeMint {
                         supply_cap: Some(Varuint(1_000_000)),
@@ -3755,7 +3767,7 @@ async fn test_contract_creation_and_mint() {
                 ticker: None,
                 supply_cap: None,
                 divisibility: 18,
-                live_time: 0,
+                live_time: Varint(0),
                 mint_mechanism: MBAMintMechanisms {
                     preallocated: None,
                     free_mint: None,
@@ -3839,6 +3851,45 @@ async fn test_contract_creation_and_mint() {
 
     // Minted LP: https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol#L120-L123
     assert_eq!(*lp_minted_amount, 70710);
+
+    ctx.drop().await;
+}
+
+#[tokio::test]
+async fn test_integration_mint_nft() {
+    let mut ctx = TestContext::new().await;
+    let message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            spec: None,
+            contract_type: ContractType::Nft(NftAssetContract {
+                supply_cap: Some(Varuint(1)),
+                live_time: Varint(0),
+                end_time: None,
+                asset: vec![0],
+                pointer: None,
+            }),
+        }),
+        transfer: None,
+        contract_call: Some(ContractCall {
+            contract: None,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(Varuint(1)),
+                oracle_message: None,
+                pointer_to_key: None,
+                assert_values: None,
+                commitment_message: None,
+            }),
+        }),
+    };
+
+    let block_tx_contract = ctx.build_and_mine_message(&message).await;
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    let asset_lists = ctx.get_asset_list().await;
+    assert_eq!(
+        asset_lists[0].1.list.get(&block_tx_contract.to_string()),
+        Some(&1)
+    );
 
     ctx.drop().await;
 }
