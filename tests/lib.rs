@@ -24,6 +24,7 @@ use glittr::{
         MintStructure, ProportionalType, RatioModel, ReturnCollateral, SwapMechanisms,
     },
     mint_only_asset::{MOAMintMechanisms, MintOnlyAssetContract},
+    nft::NftAssetContract,
     spec::{
         MintBurnAssetCollateralizedSpec, MintBurnAssetSpec, MintOnlyAssetSpec,
         MintOnlyAssetSpecPegInType, SpecContract, SpecContractType,
@@ -3801,6 +3802,42 @@ async fn test_contract_creation_and_mint() {
 
     // Minted LP: https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol#L120-L123
     assert_eq!(*lp_minted_amount, 70710);
+
+    ctx.drop().await;
+}
+
+#[tokio::test]
+async fn test_integration_mint_nft() {
+    let mut ctx = TestContext::new().await;
+    let message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            spec: None,
+            contract_type: ContractType::NFT(NftAssetContract {
+                supply_cap: Some(U128(1)),
+                live_time: 0,
+                end_time: None,
+                asset_image: vec![0],
+                pointer: None,
+            }),
+        }),
+        transfer: None,
+        contract_call: Some(ContractCall {
+            contract: None,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
+                oracle_message: None,
+                pointer_to_key: None,
+                assert_values: None,
+                commitment_message: None,
+            }),
+        }),
+    };
+
+    let block_tx_contract = ctx.build_and_mine_message(&message).await;
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    let asset_lists = ctx.get_asset_list().await;
+    assert_eq!(asset_lists[0].1.list.get(&block_tx_contract.to_string()), Some(&1));
 
     ctx.drop().await;
 }
