@@ -555,7 +555,7 @@ impl Updater {
                     }
                     // TODO implement spec index
                     ContractType::Spec(_) => None,
-                    ContractType::NFT(nft) => {
+                    ContractType::Nft(nft) => {
                         if let Some(flaw) = check_live_time(
                             nft.live_time,
                             nft.end_time,
