@@ -5,9 +5,48 @@ use bitcoin::{
     PublicKey, ScriptBuf,
 };
 use message::MintBurnOption;
+use nft::NftAssetContract;
 use transaction_shared::Preallocated;
 
 impl Updater {
+    async fn mint_nft(
+        &mut self,
+        nft: &NftAssetContract,
+        tx: &Transaction,
+        _block_tx: &BlockTx,
+        contract_id: &BlockTxTuple,
+        mint_option: &MintBurnOption,
+    ) -> Option<Flaw> {
+        // TODO whitelist mint
+
+        if let Some(flaw) = self
+            .validate_and_update_supply_cap(
+                contract_id,
+                nft.supply_cap.clone(),
+                1,
+                true,
+                false,
+                None,
+            )
+            .await
+        {
+            return Some(flaw);
+        }
+
+        // check pointer overflow
+        if let Some(pointer) = mint_option.pointer {
+            if let Some(flaw) = self.validate_pointer(pointer, tx) {
+                return Some(flaw);
+            }
+
+            // allocate enw asset for the mint
+            self.allocate_new_asset(pointer, contract_id, 1)
+                .await;
+        }
+
+        None
+    }
+
     async fn mint_free_mint(
         &mut self,
         moa: &MintOnlyAssetContract,
@@ -513,6 +552,19 @@ impl Updater {
                     }
                     // TODO implement spec index
                     ContractType::Spec(_) => None,
+                    ContractType::Nft(nft) => {
+                        if let Some(flaw) = check_live_time(
+                            nft.live_time,
+                            nft.end_time,
+                            contract_id.0,
+                            block_tx.block,
+                        ) {
+                            return Some(flaw);
+                        }
+
+                        return self.mint_nft(&nft, tx, block_tx, contract_id, mint_option).await;
+
+                    }
                 },
                 None => Some(Flaw::ContractNotMatch),
             },

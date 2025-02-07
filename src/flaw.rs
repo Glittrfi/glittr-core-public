@@ -86,4 +86,5 @@ pub enum Flaw {
     PoolNotFound,
     AssertValuesMismatch,
     NotFound,
+    EndTimeIsLessThanLiveTime
 }

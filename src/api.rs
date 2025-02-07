@@ -25,9 +25,10 @@ pub struct APIState {
 pub struct ContractInfo {
     pub ticker: Option<String>,
     pub supply_cap: Option<U128>,
-    pub divisibility: u8,
+    pub divisibility: Option<u8>,
     pub total_supply: U128,
-    pub r#type: MintType,
+    pub r#type: Option<MintType>,
+    pub asset: Option<Vec<u8>>,
 }
 
 #[derive(Deserialize, Serialize, Clone)]
