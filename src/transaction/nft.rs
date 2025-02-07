@@ -7,7 +7,7 @@ use super::*;
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct NftAssetContract {
-    pub asset_image: Vec<u8>,
+    pub asset: Vec<u8>,
     pub supply_cap: Option<U128>,
     pub live_time: RelativeOrAbsoluteBlockHeight,
     pub end_time: Option<RelativeOrAbsoluteBlockHeight>,

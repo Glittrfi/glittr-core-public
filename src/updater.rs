@@ -687,7 +687,7 @@ impl Updater {
                             },
                             collateralized: None,
                         }),
-                        asset_image: None,
+                        asset: None,
                     }));
                 }
                 ContractType::Mba(mba) => Ok(Some(ContractInfo {
@@ -747,7 +747,7 @@ impl Updater {
                             None
                         },
                     }),
-                    asset_image: None,
+                    asset: None,
                 })),
                 ContractType::Spec(_) => Ok(None),
                 ContractType::Nft(nft)=> Ok(Some(ContractInfo {
@@ -756,7 +756,7 @@ impl Updater {
                     divisibility: None,
                     total_supply: U128(asset_data.minted_supply - asset_data.burned_supply),
                     r#type: None,
-                    asset_image: Some(nft.asset_image),
+                    asset: Some(nft.asset),
                 })),
             },
             None => Ok(None),

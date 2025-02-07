@@ -23,7 +23,7 @@ struct AssetBalance {
     ticker: Option<String>,
     divisibility: Option<u8>,
     r#type: Option<MintType>,
-    asset_image: Option<Vec<u8>>
+    asset: Option<Vec<u8>>
 }
 
 #[derive(Serialize, Deserialize)]
@@ -111,7 +111,7 @@ async fn helper_get_address_balance_summary(
                     ticker: contract_info.ticker,
                     divisibility: contract_info.divisibility,
                     r#type: contract_info.r#type,
-                    asset_image: contract_info.asset_image,
+                    asset: contract_info.asset,
                 });
             }
 
@@ -153,7 +153,7 @@ async fn helper_get_address_valid_outputs(
                         ticker: contract_info.ticker,
                         divisibility: contract_info.divisibility,
                         r#type: contract_info.r#type,
-                    asset_image: contract_info.asset_image,
+                    asset: contract_info.asset,
                     })
                 }
 
@@ -204,7 +204,7 @@ async fn helper_get_assets_in_outpoint(
                     ticker: contract_info.ticker,
                     divisibility: contract_info.divisibility,
                     r#type: contract_info.r#type,
-                    asset_image: contract_info.asset_image,
+                    asset: contract_info.asset,
                 });
             }
             let block_height = updater.get_last_indexed_block().await;

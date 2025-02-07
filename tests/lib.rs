@@ -3816,7 +3816,7 @@ async fn test_integration_mint_nft() {
                 supply_cap: Some(U128(1)),
                 live_time: 0,
                 end_time: None,
-                asset_image: vec![0],
+                asset: vec![0],
                 pointer: None,
             }),
         }),
