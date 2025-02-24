@@ -32,7 +32,8 @@ base64 = "0.22.1"
 aes-gcm = "0.10.3"
 sha2 = "0.10.8"
 rand = "0.8.5"
-ctrlc = {version = "3.4.5", features = ["termination"] }
+ctrlc = { version = "3.4.5", features = ["termination"] }
+tower-http = { version = "0.6.2", features = ["cors"] }
 
 [[bin]]
 name = "glittr"

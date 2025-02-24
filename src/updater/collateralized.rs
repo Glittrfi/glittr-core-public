@@ -252,8 +252,11 @@ impl Updater {
                             .unwrap_or(0);
 
                         let pool_key = BlockTx::from_tuple(*contract_id).to_string();
-                        let pool_data: Result<CollateralizedAssetData, DatabaseError> =
-                            self.database.lock().await.get(COLLATERALIZED_CONTRACT_DATA, &pool_key);
+                        let pool_data: Result<CollateralizedAssetData, DatabaseError> = self
+                            .database
+                            .lock()
+                            .await
+                            .get(COLLATERALIZED_CONTRACT_DATA, &pool_key);
 
                         match pool_data {
                             // If pool exists, validate constant product
@@ -474,7 +477,7 @@ impl Updater {
         _block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
         open_account_option: &OpenAccountOption,
-        message: Result<OpReturnMessage, Flaw>
+        message: Result<OpReturnMessage, Flaw>,
     ) -> Option<Flaw> {
         // Get the MBA contract
         let mut collateral_amounts = Vec::new();
@@ -541,7 +544,7 @@ impl Updater {
         _block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
         swap_option: &SwapOption,
-        message: Result<OpReturnMessage, Flaw>
+        message: Result<OpReturnMessage, Flaw>,
     ) -> Option<Flaw> {
         let contract_creation = match message {
             Ok(op_return_message) => op_return_message.contract_creation?,

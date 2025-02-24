@@ -14,16 +14,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{collections::HashMap, str::FromStr};
 
-
-
 #[derive(Serialize, Deserialize)]
 struct AssetBalance {
     contract_id: BlockTxString,
-    balance: U128,
+    balance: Option<U128>,
     ticker: Option<String>,
     divisibility: Option<u8>,
     r#type: Option<MintType>,
-    asset: Option<Vec<u8>>
+    asset: Option<Vec<u8>>, // this is nft asset
+    is_state_key: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -52,10 +51,7 @@ pub fn helper_routes() -> Router<APIState> {
             "/helper/assets/:outpoint",
             get(helper_get_assets_in_outpoint),
         )
-        .route(
-            "/helper/assets",
-            get(expensive_helper_get_assets)
-        )
+        .route("/helper/assets", get(expensive_helper_get_assets))
 }
 
 async fn helper_get_address_balance(
@@ -107,11 +103,12 @@ async fn helper_get_address_balance_summary(
 
                 result.push(AssetBalance {
                     contract_id: block_tx.to_string(),
-                    balance: balance.summarized.get(contract_id).unwrap().clone(),
+                    balance: Some(balance.summarized.get(contract_id).unwrap().clone()),
                     ticker: contract_info.ticker,
                     divisibility: contract_info.divisibility,
                     r#type: contract_info.r#type,
                     asset: contract_info.asset,
+                    is_state_key: None,
                 });
             }
 
@@ -149,11 +146,12 @@ async fn helper_get_address_valid_outputs(
 
                     asset_balances.push(AssetBalance {
                         contract_id: block_tx_str,
-                        balance,
+                        balance: Some(balance),
                         ticker: contract_info.ticker,
                         divisibility: contract_info.divisibility,
                         r#type: contract_info.r#type,
-                    asset: contract_info.asset,
+                        asset: contract_info.asset,
+                        is_state_key: None,
                     })
                 }
 
@@ -186,10 +184,10 @@ async fn helper_get_assets_in_outpoint(
         vout: u32::from_str(outpoint_parts[1]).unwrap(),
     };
 
+    let mut asset_balances: Vec<AssetBalance> = Vec::new();
+
     match updater.get_asset_list(&outpoint).await {
         Ok(asset_list) => {
-            let mut asset_balances: Vec<AssetBalance> = Vec::new();
-
             for (contract_id, balance) in asset_list.list {
                 let block_tx = BlockTx::from_str(&contract_id).unwrap();
                 let contract_info = updater
@@ -200,20 +198,76 @@ async fn helper_get_assets_in_outpoint(
 
                 asset_balances.push(AssetBalance {
                     contract_id,
-                    balance: U128(balance),
+                    balance: Some(U128(balance)),
                     ticker: contract_info.ticker,
                     divisibility: contract_info.divisibility,
                     r#type: contract_info.r#type,
                     asset: contract_info.asset,
+                    is_state_key: None,
                 });
             }
-            let block_height = updater.get_last_indexed_block().await;
-
-            Ok(Json(
-                json!({ "result": asset_balances, "block_height": block_height }),
-            ))
         }
-        Err(_) => Err(StatusCode::NOT_FOUND),
+        Err(_) => ()
+    };
+
+    match updater.get_state_keys(&outpoint).await {
+        Ok(state_keys) => {
+            for contract_id in state_keys.contract_ids {
+                let block_tx = BlockTx::from_tuple(contract_id);
+                let contract_info = updater
+                    .get_contract_info_by_block_tx(block_tx.to_tuple())
+                    .await
+                    .unwrap()
+                    .unwrap();
+
+                asset_balances.push(AssetBalance {
+                    contract_id: block_tx.to_string(),
+                    balance: None,
+                    ticker: contract_info.ticker,
+                    divisibility: contract_info.divisibility,
+                    r#type: contract_info.r#type,
+                    asset: contract_info.asset,
+                    is_state_key: Some(true),
+                });
+
+            }
+        }
+        Err(_) => (),
+    }
+
+    match updater.get_collateral_accounts(&outpoint).await {
+        Ok(collateral_account) => {
+            for contract_id in collateral_account.collateral_accounts.keys() {
+                let block_tx = BlockTx::from_str(contract_id).unwrap();
+                let contract_info = updater
+                    .get_contract_info_by_block_tx(block_tx.to_tuple())
+                    .await
+                    .unwrap()
+                    .unwrap();
+
+                asset_balances.push(AssetBalance {
+                    contract_id: block_tx.to_string(),
+                    balance: None,
+                    ticker: contract_info.ticker,
+                    divisibility: contract_info.divisibility,
+                    r#type: contract_info.r#type,
+                    asset: contract_info.asset,
+                    is_state_key: Some(true),
+                });
+
+            }
+        }
+        Err(_) => (),
+    }
+
+    if asset_balances.len() > 0 {
+        let block_height = updater.get_last_indexed_block().await;
+
+        Ok(Json(
+            json!({ "result": asset_balances, "block_height": block_height }),
+        ))
+    } else {
+        Err(StatusCode::NOT_FOUND)
     }
 }
 
@@ -235,7 +289,10 @@ async fn expensive_helper_get_assets(
             .unwrap()
             .unwrap();
 
-        result.insert(BlockTx::from_tuple(block_tx_tuple.clone()).to_string(), contract_info);
+        result.insert(
+            BlockTx::from_tuple(block_tx_tuple.clone()).to_string(),
+            contract_info,
+        );
     }
 
     Ok(Json(
