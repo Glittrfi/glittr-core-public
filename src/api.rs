@@ -1,4 +1,8 @@
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    str::FromStr,
+    sync::Arc,
+};
 
 use super::*;
 use axum::{
@@ -12,6 +16,7 @@ use bitcoin::{consensus::deserialize, OutPoint, Transaction, Txid};
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use serde_json::{json, Value};
 use store::database::{DatabaseError, MESSAGE_PREFIX, TRANSACTION_TO_BLOCK_TX_PREFIX};
+use tower_http::cors::CorsLayer;
 use transaction::message::OpReturnMessage;
 use varuint::Varuint;
 
@@ -97,6 +102,8 @@ pub async fn run_api(database: Arc<Mutex<Database>>) -> Result<(), std::io::Erro
     let app = app
         .merge(helper_api::helper_routes())
         .with_state(shared_state);
+
+    let app = app.layer(CorsLayer::permissive());
 
     let listener = tokio::net::TcpListener::bind(CONFIG.api_url.clone()).await;
 
@@ -214,10 +221,18 @@ async fn get_assets(
         vout,
     };
 
+    let mut asset_list: AssetList = AssetList {
+        list: HashMap::new(),
+    };
+    let mut state_keys: StateKeys = StateKeys {
+        contract_ids: HashSet::new(),
+    };
+    let mut contract_infos = HashMap::new();
+
     match updater.get_asset_list(&outpoint).await {
-        Ok(asset_list) => {
+        Ok(asset_list_) => {
+            asset_list = asset_list_;
             if options.show_contract_info == Some(true) {
-                let mut contract_infos = HashMap::new();
                 for contract_id in asset_list.list.keys() {
                     let block_tx = BlockTx::from_str(contract_id).unwrap();
                     let contract_info = updater
@@ -226,15 +241,61 @@ async fn get_assets(
                         .unwrap();
                     contract_infos.insert(contract_id.clone(), contract_info);
                 }
-                Ok(Json(
-                    json!({ "assets": asset_list, "contract_info": contract_infos }),
-                ))
-            } else {
-                Ok(Json(json!({ "assets": asset_list })))
             }
         }
-        Err(_) => Err(StatusCode::NOT_FOUND),
+        Err(_) => (),
+    };
+
+    match updater.get_state_keys(&outpoint).await {
+        Ok(state_keys_) => {
+            state_keys = state_keys_;
+            if options.show_contract_info == Some(true) {
+                for contract_id in state_keys.contract_ids.iter() {
+                    let block_tx = BlockTx::from_tuple(contract_id.clone());
+                    let contract_info = updater
+                        .get_contract_info_by_block_tx(block_tx.to_tuple())
+                        .await
+                        .unwrap();
+                    contract_infos.insert(block_tx.to_string(), contract_info);
+                }
+            }
+        }
+        Err(_) => (),
     }
+
+    match updater.get_collateral_accounts(&outpoint).await {
+        Ok(collateral_account) => {
+            for contract_id_string in collateral_account.collateral_accounts.keys() {
+                state_keys
+                    .contract_ids
+                    .insert(BlockTx::from_str(&contract_id_string).unwrap().to_tuple());
+                if options.show_contract_info == Some(true) {
+                    let block_tx = BlockTx::from_str(&contract_id_string).unwrap();
+                    let contract_info = updater
+                        .get_contract_info_by_block_tx(block_tx.to_tuple())
+                        .await
+                        .unwrap();
+                    contract_infos.insert(block_tx.to_string(), contract_info);
+                }
+            }
+        }
+        Err(_) => (),
+    }
+
+    let mut result = json!({"assets": asset_list});
+
+    if state_keys.contract_ids.len() > 0 {
+        result["state_keys"] = json!(state_keys
+            .contract_ids
+            .iter()
+            .map(|contract_id| BlockTx::from_tuple(contract_id.clone()).to_string())
+            .collect::<Vec<String>>());
+    }
+
+    if contract_infos.len() > 0 {
+        result["contract_info"] = json!(contract_infos);
+    }
+    return Ok(Json(result));
 }
 
 async fn get_asset_contract(
@@ -250,9 +311,23 @@ async fn get_asset_contract(
             .get_contract_info_by_block_tx((Varuint(block), Varuint(tx)))
             .await
             .unwrap();
-        Ok(Json(
-            json!({ "asset": asset_contract_data, "contract_info": contract_info }),
-        ))
+
+        if let Ok(collateralized_contract_data) =
+            updater.get_collateralized_contract_data(&(Varuint(block), Varuint(tx))).await
+        {
+            let contract_info = updater
+                .get_contract_info_by_block_tx((Varuint(block), Varuint(tx)))
+                .await
+                .unwrap();
+
+            Ok(Json(
+                json!({ "asset": asset_contract_data, "collateralized": collateralized_contract_data, "contract_info": contract_info }),
+            ))
+        } else {
+            Ok(Json(
+                json!({ "asset": asset_contract_data, "contract_info": contract_info }),
+            ))
+        }
     } else {
         Err(StatusCode::NOT_FOUND)
     }
@@ -304,6 +379,7 @@ async fn validate_tx(
         // Get current block height for validation
         let current_block_tip = state.rpc.get_block_count().unwrap();
         let mut temp_updater = Updater::new(Arc::clone(&state.database), true).await;
+        let _ = temp_updater.unallocate_inputs(&tx).await;
         if let Ok(outcome) = temp_updater
             .index(current_block_tip, 1, &tx, Ok(op_return_message))
             .await

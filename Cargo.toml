@@ -7,6 +7,46 @@ edition = "2021"
 [features]
 helper-api = []
 
+[[test]]
+name = "integration_tests_lp"
+path = "integration-tests/lp.rs"
+
+[[test]]
+name = "integration_tests_basic"
+path = "integration-tests/basic.rs"
+
+[[test]]
+name = "integration_tests_free_mint"
+path = "integration-tests/free_mint.rs"
+
+[[test]]
+name = "integration_tests_mint_purchase"
+path = "integration-tests/mint_purchase.rs"
+
+[[test]]
+name = "integration_tests_nft"
+path = "integration-tests/nft.rs"
+
+[[test]]
+name = "integration_tests_spec"
+path = "integration-tests/spec.rs"
+
+[[test]]
+name = "integration_tests_transfer"
+path = "integration-tests/transfer.rs"
+
+[[test]]
+name = "integration_tests_pbs"
+path = "integration-tests/pbs.rs"
+
+[[test]]
+name = "integration_tests_collateralized"
+path = "integration-tests/collateralized.rs"
+
+[[test]]
+name = "integration_tests_airdrop"
+path = "integration-tests/airdrop.rs"
+
 [dependencies]
 axum = "0.7.7"
 bitcoin = "0.32.3"
@@ -34,6 +74,7 @@ rand = "0.8.5"
 brotli = "7.0.0"
 num-traits = "0.2.19"
 ctrlc = {version = "3.4.5", features = ["termination"] }
+tower-http = { version = "0.6.2", features = ["cors"] }
 
 [[bin]]
 name = "glittr"

@@ -49,15 +49,18 @@ impl Updater {
 
     async fn mint_free_mint(
         &mut self,
-        moa: &MintOnlyAssetContract,
+        asset: &ContractType,
         tx: &Transaction,
         _block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
         mint_option: &MintBurnOption,
     ) -> Option<Flaw> {
+        let asset = match convert_to_mint_only_asset(asset) {
+            Ok(asset) => asset,
+            Err(flaw) => return Some(flaw),
+        };
 
-
-        let free_mint = moa.mint_mechanism.free_mint.as_ref().unwrap();
+        let free_mint = asset.mint_mechanism.free_mint.as_ref().unwrap();
 
         if let Some(assert_values) = &mint_option.assert_values {
             if let Some(flaw) = self.validate_assert_values(
@@ -73,7 +76,7 @@ impl Updater {
         if let Some(flaw) = self
             .validate_and_update_supply_cap(
                 contract_id,
-                moa.supply_cap.clone(),
+                asset.supply_cap.clone(),
                 free_mint.amount_per_mint.0,
                 true,
                 true,
@@ -100,13 +103,18 @@ impl Updater {
 
     pub async fn mint_purchase_burn_swap(
         &mut self,
-        moa: &MintOnlyAssetContract,
+        asset: &ContractType,
         purchase: &PurchaseBurnSwap,
         tx: &Transaction,
         block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
         mint_option: MintBurnOption,
     ) -> Option<Flaw> {
+        let asset = match convert_to_mint_only_asset(asset) {
+            Ok(asset) => asset,
+            Err(flaw) => return Some(flaw),
+        };
+
         let mut total_unallocated_glittr_asset: u128 = 0;
         let mut total_received_value: u128 = 0;
 
@@ -255,7 +263,7 @@ impl Updater {
         if let Some(flaw) = self
             .validate_and_update_supply_cap(
                 contract_id,
-                moa.supply_cap.clone(),
+                asset.supply_cap.clone(),
                 out_value,
                 true,
                 false,
@@ -280,13 +288,19 @@ impl Updater {
 
     pub async fn mint_preallocated(
         &mut self,
-        moa: &MintOnlyAssetContract,
+        asset: &ContractType,
         preallocated: &Preallocated,
         tx: &Transaction,
         block_tx: &BlockTx,
         contract_id: &BlockTxTuple,
         mint_option: &MintBurnOption,
     ) -> Option<Flaw> {
+        let asset = match convert_to_mint_only_asset(asset) {
+            Ok(asset) => asset,
+            Err(flaw) => return Some(flaw),
+        };
+
+        // Handling edge case when there are two input utxos by two vesting owners
         let mut owner_pub_key: Vec<u8> = Vec::new();
         let mut total_allocation: u128 = 0;
 
@@ -411,7 +425,7 @@ impl Updater {
         if let Some(flaw) = self
             .validate_and_update_supply_cap(
                 contract_id,
-                moa.supply_cap.clone(),
+                asset.supply_cap.clone(),
                 out_value,
                 true,
                 false,
@@ -460,7 +474,7 @@ impl Updater {
 
         match message {
             Ok(op_return_message) => match op_return_message.contract_creation {
-                Some(contract_creation) => match contract_creation.contract_type {
+                Some(contract_creation) => match contract_creation.contract_type.clone() {
                     ContractType::Moa(moa) => {
                         if let Some(flaw) = check_live_time(
                             moa.live_time,
@@ -471,10 +485,13 @@ impl Updater {
                             return Some(flaw);
                         }
 
+                        // Check for every mint mechanism type
+                        // If a mechanism type is a valid one, return early
+
                         let result_preallocated =
                             if let Some(preallocated) = &moa.mint_mechanism.preallocated {
                                 self.mint_preallocated(
-                                    &moa,
+                                    &contract_creation.contract_type,
                                     preallocated,
                                     tx,
                                     block_tx,
@@ -487,23 +504,29 @@ impl Updater {
                             };
 
                         if result_preallocated.is_none() {
-                            return result_preallocated;
+                            return None;
                         }
 
                         let result_free_mint = if moa.mint_mechanism.free_mint.is_some() {
-                            self.mint_free_mint(&moa, tx, block_tx, contract_id, mint_option)
-                                .await
+                            self.mint_free_mint(
+                                &contract_creation.contract_type,
+                                tx,
+                                block_tx,
+                                contract_id,
+                                mint_option,
+                            )
+                            .await
                         } else {
                             Some(Flaw::NotImplemented)
                         };
 
                         if result_free_mint.is_none() {
-                            return result_free_mint;
+                            return None;
                         }
 
                         let result_purchase = if let Some(purchase) = &moa.mint_mechanism.purchase {
                             self.mint_purchase_burn_swap(
-                                &moa,
+                                &contract_creation.contract_type,
                                 purchase,
                                 tx,
                                 block_tx,
@@ -516,7 +539,7 @@ impl Updater {
                         };
 
                         if result_purchase.is_none() {
-                            return result_purchase;
+                            return None;
                         }
 
                         if result_preallocated != Some(Flaw::NotImplemented) {
@@ -537,10 +560,11 @@ impl Updater {
                             return Some(flaw);
                         }
 
-                        // TODO: integrate other mint mechanisms
-                        if let Some(collateralized) = &mba.mint_mechanism.collateralized {
-                            return self
-                                .mint_collateralized(
+                        // Check for every mint mechanism type
+                        // If a mechanism type is a valid one, return early
+                        let result_collateralized =
+                            if let Some(collateralized) = &mba.mint_mechanism.collateralized {
+                                self.mint_collateralized(
                                     &mba,
                                     collateralized.clone(),
                                     tx,
@@ -548,9 +572,77 @@ impl Updater {
                                     contract_id,
                                     mint_option,
                                 )
-                                .await;
+                                .await
+                            } else {
+                                Some(Flaw::NotImplemented)
+                            };
+
+                        if result_collateralized.is_none() {
+                            return None;
+                        }
+
+                        let result_preallocated =
+                            if let Some(preallocated) = &mba.mint_mechanism.preallocated {
+                                self.mint_preallocated(
+                                    &contract_creation.contract_type,
+                                    preallocated,
+                                    tx,
+                                    block_tx,
+                                    contract_id,
+                                    mint_option,
+                                )
+                                .await
+                            } else {
+                                Some(Flaw::NotImplemented)
+                            };
+
+                        if result_preallocated.is_none() {
+                            return None;
+                        }
+
+                        let result_free_mint = if mba.mint_mechanism.free_mint.is_some() {
+                            self.mint_free_mint(
+                                &contract_creation.contract_type,
+                                tx,
+                                block_tx,
+                                contract_id,
+                                mint_option,
+                            )
+                            .await
                         } else {
-                            return Some(Flaw::NotImplemented);
+                            Some(Flaw::NotImplemented)
+                        };
+
+                        if result_free_mint.is_none() {
+                            return None;
+                        }
+
+                        let result_purchase = if let Some(purchase) = &mba.mint_mechanism.purchase {
+                            self.mint_purchase_burn_swap(
+                                &contract_creation.contract_type,
+                                purchase,
+                                tx,
+                                block_tx,
+                                contract_id,
+                                mint_option.clone(),
+                            )
+                            .await
+                        } else {
+                            Some(Flaw::NotImplemented)
+                        };
+
+                        if result_purchase.is_none() {
+                            return None;
+                        }
+
+                        if result_preallocated != Some(Flaw::NotImplemented) {
+                            result_preallocated
+                        } else if result_free_mint != Some(Flaw::NotImplemented) {
+                            result_free_mint
+                        } else if result_collateralized != Some(Flaw::NotImplemented) {
+                            result_collateralized
+                        } else {
+                            result_purchase
                         }
                     }
                     // TODO implement spec index
@@ -565,8 +657,9 @@ impl Updater {
                             return Some(flaw);
                         }
 
-                        return self.mint_nft(&nft, tx, block_tx, contract_id, mint_option).await;
-
+                        return self
+                            .mint_nft(&nft, tx, block_tx, contract_id, mint_option)
+                            .await;
                     }
                 },
                 None => Some(Flaw::ContractNotMatch),

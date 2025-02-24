@@ -52,6 +52,26 @@ pub fn bloom_filter_to_compressed_vec(filter: GrowableBloom) -> Vec<u8> {
         .to_vec()
 }
 
+pub fn convert_to_mint_only_asset(asset: &ContractType) -> Result<MintOnlyAssetContract, Flaw> {
+    match asset {
+        ContractType::Moa(moa) => Ok(moa.clone()),
+        ContractType::Mba(mba) => Ok(MintOnlyAssetContract {
+            ticker: mba.ticker.clone(),
+            supply_cap: mba.supply_cap.clone(),
+            divisibility: mba.divisibility,
+            live_time: mba.live_time,
+            end_time: mba.end_time,
+            mint_mechanism: mint_only_asset::MOAMintMechanisms {
+                preallocated: mba.mint_mechanism.preallocated.clone(),
+                free_mint: mba.mint_mechanism.free_mint.clone(),
+                purchase: mba.mint_mechanism.purchase.clone(),
+            },
+            commitment: mba.commitment.clone(),
+        }),
+        _ => Err(Flaw::ContractNotMatch),
+    }
+}
+
 pub fn compressed_vec_to_bloom_filter(input: Vec<u8>) -> GrowableBloom {
     let decompressed =
         decompress_to_vec(general_purpose::STANDARD.decode(input).unwrap().as_slice()).unwrap();
@@ -186,10 +206,10 @@ impl Updater {
     ) -> Result<u128, Flaw> {
         match ratio {
             RatioType::Fixed { ratio } => {
-                if !is_burn {
-                    Ok((total_received_value * ratio.0 .0 as u128) / ratio.1 .0 as u128)
+                if is_burn {
+                    Ok((total_received_value * ratio.0.0 as u128) / ratio.1.0 as u128)
                 } else {
-                    Ok((total_received_value * ratio.1 .0 as u128) / ratio.0 .0 as u128)
+                    Ok((total_received_value * ratio.1.0 as u128) / ratio.0.0 as u128)
                 }
             }
             RatioType::Oracle { setting } => {
