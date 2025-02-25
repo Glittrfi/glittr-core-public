@@ -75,7 +75,8 @@ pub struct ProportionalType {
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum RatioModel {
-    ConstantProduct
+    ConstantProduct,
+    ConstantSum, // New variant for CSMM
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
