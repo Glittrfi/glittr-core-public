@@ -48,85 +48,161 @@ impl Updater {
                     }
                 }
                 mint_burn_asset::MintStructure::Proportional(proportional_type) => {
-                    if let RatioModel::ConstantProduct = proportional_type.ratio_model {
-                        // Get pool data
-                        let first_asset_id: BlockTx;
-                        let second_asset_id: BlockTx;
-                        if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[0] {
-                            first_asset_id = BlockTx::from_tuple(asset_id)
-                        } else {
-                            return Some(Flaw::PoolNotFound);
-                        }
+                    match proportional_type.ratio_model {
+                        RatioModel::ConstantProduct => {
+                            // Get pool data
+                            let first_asset_id: BlockTx;
+                            let second_asset_id: BlockTx;
+                            if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[0] {
+                                first_asset_id = BlockTx::from_tuple(asset_id)
+                            } else {
+                                return Some(Flaw::PoolNotFound);
+                            }
 
-                        if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[1] {
-                            second_asset_id = BlockTx::from_tuple(asset_id)
-                        } else {
-                            return Some(Flaw::PoolNotFound);
-                        }
+                            if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[1] {
+                                second_asset_id = BlockTx::from_tuple(asset_id)
+                            } else {
+                                return Some(Flaw::PoolNotFound);
+                            }
 
-                        let pool_key = BlockTx::from_tuple(*contract_id).to_string();
+                            let pool_key = BlockTx::from_tuple(*contract_id).to_string();
 
-                        let pool_data: Result<CollateralizedAssetData, DatabaseError> =
-                            self.database.lock().await.get(COLLATERALIZED_CONTRACT_DATA, &pool_key);
+                            let pool_data: Result<CollateralizedAssetData, DatabaseError> =
+                                self.database.lock().await.get(COLLATERALIZED_CONTRACT_DATA, &pool_key);
 
-                        if pool_data.is_err() {
-                            return Some(Flaw::PoolNotFound);
-                        }
+                            if pool_data.is_err() {
+                                return Some(Flaw::PoolNotFound);
+                            }
 
-                        let mut pool_data = pool_data.unwrap();
+                            let mut pool_data = pool_data.unwrap();
 
-                        let existing_pool_amounts0 =
-                            pool_data.amounts.get(&first_asset_id.to_string());
-                        let existing_pool_amounts1 =
-                            pool_data.amounts.get(&second_asset_id.to_string());
+                            let existing_pool_amounts0 =
+                                pool_data.amounts.get(&first_asset_id.to_string());
+                            let existing_pool_amounts1 =
+                                pool_data.amounts.get(&second_asset_id.to_string());
 
-                        if existing_pool_amounts0.is_none() {
-                            return Some(Flaw::PoolNotFound);
-                        }
+                            if existing_pool_amounts0.is_none() {
+                                return Some(Flaw::PoolNotFound);
+                            }
 
-                        if existing_pool_amounts1.is_none() {
-                            return Some(Flaw::PoolNotFound);
-                        }
+                            if existing_pool_amounts1.is_none() {
+                                return Some(Flaw::PoolNotFound);
+                            }
 
-                        let existing_pool_amounts0 = existing_pool_amounts0.unwrap().clone();
-                        let existing_pool_amounts1 = existing_pool_amounts1.unwrap().clone();
+                            let existing_pool_amounts0 = existing_pool_amounts0.unwrap().clone();
+                            let existing_pool_amounts1 = existing_pool_amounts1.unwrap().clone();
 
-                        // Calculate proportion of pool to return
-                        let share = burned_amount
-                            .saturating_mul(1_000_000) // Scale for precision
-                            .saturating_div(pool_data.total_supply);
+                            // Calculate proportion of pool to return
+                            let share = burned_amount
+                                .saturating_mul(1_000_000) // Scale for precision
+                                .saturating_div(pool_data.total_supply);
 
-                        // Calculate return amounts
-                        let return_amount0 = existing_pool_amounts0
-                            .saturating_mul(share)
-                            .saturating_div(1_000_000);
-                        let return_amount1 = existing_pool_amounts1
-                            .saturating_mul(share)
-                            .saturating_div(1_000_000);
+                            // Calculate return amounts
+                            let return_amount0 = existing_pool_amounts0
+                                .saturating_mul(share)
+                                .saturating_div(1_000_000);
+                            let return_amount1 = existing_pool_amounts1
+                                .saturating_mul(share)
+                                .saturating_div(1_000_000);
 
-                        if return_amount0 == 0 || return_amount1 == 0 {
-                            return Some(Flaw::InsufficientOutputAmount);
-                        }
+                            if return_amount0 == 0 || return_amount1 == 0 {
+                                return Some(Flaw::InsufficientOutputAmount);
+                            }
 
-                        // Update pool state
-                        pool_data
-                            .amounts
-                            .insert(first_asset_id.to_string(), existing_pool_amounts0.saturating_sub(return_amount0));
-                        pool_data
-                            .amounts
-                            .insert(second_asset_id.to_string(), existing_pool_amounts1.saturating_sub(return_amount1));
-                        pool_data.total_supply =
-                            pool_data.total_supply.saturating_sub(burned_amount);
+                            // Update pool state
+                            pool_data
+                                .amounts
+                                .insert(first_asset_id.to_string(), existing_pool_amounts0.saturating_sub(return_amount0));
+                            pool_data
+                                .amounts
+                                .insert(second_asset_id.to_string(), existing_pool_amounts1.saturating_sub(return_amount1));
+                            pool_data.total_supply =
+                                pool_data.total_supply.saturating_sub(burned_amount);
 
-                        if !self.is_read_only {
-                            self.database
-                                .lock()
-                                .await
-                                .put(COLLATERALIZED_CONTRACT_DATA, &pool_key, pool_data);
-                        }
+                            if !self.is_read_only {
+                                self.database
+                                    .lock()
+                                    .await
+                                    .put(COLLATERALIZED_CONTRACT_DATA, &pool_key, pool_data);
+                            }
 
-                        out_values.push(return_amount0);
-                        out_values.push(return_amount1);
+                            out_values.push(return_amount0);
+                            out_values.push(return_amount1);
+                        },
+                        RatioModel::ConstantSum => {
+                            // Get pool data
+                            let first_asset_id: BlockTx;
+                            let second_asset_id: BlockTx;
+                            if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[0] {
+                                first_asset_id = BlockTx::from_tuple(asset_id)
+                            } else {
+                                return Some(Flaw::PoolNotFound);
+                            }
+
+                            if let InputAsset::GlittrAsset(asset_id) = collateralized.input_assets[1] {
+                                second_asset_id = BlockTx::from_tuple(asset_id)
+                            } else {
+                                return Some(Flaw::PoolNotFound);
+                            }
+
+                            let pool_key = BlockTx::from_tuple(*contract_id).to_string();
+                            let pool_data: Result<CollateralizedAssetData, DatabaseError> =
+                                self.database.lock().await.get(COLLATERALIZED_CONTRACT_DATA, &pool_key);
+
+                            if pool_data.is_err() {
+                                return Some(Flaw::PoolNotFound);
+                            }
+                            let mut pool_data = pool_data.unwrap();
+
+                            let existing_pool_amounts0 = pool_data.amounts.get(&first_asset_id.to_string());
+                            let existing_pool_amounts1 = pool_data.amounts.get(&second_asset_id.to_string());
+
+                            if existing_pool_amounts0.is_none() || existing_pool_amounts1.is_none() {
+                                return Some(Flaw::PoolNotFound);
+                            }
+
+                            let existing_pool_amounts0 = existing_pool_amounts0.unwrap().clone();
+                            let existing_pool_amounts1 = existing_pool_amounts1.unwrap().clone();
+
+                            // For a constant-sum pool, the withdrawal is linear.
+                            // Calculate the share of the pool being redeemed.
+                            let share = burned_amount
+                                .saturating_mul(1_000_000) // Scale for precision
+                                .saturating_div(pool_data.total_supply);
+
+                            // Calculate return amounts proportionally
+                            let return_amount0 = existing_pool_amounts0
+                                .saturating_mul(share)
+                                .saturating_div(1_000_000);
+                            let return_amount1 = existing_pool_amounts1
+                                .saturating_mul(share)
+                                .saturating_div(1_000_000);
+
+                            if return_amount0 == 0 || return_amount1 == 0 {
+                                return Some(Flaw::InsufficientOutputAmount);
+                            }
+
+                            // Update pool state by subtracting the withdrawn amounts.
+                            pool_data.amounts.insert(
+                                first_asset_id.to_string(),
+                                existing_pool_amounts0.saturating_sub(return_amount0),
+                            );
+                            pool_data.amounts.insert(
+                                second_asset_id.to_string(),
+                                existing_pool_amounts1.saturating_sub(return_amount1),
+                            );
+                            pool_data.total_supply = pool_data.total_supply.saturating_sub(burned_amount);
+
+                            if !self.is_read_only {
+                                self.database
+                                    .lock()
+                                    .await
+                                    .put(COLLATERALIZED_CONTRACT_DATA, &pool_key, pool_data);
+                            }
+
+                            out_values.push(return_amount0);
+                            out_values.push(return_amount1);
+                        },
                     }
                 }
                 mint_burn_asset::MintStructure::Account(_account_type) => {
