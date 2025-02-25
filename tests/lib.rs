@@ -3807,6 +3807,272 @@ async fn test_contract_creation_and_mint() {
 }
 
 #[tokio::test]
+async fn test_contract_creation_and_mint_constant_sum() {
+    let mut ctx = TestContext::new().await;
+    let (owner_address, _) = get_bitcoin_address();
+
+    // Create two MOA tokens to be used in the liquidity pool
+    let token1_message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            spec: None,
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(1_000_000)),
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MOAMintMechanisms {
+                    free_mint: Some(FreeMint {
+                        supply_cap: Some(U128(1_000_000)),
+                        amount_per_mint: U128(100_000),
+                    }),
+                    preallocated: None,
+                    purchase: None,
+                },
+                end_time: None,
+                commitment: None,
+            }),
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let token2_message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            spec: None,
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(1_000_000)),
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MOAMintMechanisms {
+                    free_mint: Some(FreeMint {
+                        supply_cap: Some(U128(1_000_000)),
+                        amount_per_mint: U128(50_000),
+                    }),
+                    preallocated: None,
+                    purchase: None,
+                },
+                end_time: None,
+                commitment: None,
+            }),
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    // Build and mine the two token contracts.
+    let token1_contract = ctx.build_and_mine_message(&token1_message).await;
+    let token2_contract = ctx.build_and_mine_message(&token2_message).await;
+
+    // Mint both tokens.
+    let mint_token1_message = OpReturnMessage {
+        contract_call: Some(ContractCall {
+            contract: Some(token1_contract.to_tuple()),
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
+                oracle_message: None,
+                pointer_to_key: None,
+                assert_values: None,
+                commitment_message: None,
+            }),
+        }),
+        transfer: None,
+        contract_creation: None,
+    };
+
+    let mint_token2_message = OpReturnMessage {
+        contract_call: Some(ContractCall {
+            contract: Some(token2_contract.to_tuple()),
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
+                oracle_message: None,
+                pointer_to_key: None,
+                assert_values: None,
+                commitment_message: None,
+            }),
+        }),
+        transfer: None,
+        contract_creation: None,
+    };
+
+    let token1_mint_tx = ctx.build_and_mine_message(&mint_token1_message).await;
+    let token2_mint_tx = ctx.build_and_mine_message(&mint_token2_message).await;
+
+    // --- Constant Product LP Contract ---
+    let lp_message_cp = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            spec: None,
+            contract_type: ContractType::Mba(MintBurnAssetContract {
+                ticker: None,
+                supply_cap: None, // No supply cap for LP tokens
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MBAMintMechanisms {
+                    preallocated: None,
+                    free_mint: None,
+                    purchase: None,
+                    collateralized: Some(Collateralized {
+                        input_assets: vec![
+                            InputAsset::GlittrAsset(token1_contract.to_tuple()),
+                            InputAsset::GlittrAsset(token2_contract.to_tuple()),
+                        ],
+                        _mutable_assets: false,
+                        // Use constant-product here.
+                        mint_structure: MintStructure::Proportional(ProportionalType {
+                            ratio_model: RatioModel::ConstantProduct,
+                            inital_mint_pointer_to_key: None,
+                        }),
+                    }),
+                },
+                burn_mechanism: BurnMechanisms {
+                    return_collateral: Some(ReturnCollateral {
+                        fee: None,
+                        oracle_setting: None,
+                    }),
+                },
+                swap_mechanism: SwapMechanisms { fee: None },
+                end_time: None,
+                commitment: None,
+            }),
+        }),
+        transfer: None,
+        contract_call: Some(ContractCall {
+            contract: None,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
+                oracle_message: None,
+                pointer_to_key: None,
+                assert_values: None,
+                commitment_message: None,
+            }),
+        }),
+    };
+
+    // Broadcast constant-product LP creation & mint transaction.
+    ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[
+            (token1_mint_tx.block as usize, 1, 1, Witness::new()),
+            (token2_mint_tx.block as usize, 1, 1, Witness::new()),
+            (token2_mint_tx.block as usize, 0, 0, Witness::new()),
+        ],
+        op_return: Some(lp_message_cp.into_script()),
+        op_return_index: Some(0),
+        op_return_value: Some(0),
+        output_values: &[1000, 1000],
+        outputs: 2,
+        p2tr: false,
+        recipient: Some(owner_address.clone()),
+    });
+    ctx.core.mine_blocks(1);
+
+    let contract_create_and_mint_lp_block_tx_cp = BlockTx {
+        block: ctx.core.height(),
+        tx: 1,
+    };
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    // Verify constant-product LP mint outcome.
+    let asset_lists_cp = ctx.get_asset_map().await;
+    let lp_minted_amount_cp = asset_lists_cp
+        .values()
+        .find_map(|list| list.list.get(&contract_create_and_mint_lp_block_tx_cp.to_string()))
+        .expect("Minted asset should exist");
+    // For constant-product, the initial LP supply is sqrt(100_000*50_000)=sqrt(5e9) ≈ 70710.
+    assert_eq!(*lp_minted_amount_cp, 70710);
+
+    // --- Constant Sum LP Contract ---
+    // For a fresh test, we re-use the same token contracts.
+    // Create a new LP contract message, but now with RatioModel::ConstantSum.
+    let lp_message_cs = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            spec: None,
+            contract_type: ContractType::Mba(MintBurnAssetContract {
+                ticker: None,
+                supply_cap: None, // No supply cap for LP tokens
+                divisibility: 18,
+                live_time: 0,
+                mint_mechanism: MBAMintMechanisms {
+                    preallocated: None,
+                    free_mint: None,
+                    purchase: None,
+                    collateralized: Some(Collateralized {
+                        input_assets: vec![
+                            InputAsset::GlittrAsset(token1_contract.to_tuple()),
+                            InputAsset::GlittrAsset(token2_contract.to_tuple()),
+                        ],
+                        _mutable_assets: false,
+                        // Use constant-sum here.
+                        mint_structure: MintStructure::Proportional(ProportionalType {
+                            ratio_model: RatioModel::ConstantSum,
+                            inital_mint_pointer_to_key: None,
+                        }),
+                    }),
+                },
+                burn_mechanism: BurnMechanisms {
+                    return_collateral: Some(ReturnCollateral {
+                        fee: None,
+                        oracle_setting: None,
+                    }),
+                },
+                swap_mechanism: SwapMechanisms { fee: None },
+                end_time: None,
+                commitment: None,
+            }),
+        }),
+        transfer: None,
+        contract_call: Some(ContractCall {
+            contract: None,
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
+                oracle_message: None,
+                pointer_to_key: None,
+                assert_values: None,
+                commitment_message: None,
+            }),
+        }),
+    };
+
+    // Broadcast constant-sum LP creation & mint transaction.
+    ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[
+            (token1_mint_tx.block as usize, 1, 1, Witness::new()),
+            (token2_mint_tx.block as usize, 1, 1, Witness::new()),
+            (token2_mint_tx.block as usize, 0, 0, Witness::new()),
+        ],
+        op_return: Some(lp_message_cs.into_script()),
+        op_return_index: Some(0),
+        op_return_value: Some(0),
+        output_values: &[1000, 1000],
+        outputs: 2,
+        p2tr: false,
+        recipient: Some(owner_address.clone()),
+    });
+    ctx.core.mine_blocks(1);
+
+    let contract_create_and_mint_lp_block_tx_cs = BlockTx {
+        block: ctx.core.height(),
+        tx: 1,
+    };
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    // Verify constant-sum LP mint outcome.
+    let asset_lists_cs = ctx.get_asset_map().await;
+    let lp_minted_amount_cs = asset_lists_cs
+        .values()
+        .find_map(|list| list.list.get(&contract_create_and_mint_lp_block_tx_cs.to_string()))
+        .expect("Minted asset should exist");
+    // For constant-sum, the initial LP supply equals the sum of deposits:
+    // 100_000 + 50_000 = 150_000.
+    assert_eq!(*lp_minted_amount_cs, 150_000);
+
+    ctx.drop().await;
+}
+
+#[tokio::test]
 async fn test_integration_mint_nft() {
     let mut ctx = TestContext::new().await;
     let message = OpReturnMessage {
@@ -3841,6 +4107,340 @@ async fn test_integration_mint_nft() {
         asset_lists[0].1.list.get(&block_tx_contract.to_string()),
         Some(&1)
     );
+
+    ctx.drop().await;
+}
+
+#[tokio::test]
+async fn test_integration_proportional_mba_lp_constant_sum() {
+    let mut ctx = TestContext::new().await;
+    let (owner_address, _) = get_bitcoin_address();
+
+    // Create two MOA tokens to be used in the liquidity pool
+    let token1_message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            spec: None,
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(1_000_000)),
+                divisibility: 18,
+                live_time: 0,
+                end_time: None,
+                mint_mechanism: MOAMintMechanisms {
+                    free_mint: Some(FreeMint {
+                        supply_cap: Some(U128(1_000_000)),
+                        amount_per_mint: U128(100_000),
+                    }),
+                    preallocated: None,
+                    purchase: None,
+                },
+                commitment: None,
+            }),
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let token2_message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            spec: None,
+            contract_type: ContractType::Moa(MintOnlyAssetContract {
+                ticker: None,
+                supply_cap: Some(U128(1_000_000)),
+                divisibility: 18,
+                live_time: 0,
+                end_time: None,
+                mint_mechanism: MOAMintMechanisms {
+                    free_mint: Some(FreeMint {
+                        supply_cap: Some(U128(1_000_000)),
+                        amount_per_mint: U128(50_000),
+                    }),
+                    preallocated: None,
+                    purchase: None,
+                },
+                commitment: None,
+            }),
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let token1_contract = ctx.build_and_mine_message(&token1_message).await;
+    let token2_contract = ctx.build_and_mine_message(&token2_message).await;
+
+    // Mint both tokens
+    let mint_token1_message = OpReturnMessage {
+        contract_call: Some(ContractCall {
+            contract: Some(token1_contract.to_tuple()),
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
+                oracle_message: None,
+                pointer_to_key: None,
+                assert_values: None,
+                commitment_message: None,
+            }),
+        }),
+        transfer: None,
+        contract_creation: None,
+    };
+
+    let mint_token2_message = OpReturnMessage {
+        contract_call: Some(ContractCall {
+            contract: Some(token2_contract.to_tuple()),
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
+                oracle_message: None,
+                pointer_to_key: None,
+                assert_values: None,
+                commitment_message: None,
+            }),
+        }),
+        transfer: None,
+        contract_creation: None,
+    };
+
+    let token1_mint_tx = ctx.build_and_mine_message(&mint_token1_message).await;
+    let token2_mint_tx = ctx.build_and_mine_message(&mint_token2_message).await;
+
+    // Create LP token contract using constant-sum instead of constant-product
+    let lp_message = OpReturnMessage {
+        contract_creation: Some(ContractCreation {
+            spec: None,
+            contract_type: ContractType::Mba(MintBurnAssetContract {
+                ticker: None,
+                supply_cap: None, // No supply cap for LP tokens
+                divisibility: 18,
+                live_time: 0,
+                end_time: None,
+                mint_mechanism: MBAMintMechanisms {
+                    preallocated: None,
+                    free_mint: None,
+                    purchase: None,
+                    collateralized: Some(Collateralized {
+                        input_assets: vec![
+                            InputAsset::GlittrAsset(token1_contract.to_tuple()),
+                            InputAsset::GlittrAsset(token2_contract.to_tuple()),
+                        ],
+                        _mutable_assets: false,
+                        mint_structure: MintStructure::Proportional(ProportionalType {
+                            // Use the new constant-sum branch here.
+                            ratio_model: RatioModel::ConstantSum,
+                            inital_mint_pointer_to_key: None,
+                        }),
+                    }),
+                },
+                burn_mechanism: BurnMechanisms {
+                    return_collateral: Some(ReturnCollateral {
+                        fee: None,
+                        oracle_setting: None,
+                    }),
+                },
+                swap_mechanism: SwapMechanisms { fee: None },
+                commitment: None,
+            }),
+        }),
+        transfer: None,
+        contract_call: None,
+    };
+
+    let lp_contract = ctx.build_and_mine_message(&lp_message).await;
+
+    // Provide liquidity and mint LP tokens.
+    // For constant-sum, if no pool exists yet, the initial supply should be:
+    // input_first_asset + input_second_asset = 100000 + 50000 = 150000.
+    let mint_lp_message = OpReturnMessage {
+        contract_call: Some(ContractCall {
+            contract: Some(lp_contract.to_tuple()),
+            call_type: CallType::Mint(MintBurnOption {
+                pointer: Some(1),
+                oracle_message: None,
+                pointer_to_key: None,
+                assert_values: None,
+                commitment_message: None,
+            }),
+        }),
+        transfer: None,
+        contract_creation: None,
+    };
+
+    // Broadcast liquidity provision transaction.
+    ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[
+            (token1_mint_tx.block as usize, 1, 1, Witness::new()),
+            (token2_mint_tx.block as usize, 1, 1, Witness::new()),
+            (token2_mint_tx.block as usize, 0, 0, Witness::new()),
+        ],
+        op_return: Some(mint_lp_message.into_script()),
+        op_return_index: Some(0),
+        op_return_value: Some(0),
+        output_values: &[1000, 1000],
+        outputs: 2,
+        p2tr: false,
+        recipient: Some(owner_address.clone()),
+    });
+    ctx.core.mine_blocks(1);
+
+    let mint_lp_block_tx = BlockTx {
+        block: ctx.core.height(),
+        tx: 1,
+    };
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    // Verify initial LP mint: for constant-sum, expected LP supply is 150000.
+    let asset_lists = ctx.get_asset_map().await;
+    let lp_minted_amount = asset_lists
+        .values()
+        .find_map(|list| list.list.get(&lp_contract.to_string()))
+        .expect("LP minted asset should exist");
+
+    assert_eq!(*lp_minted_amount, 150_000);
+
+    // Now, test swap functionality under constant-sum.
+    // Rebase token1 by transferring 100 units.
+    let token1_mint_tx_2 = ctx.build_and_mine_message(&mint_token1_message).await;
+
+    let rebase_token1_message = OpReturnMessage {
+        transfer: Some(Transfer {
+            transfers: vec![TxTypeTransfer {
+                asset: token1_contract.to_tuple(),
+                output: 2,
+                amount: U128(100),
+            }],
+        }),
+        contract_creation: None,
+        contract_call: None,
+    };
+
+    ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[
+            (token1_mint_tx_2.block as usize, 1, 1, Witness::new()),
+            (token1_mint_tx_2.block as usize, 0, 0, Witness::new()),
+        ],
+        op_return: Some(rebase_token1_message.into_script()),
+        op_return_index: Some(0),
+        op_return_value: Some(0),
+        output_values: &[1000, 1000, 1000],
+        outputs: 3,
+        p2tr: false,
+        recipient: Some(owner_address.clone()),
+    });
+    ctx.core.mine_blocks(1);
+
+    let rebase_block_tx = BlockTx {
+        block: ctx.core.height(),
+        tx: 1,
+    };
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    // Now perform a swap on the LP contract.
+    // For constant-sum swaps, the output is simply:
+    // out_value = min(input_amount, available reserve of counter asset).
+    // Here, with a 100-unit token1 input and token2 reserve initially 50000, we expect 100 units output.
+    let swap_message = OpReturnMessage {
+        contract_call: Some(ContractCall {
+            contract: Some(lp_contract.to_tuple()),
+            call_type: CallType::Swap(SwapOption {
+                pointer: 1,
+                assert_values: Some(AssertValues {
+                    input_values: Some(vec![U128(100)]),
+                    total_collateralized: None,
+                    min_out_value: Some(U128(100)),
+                }),
+            }),
+        }),
+        transfer: None,
+        contract_creation: None,
+    };
+
+    // Broadcast swap transaction.
+    ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[
+            (rebase_block_tx.block as usize, 1, 2, Witness::new()),
+            (rebase_block_tx.block as usize, 0, 0, Witness::new()),
+        ],
+        op_return: Some(swap_message.into_script()),
+        op_return_index: Some(0),
+        op_return_value: Some(0),
+        output_values: &[1000, 1000],
+        outputs: 2,
+        p2tr: false,
+        recipient: Some(owner_address.clone()),
+    });
+    ctx.core.mine_blocks(1);
+
+    let swap_block_tx = BlockTx {
+        block: ctx.core.height(),
+        tx: 1,
+    };
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    // Verify swap outcome.
+    let asset_lists = ctx.get_asset_map().await;
+    let token_2_swapped = asset_lists
+        .values()
+        .find_map(|list| list.list.get(&token2_contract.to_string()))
+        .expect("Token2 asset should exist");
+
+    // Under constant-sum, expected output is the full input amount (i.e. 100).
+    assert_eq!(*token_2_swapped, 100);
+
+    // Finally, test burning the LP tokens.
+    let burn_lp_message = OpReturnMessage {
+        contract_call: Some(ContractCall {
+            contract: Some(lp_contract.to_tuple()),
+            call_type: CallType::Burn(MintBurnOption {
+                pointer: Some(1),
+                oracle_message: None,
+                pointer_to_key: None,
+                assert_values: None,
+                commitment_message: None,
+            }),
+        }),
+        transfer: None,
+        contract_creation: None,
+    };
+
+    ctx.core.broadcast_tx(TransactionTemplate {
+        fee: 0,
+        inputs: &[
+            (mint_lp_block_tx.block as usize, 1, 1, Witness::new()),
+            (mint_lp_block_tx.block as usize, 0, 0, Witness::new()),
+        ],
+        op_return: Some(burn_lp_message.into_script()),
+        op_return_index: Some(0),
+        op_return_value: Some(0),
+        output_values: &[1000, 1000],
+        outputs: 2,
+        p2tr: false,
+        recipient: Some(owner_address.clone()),
+    });
+    ctx.core.mine_blocks(1);
+
+    let burn_block_tx = BlockTx {
+        block: ctx.core.height(),
+        tx: 1,
+    };
+
+    start_indexer(Arc::clone(&ctx.indexer)).await;
+
+    // Verify burn outcome and final state.
+    let burn_outcome = ctx.get_and_verify_message_outcome(burn_block_tx).await;
+    assert!(burn_outcome.flaw.is_none(), "{:?}", burn_outcome.flaw);
+
+    // In a proper liquidity pool burn, the pool should eventually be emptied or converted.
+    // For this test, we simply verify that the LP contract's asset entry is now zero.
+    let final_assets = ctx.get_asset_map().await;
+    let remaining_lp = final_assets
+        .values()
+        .find_map(|list| list.list.get(&lp_contract.to_string()))
+        .unwrap_or(&0);
+    assert_eq!(*remaining_lp, 0);
 
     ctx.drop().await;
 }
